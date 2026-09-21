@@ -117,12 +117,12 @@ just watch
 | esc | quit |
 
 Left drag orbits, right drag pans, middle drag and scroll zoom, and ctrl with
-left drag pushes the robot around. The panel holds the board itself: the button, the four DIP
-switches, the fan override, the LED, the two addressable LEDs and the buzzer as
-the firmware is driving them, the wheel commands and wall readings, and plots of
-the desired versus measured linear and angular speed straight from the firmware
-pool, one plot per variable. Pausing, stepping, a speed limiter and a quit
-button are there too.
+left drag pushes the robot around. The panel holds the board itself: the button,
+the four DIP switches, the fan override, the LED, the two addressable LEDs and
+the buzzer as the firmware is driving them, the wheel commands and wall
+readings, and the desired versus measured linear and angular speed straight from
+the firmware pool, one plot per variable. Pausing, stepping, a speed limiter and
+a quit button are there too.
 
 Touching any board control hands the run over: the scripted `--command` and
 `--button` stop being applied, and the run is marked `interactive`.
