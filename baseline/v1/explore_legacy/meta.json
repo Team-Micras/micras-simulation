@@ -1,0 +1,19 @@
+{
+  "firmware_sha": "ad342541267bb3c8db263630f27fc7edafba5b09",
+  "model_path": "models/robot_legacy.xml",
+  "model_sha256": "c1e24df2fce989971ae83b307cf96e3070506d1c43830f5442482d6e4f95523c",
+  "maze_path": "",
+  "mujoco_version": "3.3.6",
+  "compiler": "GNU 13.3.0",
+  "build_type": "RelWithDebInfo",
+  "args": "--model models/robot_legacy.xml --command explore --seconds 8 --out runs/explore_legacy",
+  "loop_time_us": 1042,
+  "timestep": 0.000521,
+  "steps_per_tick": 2,
+  "ticks": 7677,
+  "sim_time": 7.99943,
+  "final_z": 0.00114835,
+  "pool_columns": 29,
+  "telemetry_resyncs": 0,
+  "warnings_total": 0
+}
