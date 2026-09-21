@@ -1,0 +1,7 @@
+runs/
+build/
+.cache/
+__pycache__/
+.omc/
+compile_commands.json
+third_party/_deps/
