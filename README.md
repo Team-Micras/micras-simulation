@@ -23,13 +23,14 @@ with `-DMUJOCO_DIR=<path>`.
 just build
 just run-explore                 # 8 s explore run -> runs/explore_v2
 just analyze runs/explore_v2     # report.json and the plots
-just watch                       # the same run in a window
-just serve                       # the same run with micras-monitor able to connect
+just watch                       # the same scenario, 30 s, in a window
+just serve                       # the same scenario, 120 s, open to micras-monitor
 just check                       # the gate: everything above, with assertions
 ```
 
 `just` with no arguments lists every recipe. The build uses `CMakePresets.json`;
 `MICRAS_PRESET` picks between `default` (RelWithDebInfo), `debug` and `release`.
+Only `default` has a test preset, so `just test` and `just check` need it.
 
 ## Running
 
@@ -45,7 +46,7 @@ just check                       # the gate: everything above, with assertions
 | `--ticks <int>` | exact firmware tick count, overrides `--seconds` |
 | `--maze <xml>` | recorded in `meta.json` only; the model already attaches its maze |
 | `--command none\|explore\|solve\|calibrate` | injects one `SERIAL_VARIABLE` packet writing `true` to the pool variable of the same name |
-| `--command-at <s>` | when to inject it (default 0.5); never before tick 1, which carries the map request |
+| `--command-at <s>` | when to inject it (default 0.5); never before tick 1, because tick 0 carries the map request |
 | `--dip fan=0,diagonal=0,boost=0,risky=0` | DIP switch state before the first tick; indices follow `Interface::DipSwitchPins` |
 | `--button none\|short\|long\|extra_long` | start through the `Button` proxy instead of a packet |
 | `--button-at <s>` | when the button goes down (default 0.5) |
@@ -61,9 +62,11 @@ just check                       # the gate: everything above, with assertions
 | `--video-camera <name>` | `overhead`, `side tracking` (default), `robot pov`, `maze_top_view`, or `free` |
 | `--video-size WxH` | frame size, default 1280x720 |
 
-A window, a recording and a bridge are all optional and all off by default. None
-of them changes what the run produces: `just check` proves it by running the
-same scenario twice and comparing the two CSVs byte for byte.
+A window, a recording and a bridge are all optional and all off by default, and
+none of them is meant to change what the run produces. `just check` proves that
+for the window and for the bridge, by running the same scenario with and without
+each and comparing the two CSVs byte for byte. The recording has no such gate
+yet.
 
 ## Output
 
@@ -113,12 +116,13 @@ just watch
 | c / f / t / r | contact points, contact forces, transparency, rangefinder rays |
 | esc | quit |
 
-Left drag orbits, right drag pans, scroll zooms, and ctrl with left drag pushes
-the robot around. The panel holds the board itself: the button, the four DIP
+Left drag orbits, right drag pans, middle drag and scroll zoom, and ctrl with
+left drag pushes the robot around. The panel holds the board itself: the button, the four DIP
 switches, the fan override, the LED, the two addressable LEDs and the buzzer as
 the firmware is driving them, the wheel commands and wall readings, and plots of
 the desired versus measured linear and angular speed straight from the firmware
-pool. Pausing, stepping and a speed limiter are there too.
+pool, one plot per variable. Pausing, stepping, a speed limiter and a quit
+button are there too.
 
 Touching any board control hands the run over: the scripted `--command` and
 `--button` stop being applied, and the run is marked `interactive`.
@@ -162,10 +166,9 @@ buildable, smoke-runs the hardware tests, proves that a window and a bridge
 change nothing, runs the three scenarios, analyses them, asserts their metadata,
 and compares all three against every recorded baseline.
 
-Baselines live in `baseline/`. The current one is compared byte for byte; older
-ones keep their columns compared as a prefix, so a run recorded long ago stays
-comparable even after new columns are appended. `just record-baseline` refuses
-to overwrite a version — bump it instead, and nothing is ever lost.
+Baselines live in `baseline/`; `CLAUDE.md` explains the two invariants they
+enforce. `just record-baseline` refuses to overwrite a version — bump it
+instead, and nothing is ever lost.
 
 `just format`, `just format-check` and `just lint` are the style targets; they
 use the firmware's own `.clang-format` and `.clang-tidy`.
@@ -178,7 +181,7 @@ include/micras/proxy/, src/proxy/    the 16 proxies the firmware sees
 include/micras/sim/, src/sim/        core/, telemetry/, recording/, view/, bridge/, app/
 models/          robot and maze models, plus the tuning experiments
 tools/           analysis, drift, assertions, comparison, monitor probe
-tests/           unit tests, and the firmware hardware tests under tests/src/
+tests/           unit tests; the hardware tests compile from MicrasFirmware/tests/src/
 baseline/        recorded runs the gate compares against
 MicrasFirmware/  submodule
 ```

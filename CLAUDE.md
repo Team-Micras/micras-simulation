@@ -24,23 +24,26 @@ Two invariants govern the baselines:
   `baseline/v2`, the refactoring is wrong. Revert it. Never re-record the
   baseline to make a diff go away.
 - **An extension only appends columns.** Every row's prefix up to the first new
-  column, and the pool block, stay byte-identical. The previous baseline is kept
-  and compared with `--columns-subset`, so old recordings stay comparable
-  forever. `just record-baseline` refuses to overwrite a version.
+  column stays byte-identical, and the previous baseline is kept and compared
+  with `--columns-subset`, so old recordings stay comparable forever. Note what
+  that check is: a header prefix. New columns therefore have to go at the very
+  end — appending a pool variable would shift every `proxy_*` column right and
+  break it.
 
 ## Architecture
 
-Five libraries, each depending only on the ones above it:
+Five libraries. `micras_sim_app` sits on top of all of them; `micras_sim_view`
+links only the core, so nothing about drawing can reach the recording layer:
 
 ```
 micras_sim_core     world, clock, serial bus, proxy state, run loop, firmware thread
 micras_sim          + scenario, telemetry, recording          (links the firmware shadow)
-micras_sim_view     + window, control panel, video recorder   (GLFW/ImGui/EGL)
+micras_sim_view       window, control panel, video recorder   (GLFW/ImGui/EGL, on core)
 micras_sim_bridge   + WebSocket server, monitor bridge        (IXWebSocket)
 micras_sim_app      + CLI, application wiring, crash reporter
 ```
 
-`src/main.cpp` is one call inside a `try`. The application is the only layer
+`src/main.cpp` is one call; `Application::main` is the `try`. The application is the only layer
 that knows a run can have a window, so it is the only one that links the view.
 
 `MICRAS_VIEWER`, `MICRAS_VIDEO`, `MICRAS_BRIDGE` and `MICRAS_TESTS` are all ON
@@ -53,12 +56,16 @@ only found by whoever first tries to build without a GPU.
 `Simulation::run` drives `IRunListener`s. Order per tick:
 
 ```
-on_before_tick   -> RunControl{RUN, QUIT}   scenario, monitor, telemetry, pause
+on_before_tick   -> RunControl{RUN, QUIT}   crash reporter, scenario, monitor, pause
 firmware.run_until_yield()                  the firmware thread runs one loop
 world.step(steps_per_tick)                  2 x 0.000521 s = 1042 us
 clock.advance()
-on_after_tick                               recorder, video, viewer, bridge
+on_after_tick                               monitor, telemetry, recorder, video, viewer
 ```
+
+Listeners run in registration order, which `Application` fixes. `Telemetry`
+overrides only `on_after_tick`, so the pool values a row carries are decoded
+after the tick they belong to and before the recorder writes it.
 
 `has_finished()` is checked both before `before_tick()` and after
 `run_until_yield()`, so a firmware that has exited gets no physics step and no
@@ -72,8 +79,8 @@ The firmware runs `micras::Micras` in its own thread. This is not concurrency:
 it is a **strict handoff**, a mutex and a condition variable around a `Turn`
 flag, and the two threads are never runnable at the same time. The firmware
 thread runs until it calls `yield_tick()`, then blocks; the simulation thread
-advances physics, then wakes it. ThreadSanitizer sees no race because there is
-none.
+advances physics, then wakes it. A ThreadSanitizer build reported no race, which
+is what the design predicts; nothing in the repo runs that build routinely.
 
 The thread exists because the firmware's loop is a loop: `Micras::update()`
 busy-waits on its own stopwatch, and there is no way to return from the middle
@@ -95,8 +102,9 @@ which would rename a member called `main` too.
 There is no render thread, and therefore no snapshot and no mutex around the
 proxy state — the snapshot only ever existed to protect a render thread that was
 never built. `MujocoViewer` draws inside `on_after_tick` and blocks inside
-`on_before_tick` while paused. Rendering is about 70 % of wall time with a
-window open; `--viewer-fps` is the lever.
+`on_before_tick` while paused. Rendering dominated wall time when it was last
+measured, roughly 70 % of it; `--viewer-fps` is the lever, and the figure is an
+estimate rather than something the repo records.
 
 EGL and GLX contexts cannot both be current on one thread. `--viewer --video`
 therefore requires that `VideoRecorder` make its EGL context current in
@@ -114,10 +122,13 @@ the firmware picks up ours. `MicrasFirmware/src/main.cpp`, `micras_hal` and
 Proxies are constructed as members of `Micras`, initialised at their
 declarations from the `*_config` globals in `config/target.hpp`. There is no
 constructor to inject anything into. So each `Config` carries a
-`sim::SimulationContext*`, and `config/target.hpp` is **the one file allowed to
-name `SimulationContext::instance()`** — a function-local static, so it is
-constructed on first use and never before whoever depends on it. No proxy and no
-class in `sim/` may call `instance()`; they receive the facet they need
+`sim::SimulationContext*`, and `SimulationContext::instance()` is a
+function-local static, so it is constructed on first use and never before
+whoever depends on it. Exactly three places name it: `config/target.hpp`, once
+per `Config`; `Application`'s member initialiser, which is where the process's
+one context is picked up; and the context's own file, for the yield helper the
+proxies call. **No proxy and nothing else in `sim/` may call it** — they receive
+the facet they need
 (`MujocoWorld&`, `Clock&`, `SerialBus&`, `ProxyState&`) through the `Config`. A
 proxy built without a context, or before a model is loaded, throws at
 construction. Tests build their own `SimulationContext` and pass it through the
@@ -137,12 +148,16 @@ are known divergences not yet written into the `constants.hpp` `@note`.
 
 `Stopwatch` reports **simulated** time, and it is honest: it returns what the
 clock actually says. That alone deadlocks, because the firmware busy-waits on it
-while physics is frozen. So it has spin guards: on the second repeated read at
-the same simulated instant it yields a tick, and `sleep_us` yields until the
-target passes.
+while physics is frozen. So it has spin guards, and they are deliberately
+asymmetric: `elapsed_time_us` yields on the **second** repeated read at the same
+simulated instant (`max_repeated_reads = 2`), `elapsed_time_ms` only on the
+**fourth** (`max_repeated_ms_reads = 4`), because the firmware legitimately reads
+the same millisecond twice in one tick when it classifies a button release.
+`sleep_us` yields until the target passes.
 
-The counters deliberately **survive `reset_us`/`reset_ms`**. This looks wrong and
-is load-bearing: `Fan::update` resets its own stopwatch every call, so a counter
+`reset_us` and `reset_ms` move `counter`, which is the point of them. What
+deliberately **survives a reset** are `last_read_us` and the two spin counters.
+This looks wrong and is load-bearing: `Fan::update` resets its own stopwatch every call, so a counter
 that reset with it would never reach the threshold, and `test_fan` would spin
 forever. The constructor seeds `counter = now_us - us_per_tick`, so the
 firmware's first loop reads the nominal period instead of zero.
@@ -189,13 +204,19 @@ which is also what keeps a burst from a connected monitor out of the run's
 determinism.
 
 The map reports types through `core::type_name`, so they arrive fully qualified
-(`float`, `unsigned char`, `micras::nav::GridPose`). The decoder matches on the
-last component only and expands custom serializables into one column per field.
+(`micras::nav::GridPose`, `micras::nav::State`, alongside plain `float` and
+`unsigned char`). The decoder matches on the last component only and expands custom serializables into one column per field.
 
 The monitor bridge is the same bus with a socket on it. Incoming bytes land in a
 mutex-guarded `PacketFramer` on an IXWebSocket thread and are drained on the
 simulation thread in `on_before_tick`; the tick's output goes out as one binary
 frame in `on_after_tick`. A port already taken is a warning, not a failure.
+
+That one-packet-per-tick rule is what keeps a burst from a connected monitor out
+of the run, but note what the gate actually proves: `check-monitor` compares a
+bridged run **with nobody connected** against a plain one. The bridged run that
+does have a client attached is not compared against anything, so immunity to a
+talking monitor is enforced by construction and not yet by a test.
 
 ## Real versus stub proxies
 
@@ -220,8 +241,8 @@ press and silently turns an `extra_long` into a `SHORT_PRESS`.
 
 ## The firmware submodule
 
-`MicrasFirmware/` sits on `feature/sim-harness` (branched from `ad34254`) with
-uncommitted changes. **Edit it only with intent**, in the firmware's own style
+`MicrasFirmware/` sits on `feature/sim-harness`, branched from `ad34254`.
+**Edit it only with intent**, in the firmware's own style
 (`.clang-format`, Doxygen on every declaration), and only with changes that make
 sense on the real robot too. What is there now:
 
@@ -334,7 +355,7 @@ to the `curve_safety_margin` that `ActionQueuer::get_trim_distances` applies on
 the solving path.
 
 Worth noting alongside that: the chassis mesh in `robot_v2.xml` is 66 mm wide and
-99 mm long (-33..+66 in body y), while `Micrasverse/src/config/constants.hpp`
+99 mm long (-33..+66 in body y), while the sibling Micrasverse repo's `src/config/constants.hpp`
 models the same robot as 50 x 80 mm. The mesh is 32 % wider and 24 % longer than
 the other simulator's idea of the robot, and the wheels stick out a further 4 mm
 each side. If the Micrasverse numbers are the measured robot then the mesh is
@@ -348,10 +369,14 @@ nothing was changed here.
   restartable listeners (the recorder would have to reopen into `run_002/`), and
   a fresh `FirmwareThread` and `Micras`, because the FSM, the maze map and the
   in-memory `Storage` all carry state. That is an `Application` lifecycle change.
+- **The video path is ungated.** `just check` proves a window and a bridge change
+  nothing, through `check-viewer` and `check-monitor`. There is no `check-video`,
+  and `just video` writes into `runs/explore_v2`, the very directory the baseline
+  comparison reads. Determinism under `--video` is believed, not tested.
 - **`PlotTrace` drops its oldest sample with `erase(begin())`** rather than
   being a real ring buffer. At 2048 samples and 30 fps it does not show, but it
   is the wrong data structure.
-- **Five hardware tests are not built**: the human-interface ones (`led`, `argb`,
-  `buzzer`, `button`, `dip_switch`) plus `storage`, `stopwatch` and
-  `torque_sensors`. `test_fan` needs `--button short`; the other seven run
+- **Nine of the seventeen hardware tests are not built**: the human-interface
+  ones (`led`, `argb`, `buzzer`, `button`, `dip_switch`), plus `storage`,
+  `stopwatch`, `torque_sensors` and `comm_service`. `test_fan` needs `--button short`; the other seven run
   unscripted.
