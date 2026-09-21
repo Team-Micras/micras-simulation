@@ -1,0 +1,150 @@
+<!--
+  robot_v2.xml - physical corrections on top of robot_legacy.xml (HARNESS_PLAN.md S3 Fase 4).
+  Four changed lines, each marked "FIX" below. Everything else (names of bodies, geoms, sites, joints,
+  actuators and sensors, the maze attachment, timestep=0.000521, integrator, cone, solref/solimp defaults)
+  is byte-identical to robot_legacy.xml, because the harness asserts on those names and on the timestep.
+
+  Verified in runs/v2_explore (8 s, --command explore) against runs/exp_baseline_legacy: airborne fraction
+  on straights 0.000/0.000 (baseline 0.125/0.126), steady slip 0.83% (11.7%), max|slip| 0.035 m/s (0.476),
+  mean|slip| in [RUN+0.2, RUN+1.5] 0.0001 m/s (0.0300), base-geom contact 0.000 (0.007), max|pitch| 0.038
+  deg (1.18), 0 deceleration events (8), odometry RMS error 0.0051 m/s (0.116), 0 MuJoCo warnings.
+  At rest: body z = 0.8037 mm, wheel penetration 0.196 mm, fn = 0.330 / 0.330 / 0.186 N, sum 0.8456 N =
+  the robot weight. data.csv is hash-stable across two runs of the same binary.
+  Cost: open-loop cruise speed drops from 0.262 to 0.233 m/s. The firmware feed-forward is unchanged and
+  the no-load speed is unchanged; the loss is the wheel-joint frictionloss (0.645 mN.m), which used to be
+  0.6% of the old 106 mN.m stall torque and is now 6.5% of the physical 10 mN.m one. It is the dominant
+  load at cruise. Since constants.hpp has kp=0 the speed loop is open, so nothing corrects it. Dropping
+  frictionloss to 0.129 mN.m restores 0.280 m/s (models/experiments/q11_nofrictionloss.xml) - left out
+  of v2 because the right value is a measurement on the real gearmotor, not a simulation choice.
+-->
+<mujoco>
+  <option timestep="0.000521" integrator="implicitfast" cone="elliptic"/>
+
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .1 .1" rgb2=".2 .2 .2"/>
+    <material name="grid" texture="grid" texrepeat="5.5555555555 5.5555555555" texuniform="true" reflectance=".2"/>
+
+    <model name="maze" file="maze.xml"/>
+
+    <mesh name="base" scale="0.001 0.001 0.001"
+        vertex=" 31.0 -33.0 -0.5
+                 33.0  41.0 -0.5
+                 15.5  66.0 -0.5
+
+                -31.0 -33.0 -0.5
+                -33.0  41.0 -0.5
+                -15.5  66.0 -0.5
+
+                 31.0 -33.0  0.5
+                 33.0  41.0  0.5
+                 15.5  66.0  0.5
+
+                -31.0 -33.0  0.5
+                -33.0  41.0  0.5
+                -15.5  66.0  0.5
+    "/>
+  </asset>
+
+  <default>
+    <default class="wheel">
+      <joint type="hinge" frictionloss="0.000645"/>
+      <!-- FIX (rolling/torsional friction): friction[2] (torsional, m) 0.004 -> 0.001 and friction[3] (rolling, m)
+           0.001 -> 0.0001. The legacy rolling coefficient means a resisting torque of mu_roll*fn = 1e-3*0.33 =
+           3.3e-4 N.m per wheel, which is ~2.5x the steady drive torque (1.3e-4 N.m at the cruise command). The
+           rolling/torsional constraints were therefore permanently saturated and, with cone="elliptic", pumped
+           the normal direction: this is what produced the 60 Hz, 20 um heave limit cycle, the 13% "airborne"
+           ticks and the ~12% steady slip. 1e-4 m is Crr~0.01 on an 11 mm wheel (rubber on hard floor); 1e-3 m
+           torsional is ~(3*pi/16)*mu*a for a ~2 mm contact patch. -->
+      <geom type="cylinder" size=".011 .004" rgba=".5 .5 1 1" condim="6" friction="0.95 0.001 0.0001" priority="1"/>
+      <site type="box" rgba=".5 1 .5 1" size="0.01 0.001 0.0041"/>
+    </default>
+    <default class="dc_motor">
+        <!-- FIX (item N): stall torque at the wheel was gear*gainprm*100 = 106 mN.m, ~13x the whole robot weight
+             times the wheel radius; every transient saturated friction. gainprm 1.06e-4 -> 1.0e-5 and
+             biasprm[2] -1.15e-5 -> -1.09e-6 keep the no-load speed (gainprm*100/-biasprm[2] = 91.7 rad/s =
+             1.01 m/s, unchanged, so the firmware feed-forward constant linear_speed=102 is still consistent)
+             while dropping the stall torque to 10 mN.m, the order of magnitude of the real gearmotor.
+             ctrllimited/ctrlrange added because Motor::set_command already clamps to +-100 in the firmware;
+             this makes the model refuse anything outside that range instead of silently accepting it. -->
+        <general biastype="affine" gainprm="0.00001 0 0" biasprm="0 0 -0.00000109" gear="10" ctrllimited="true" ctrlrange="-100 100"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <attach model="maze" prefix="maze_"/>
+
+    <geom name="floor" type="plane" size="0 0 .01" pos="0 0 0" material="grid"/>
+    <light name="ambient_light" pos="0 0 3" dir="0 0 -1" directional="true" castshadow="false"/>
+
+    <!-- FIX (item L, spawn): 0.03 -> 0.0012. Rest height is axle 0.010 - wheel radius 0.011 = -0.001 in body
+         frame, i.e. body z = 0.001 when the wheels touch. The legacy 0.03 was a 29 mm free fall that hit the
+         floor at 0.75 m/s and rang the contacts for ~80 ms. 0.0012 leaves 0.2 mm of settling. -->
+    <body name="micras" pos="0.09 0.05 .0012">
+      <freejoint/>
+
+      <camera name="overhead"      mode="track" pos=" 0.000  0.000 0.500" euler=" 0 0 0"  fovy="60"/>
+      <camera name="side tracking" mode="track" pos="-0.469 -0.469 0.663" xyaxes="0.707 -0.707 0.000 0.500 0.500 0.707"/>
+      <camera name="robot pov"     mode="fixed" pos=" 0.000  0.040 0.030" euler="90 0 0"  fovy="80"/>
+
+      <site name="imu"/>
+      <site name="lidar_0" pos="-0.026 0.041 0.02" zaxis=" 0 1 0"/>
+      <site name="lidar_1" pos="-0.01  0.061 0.02" zaxis="-1 1 0"/>
+      <site name="lidar_2" pos=" 0.01  0.061 0.02" zaxis=" 1 1 0"/>
+      <site name="lidar_3" pos=" 0.026 0.041 0.02" zaxis=" 0 1 0"/>
+      <site name="fan" pos="0.0 0.015 0.0" zaxis="1 0 0"/>
+
+      <!-- FIX (item S, clearance): the chassis mesh spans z in [-0.5, +0.5] mm around the body origin, and the
+           body rests at z = 1 mm, so the bottom of the chassis sat 0.5 mm above the floor and 0.9 deg of roll was
+           enough to scrape. Raising the geom by 2.5 mm puts it 3 mm above the floor, which is the ground clearance
+           the real chassis has over its skid plate; the 80 g it carries raise the centre of mass by the same
+           2.5 mm, which is physical and is the only other effect. -->
+      <geom name="base" type="mesh" mesh="base" pos="0 0 0.0025" mass="0.08" rgba="0.0 0.4 0.2 1" contype="1" conaffinity="1"/>
+      <!-- FIX (item L, caster): the 1 mm sphere at z=-0.0003 had its bottom at -0.0013, i.e. 0.3 mm BELOW the
+           wheel bottom (-0.001), so with any contact stiffening the robot pivots on the caster and both drive
+           wheels hang in the air. Radius 0.001 -> 0.003 and pos z -0.0003 -> 0.002 put the bottom at exactly
+           -0.001, coplanar with the wheels. At rest this gives fn = 0.330 / 0.330 / 0.186 N (total 0.8456 N,
+           the robot weight) with the three contacts all closed. -->
+      <!-- FIX (item L, caster contact model): condim="1" (frictionless point support). The caster is a
+           slippery skid (friction was already 0.05), and with the global condim="3" its single contact
+           point was the last one still flickering on/off (10.5% of the ticks after RUN). Making it
+           frictionless closes it permanently, raises the open-loop cruise speed from 0.228 to 0.233 m/s
+           and more than doubles the time the open-loop run survives before navigation fails
+           (firmware ERROR at 35.7 s instead of 15.6 s over a 60 s explore). -->
+      <geom name="front wheel" pos="0.0 0.06 0.002" type="sphere" size=".003" friction="0.05" priority="1" condim="1"/>
+
+      <body name="left_wheel" pos="-0.031 0.0 0.01" zaxis="-1 0 0">
+        <joint name="left_wheel" class="wheel"/>
+        <geom name="left_wheel" class="wheel"/>
+        <site class="wheel"/>
+      </body>
+      <body name="right_wheel" pos="0.031 0.0 0.01" zaxis="-1 0 0">
+        <joint name="right_wheel" class="wheel"/>
+        <geom name="right_wheel" class="wheel"/>
+        <site class="wheel"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <general name="motor_left" class="dc_motor" joint="left_wheel"/>
+    <general name="motor_right" class="dc_motor" joint="right_wheel"/>
+    <general name="fan" site="fan" gainprm="0.04"/>
+  </actuator>
+
+  <sensor>
+    <jointactuatorfrc name="torque_left"  joint="left_wheel"/>
+    <jointactuatorfrc name="torque_right" joint="right_wheel"/>
+
+    <gyro name="gyro" site="imu"/>
+    <accelerometer name="accelerometer" site="imu"/>
+
+    <jointpos name="encoder_left" joint="left_wheel"/>
+    <jointpos name="encoder_right" joint="right_wheel"/>
+
+    <rangefinder name="lidar_0" site="lidar_0"/>
+    <rangefinder name="lidar_1" site="lidar_1"/>
+    <rangefinder name="lidar_2" site="lidar_2"/>
+    <rangefinder name="lidar_3" site="lidar_3"/>
+  </sensor>
+</mujoco>
