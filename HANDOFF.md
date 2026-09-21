@@ -2,7 +2,7 @@
 
 For whoever picks this up next, human or agent. It says where the harness
 stands, what the three rules are that must not be broken while changing it, and
-the five jobs that are queued, in the order they are worth doing.
+the six jobs that are queued, in the order they are worth doing.
 
 Read `README.md` for how to use the thing and `CLAUDE.md` for why it is built
 the way it is. This file only covers what is *left*.
