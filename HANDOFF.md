@@ -2,10 +2,14 @@
 
 For whoever picks this up next, human or agent. It says where the harness
 stands, what the three rules are that must not be broken while changing it, and
-the six jobs that are queued, in the order they are worth doing.
+what is queued, roughly in the order it is worth doing.
 
 Read `README.md` for how to use the thing and `CLAUDE.md` for why it is built
-the way it is. This file only covers what is *left*.
+the way it is. This file only covers what is *left*. Two older documents carry
+the reasoning behind most of it and are worth opening before doing any of the
+physics or firmware work: `../HARNESS_PLAN.md` (the diagnosis, the 38 physics
+experiments, the risks) and `../HARNESS_REDESIGN_PLAN.md` (the eleven slices
+this harness was built in, plus the deviations recorded in its §8.1).
 
 ## Where it stands
 
@@ -50,7 +54,7 @@ exactly the tempting one.
 version, never an overwrite.** `just record-baseline` refuses to overwrite, on
 purpose. Bump `baseline` in the `justfile` to `baseline/v3`, move the old one
 into `previous_baselines`, and the older recordings stay comparable as a header
-prefix. This is the correct path for job 1 below.
+prefix. This is the correct path for job 2 below.
 
 Corollary of rule 3: new CSV columns go at the **very end**. The prefix check is
 literally a header prefix, so appending a pool variable in the middle would
@@ -82,7 +86,7 @@ The fix is to get `sendBinary` off the simulation thread: hand `outgoing` to a
 bounded ring drained by a dedicated sender thread, drop the oldest frames when
 it is full, and count the drops. The monitor is a view, not a ledger. Coalescing
 several ticks into one frame is worth doing at the same time — at ~12 000
-frames/s the framing overhead is most of the traffic. See also job 4, which is
+frames/s the framing overhead is most of the traffic. See also job 5, which is
 the same problem seen from the radio's side.
 
 **A monitor-driven run claims to be reproducible when it is not (high).**
@@ -126,7 +130,63 @@ full of control bytes), determinism holds for a no-client run, a refused port
 and a well-behaved client, hostile input neither crashes nor leaks across 18 MB
 of adversarial traffic, and the server binds to loopback only.
 
-## Job 1 — MuJoCo 3.3.6 to 3.13.0
+## Job 1 — The robot still does not finish maze 2
+
+This is the actual goal and it is not met. Everything else on this list is
+infrastructure around it.
+
+Where it is: on `models/maze.txt` the explore reaches a goal cell at 38.8 s,
+returns to `{0, 0}` and goes IDLE at 94.6 s — the maze is solved. On
+`models/maze2.txt`, the 2019 Portugal qualifier, it does not reach the goal and
+dies at 69.2 s. So the tuning is not maze independent, and a robot that only
+solves the maze it was tuned on has not been shown to work.
+
+The failure has been isolated and it is **geometric, not a control problem**.
+`push_exploring` queues `stop`, `turn_back`, `move_half`, and `turn_back` pivots
+about the body origin with no safety margin. The chassis mesh puts the front tip
+at `sqrt(15.5² + 66²) = 67.8` mm from that origin against a corridor half-width
+of 83.7 mm, so the spin needs the body origin within **15.9 mm** of the cell
+centre, and `tools/turn_stats.py` shows every spin in every run starting 16 to
+18 mm past it — because `stop` starts wherever the accumulated longitudinal
+error left the robot and only measures 90 mm of travel from there. Every spin
+scrapes. On maze 2 the spin at 25.7 s is the first chassis contact of the run
+and the start of the 2.19 m odometry runaway that kills it.
+
+Three things it depends on, and only one of them is code:
+
+1. **Measure the real chassis.** The mesh in `robot_v2.xml` is 66 mm wide and
+   99 mm long; the sibling Micrasverse repo models the same robot as 50 × 80 mm.
+   That is 32 % wider and 24 % longer, and the wheels stick out another 4 mm
+   each side. If Micrasverse is right, the mesh is simply wrong and fixing it
+   takes the spin margin from 15.9 to about 25 mm — which may be the whole bug.
+   **Somebody has to put a caliper on the real robot.** Nobody should touch the
+   mesh before that number exists.
+2. **Give `turn_back` a safety margin on the exploring path.** The solving path
+   already has one — `ActionQueuer::get_trim_distances` applies
+   `curve_safety_margin` to the 180° case. The exploring path has nothing
+   equivalent. This is firmware nav work.
+3. **`post_reference` is wrong, not `post_threshold`.** Lowering the threshold
+   was swept over 400/100/50/30/20 and is a clear negative — the correction
+   fires constantly and injects error. Fixing it needs a measurement of where
+   the simulated post edge actually falls, which nobody has taken.
+
+**A firmware bug found during that work and never fixed**, still present at
+`MicrasFirmware/micras_nav/src/action_queuer.cpp:83-88`: the `turned_left`
+branch of `push_exploring` queues `move_to_turn, turn_left, move_to_turn`, while
+`turned_right` two blocks below queues `move_to_turn, turn_right,
+move_from_turn`. Almost certainly copy-paste — the left turn exits on the
+wrong action, and with no `follow_wall` where the right turn has one. Fix it
+under rule 3 (it changes behaviour, so it needs a new baseline), and check
+whether it moves the maze 2 result before doing anything else on this list.
+
+Also open, from the same investigation: **23 differences between
+`config/constants.hpp` and the firmware are still marked `TODO`** in the
+allowlist at the top of `tools/check_config_drift.py`, meaning allowlisted but
+never explained. `just drift` prints the count. The most suspicious is the sign
+of `right_feed_forward.angular_acceleration` (+0.1 in the harness against
+-0.0244 in the firmware, while the left one keeps its sign).
+
+## Job 2 — MuJoCo 3.3.6 to 3.13.0
 
 Worth doing and nothing structural is in the way. 3.13.0 is real and current
 (released 2026-09-09); the pin at 3.3.6 is just where the work started.
@@ -167,7 +227,7 @@ fine and it is rule 3, not rule 2.** The procedure:
 `compare_run.py`'s `BEHAVIOUR_FIELDS`, so the provenance is kept without the
 version itself failing a comparison.
 
-## Job 2 — Get Micras out of the command line
+## Job 3 — Get Micras out of the command line
 
 The complaint is fair: `Cli` knows far too much about this specific robot.
 `--command none|explore|solve|calibrate` hardcodes four firmware pool variable
@@ -191,9 +251,9 @@ belongs in **data**, not in C++:
 Do it under rule 2: an identical scenario expressed the new way must produce a
 byte-identical `data.csv`. That is a strong test and it is cheap to run.
 
-## Job 3 — Get Micras out of the CSV recorder
+## Job 4 — Get Micras out of the CSV recorder
 
-Same complaint, bigger blast radius, and the reason to do it after job 2.
+Same complaint, bigger blast radius, and the reason to do it after job 3.
 
 `src/sim/recording/ground_truth.cpp` is where it concentrates: wheel joint
 names, the left/right wheel geoms, the caster, the `base` geom, four wall
@@ -215,7 +275,7 @@ Two things to preserve while doing it, both non-obvious and both load-bearing:
   `nan` means "no contact at all" and `0` means "touching exactly". Collapsing
   them loses real information that `analyze.py` reads.
 
-## Job 4 — The radio is lying about its bandwidth
+## Job 5 — The radio is lying about its bandwidth
 
 This one is not cosmetic and it is the one most likely to cost a race.
 
@@ -245,25 +305,103 @@ Two ways to fix it, and they are not equivalent:
 The budget should be configurable, because the answer depends on which radio the
 robot actually carries.
 
-## Job 5 — The singleton
+**This was already queued on the firmware side**, with options chosen, and the
+harness now gives you the measurement to justify picking one. The stream needed
+about 1.6 Mbaud before the new monitoring variables and about 2.5 Mbaud after.
+The options on the table: decimate `send_serial_variables` (1 in 10 gives about
+96 Hz, which is plenty for a human watching); remove the redundancy, since
+`Odometry State` duplicates velocities already sent separately; and
+`send_data(std::span)` plus a ring buffer to get the heap out of the control
+loop.
+
+And a real firmware bug sitting underneath all of it:
+`BluetoothSerial::trim_tx_queue` (`micras_proxy/src/bluetooth_serial.cpp:63`)
+erases **raw bytes** from the front of the queue when it overflows. It cuts
+wherever it lands, mid-packet, so the packet straddling the cut is corrupted and
+the receiver resyncs. Whatever else is done about bandwidth, dropping should be
+per whole packet — drop-newest or drop-oldest, but never half of one.
+
+## Job 6 — The singleton, and the decision that actually removes it
 
 `sim::SimulationContext::instance()` is a function-local static. It is not there
 because anyone liked it; `CLAUDE.md`'s shadow-proxy section and Appendix A of
 `HARNESS_REDESIGN_PLAN.md` have the full argument, but the short version is that
 the firmware builds its proxies as member initialisers from `const` globals in
 `target.hpp`, so at construction time the only route to the world is something
-reachable from a `Config`. A static class would have the same property and the
-same problem — the issue is process-wide reachability, not the spelling.
+reachable from a `Config`. **A static class would have the same property and the
+same problem** — the issue is process-wide reachability, not the spelling.
 
 It is already fenced: exactly three places name `instance()` — `target.hpp`,
 `Application`'s member initialiser, and the context's own file. Everything else
 receives facets through its `Config`, and the tests build their own context,
 which is what makes the fence real rather than aspirational.
 
-Removing it properly needs the firmware to grow an explicit proxy-layer contract
-(a `Micras` that can be constructed with its dependencies). When that lands,
-`Application` constructs and injects the context and nothing else changes.
-Until then, tightening the fence is worth more than replacing the mechanism.
+**The decision that actually removes it has already been taken** (2026-09-21,
+priority "soon", recorded at the end of `../HARNESS_PLAN.md` §7): `Micras` takes
+its proxies through its constructor as `shared_ptr`, exactly as `Odometry`,
+`FollowWall` and `SpeedController` already do, and the hardware `main.cpp`
+assembles the real proxies from `target.hpp`. That single change kills the
+header-shadowing mechanism, the singleton, **and** the three divergent copies of
+the proxy layer that `tools/check_config_drift.py` exists to police. It needs an
+interface or a C++20 concept per proxy so the simulated and the real one are
+interchangeable, and it wants a firmware CMake that can build
+`micras::core/nav/comm` without CubeMX, with something like
+`MICRAS_PROXY_IMPL=<dir>`.
+
+Until that lands, tightening the fence is worth more than replacing the
+mechanism. Do not invent a third way around it.
+
+## Firmware backlog, already diagnosed
+
+Small, understood, and none of it done. Each needs a new baseline under rule 3
+because each changes behaviour.
+
+- **`Interface` latches the command triggers.** `comm_explore`, `comm_solve` and
+  `comm_calibrate` are triggers, not switches, but they are never cleared after
+  generating their event, so the `true` stays latched and re-fires the moment the
+  FSM comes back to `IDLE`. This is why a run that finishes and goes IDLE
+  immediately starts another one.
+- **`SERIAL_VARIABLE_CONTROL` has no bounds check.** A malformed id from the
+  radio indexes out of range.
+- **The receive deque is cleared after framing a single packet**, which is why
+  the harness may never inject more than one packet per tick. It is a firmware
+  behaviour worth revisiting, not a harness limitation.
+- **The rangefinder sentinel.** MuJoCo returns -1 for no hit, and the
+  `1 - exp(-c/x²)` conversion cannot tell -1 from +1. Handle the sentinel
+  explicitly rather than letting it alias onto a real reading.
+- **`solving.max_linear_acceleration = 12` is unreachable in the model.** With
+  the centre of mass about 20 mm ahead of the axle and a third of the weight on
+  the caster, maximum acceleration is around 6 m/s². When the motor model was
+  corrected this started showing up as a new "failure"; it is a finding, not a
+  regression.
+
+## What the plan asked for and is not there
+
+`../HARNESS_REDESIGN_PLAN.md` §2 is the list of decisions taken with the user
+before any of this was built. Its §8.1 records the deviations that were made
+deliberately during execution, with reasons — read that before assuming
+something was forgotten. These four, though, were agreed and simply are not
+done:
+
+- **Screenshot from the viewer.** §2 lists it in the same breath as the render
+  flags ("flags de render, screenshot"). There is no key for it and no code.
+  `mjr_readPixels` is already used by `VideoRecorder`, so this is small.
+- **Battery on the panel.** §2's minimum panel content includes it. It is not
+  there, and it cannot be until something feeds it: `ProxyState` has no battery
+  field, and the CSV column was removed once measurement showed this firmware
+  build never reads the battery at all (recorded in §8.1). So the honest version
+  of this item is a question — should the panel show a value the firmware
+  ignores? — not a coding task.
+- **A bipolar fan control.** §2 asks for one. The panel has a "fan allowed"
+  checkbox, which is an override, not a control.
+- **Reset in the window means a new run** (`run_002/`), so that every CSV is a
+  complete run. Deferred with reasons in §8.1; see the entry below.
+
+Also worth knowing when reading §2 against the code: it says
+`SimulationContext::instance()` is used *only* by `target.hpp`. In practice
+`Application`'s member initialiser names it too, which is where the process's
+one context is picked up. That is correct and intended; the plan's sentence is
+just narrower than reality. `CLAUDE.md` states the actual rule.
 
 ## Also queued, smaller
 
