@@ -2,70 +2,90 @@
 
 `README.md` is how to use this. This file is why it is built the way it is: the
 invariants that hold it together, the subtleties that look like bugs and are
-not, and the measurements behind the numbers in `config/constants.hpp`.
+not, and the measurements behind the numbers in `targets/micras/robot.toml`.
 
 Linux only, by decision. `just` is the entry point; there is no Makefile.
+`SPEC_1_WORK.md` and `SPEC_2_DECISIONS.md` record the work that produced this
+layout and the fourteen decisions behind it.
 
 ## The rule everything else serves
 
 **A run is reproducible.** Two runs of the same binary with the same arguments
-produce byte-identical `data.csv` and `meta.json`. Nothing in `sim/` may make
+produce byte-identical `data.csv` and `meta.json`. Nothing in the engine may make
 the firmware's view of the world depend on wall time, on a window being open, on
-a client being connected, or on how fast the machine is.
+a client being connected, or on how fast the machine is. Noise is part of the
+world (D8) and is seeded: `--seed` picks the stream, `--ideal` turns it off.
 
-This is enforced, not hoped for. `just check` runs the same scenario headless
-and with a window, headless and with a bridge, and compares the two CSVs as
-bytes; and it compares the three standard scenarios against the recorded
-baselines in `baseline/`.
+This is enforced, not hoped for. `just micras check` runs the same scenario
+headless and with a window, with and without a video, and with a bridge nobody
+connects to, and compares each pair of CSVs as bytes (`tools/compare_run.py`).
 
-Two invariants govern the baselines:
+Baselines are summaries, not recordings (D10). `targets/micras/baselines/v5/`
+holds one `summary.json` per checked run: the hash of `data.csv`, the state
+timeline, and a handful of numbers with their tolerances (`tools/baseline.py`).
+On the machine that recorded it the hash matches; on another it will not, because
+the compiler, libm and the MuJoCo build all move the last bits, and the summary is
+what is compared. Two rules:
 
-- **A refactoring must not move a byte.** If `data.csv` differs from
-  `baseline/v2`, the refactoring is wrong. Revert it. Never re-record the
-  baseline to make a diff go away.
-- **An extension only appends columns.** Every row's prefix up to the first new
-  column stays byte-identical, and the previous baseline is kept and compared
-  with `--columns-subset`, so old recordings stay comparable forever. Note what
-  that check is: a header prefix. New columns therefore have to go at the very
-  end — appending a pool variable would shift every `proxy_*` column right and
-  break it.
+- **A refactoring must not move a byte.** On one machine, a refactoring leaves
+  the hash where it was. If it moves, the refactoring is wrong.
+- **Never re-record to make a difference go away.** `record-baseline` refuses to
+  overwrite a version; a change of behaviour is a new version, `v5`, with the
+  reason in the commit.
 
-## Architecture
+## Layers
 
-Five libraries. `micras_sim_app` sits on top of all of them; `micras_sim_view`
-links only the core, so nothing about drawing can reach the recording layer:
+Everything is in this repository, in three layers:
 
 ```
-micras_sim_core     world, clock, serial bus, proxy state, run loop, firmware thread
-micras_sim          + scenario, telemetry, recording          (links the firmware shadow)
-micras_sim_view       window, control panel, video recorder   (GLFW/ImGui/EGL, on core)
-micras_sim_bridge   + WebSocket server, monitor bridge        (IXWebSocket)
-micras_sim_app      + CLI, application wiring, crash reporter
+engine/, view/, bridge/, app/   the simulator: knows no robot and no HAL
+hal_host/                       micras_hal implemented on a PC: knows no physics
+targets/micras/                 the micromouse: firmware submodule, bindings, robot.toml
 ```
 
-`src/main.cpp` is one call; `Application::main` is the `try`. The application is the only layer
-that knows a run can have a window, so it is the only one that links the view.
+`just check-generic` greps everything outside `targets/` for names that belong to
+a robot and fails on any (M2). The root CMakeLists adds every folder of
+`targets/` that has a CMakeLists; nothing above `targets/` names one.
 
-`MICRAS_VIEWER`, `MICRAS_VIDEO`, `MICRAS_BRIDGE` and `MICRAS_TESTS` are all ON
-by default and all must still compile when OFF; `just check-options` configures
-every one of them off as part of the gate, because stale stubs are otherwise
-only found by whoever first tries to build without a GPU.
+Four engine libraries. `micras_sim_app` sits on top; `micras_sim_view` links only
+the engine, so nothing about drawing can reach the recording layer:
+
+```
+micras_sim_engine   world, clock, run loop, firmware thread, devices, arenas,
+                    robot description and model, scenarios, recording
+micras_sim_view     window, declarative panel and overlay, video (GLFW/ImGui/EGL)
+micras_sim_bridge   WebSocket server, monitor bridge (IXWebSocket)
+micras_sim_app      CLI, application wiring, crash reporter; the Target interface
+```
+
+A robot target implements `Target` (`app/include/micras/sim/app/target.hpp`): its
+name, firmware commit, loop period, options, robot file, ground truth columns and
+program, and `wire()`, which binds its devices to the host ports and returns what
+it adds to the run (`Wiring`: inputs, observers, columns, variables, panel,
+overlay, scenario hooks). Its `main` is one call to `micras::sim::run`.
+
+`MICRAS_VIEWER`, `MICRAS_VIDEO`, `MICRAS_BRIDGE` and `MICRAS_TESTS` are all ON by
+default and all must still compile when OFF; `just check-options` configures
+every one of them off, because stale stubs are otherwise only found by whoever
+first tries to build without a GPU.
 
 ### The run loop
 
 `Simulation::run` drives `IRunListener`s. Order per tick:
 
 ```
-on_before_tick   -> RunControl{RUN, QUIT}   crash reporter, scenario, monitor, pause
-firmware.run_until_yield()                  the firmware thread runs one loop
-world.step(steps_per_tick)                  2 x 0.000521 s = 1042 us
+on_before_tick   -> RunControl{RUN, QUIT}   crash reporter, scenario, target inputs, monitor
+firmware.run_until_yield()                  the firmware runs until its timer crosses a step
+device->actuate()                           motors, fan: from what the firmware wrote
+world.step(steps_per_tick)                  125 us, one MuJoCo step
 clock.advance()
-on_after_tick                               monitor, telemetry, recorder, video, viewer
+device->sample()                            encoders, IMU, wall sensors, ADCs, link
+on_after_tick                               target observers, event log, recorder, video, viewer
 ```
 
-Listeners run in registration order, which `Application` fixes. `Telemetry`
-overrides only `on_after_tick`, so the pool values a row carries are decoded
-after the tick they belong to and before the recorder writes it.
+Listeners run in registration order, which `Application` fixes. Devices sample
+after the step, so what the firmware reads in tick N+1 is the world at the end of
+tick N: the true boundary, not a rounding choice.
 
 `has_finished()` is checked both before `before_tick()` and after
 `run_until_yield()`, so a firmware that has exited gets no physics step and no
@@ -73,38 +93,48 @@ CSV row. A `FinishGuard` runs `finish()` however `run()` leaves, including
 through an exception from a listener; without it a thrown listener would leave
 the firmware thread parked on the handoff with nobody left to wake it.
 
+### Time: the host timer hands over (D2)
+
+The firmware keeps its own notion of time through `micras_hal`'s timer, and
+`hal_host`'s `Clock` is the only place that time exists. **Every read of the
+timer costs one microsecond of simulated time**, since a read on the robot takes
+time too and a loop that polls the timer must see it advance. When a read
+crosses the end of a 125 us step, the clock calls its handover, which is the
+firmware thread's `yield_tick()`: the world advances one step and the read
+returns after it. So a busy wait runs the world exactly as long as it waits, the
+firmware's 125 us loop is one step, and the time inside one iteration is the
+number of timer reads times the quantum: deterministic, but not a measurement of
+anything. There are no spin guards and no special cases.
+
 ### The two threads
 
-The firmware runs `micras::Micras` in its own thread. This is not concurrency:
-it is a **strict handoff**, a mutex and a condition variable around a `Turn`
-flag, and the two threads are never runnable at the same time. The firmware
-thread runs until it calls `yield_tick()`, then blocks; the simulation thread
-advances physics, then wakes it. A ThreadSanitizer build reported no race, which
-is what the design predicts; nothing in the repo runs that build routinely.
-
-The thread exists because the firmware's loop is a loop: `Micras::update()`
-busy-waits on its own stopwatch, and there is no way to return from the middle
-of it. Everything else — the window, the panel, the bridge callbacks that matter
-— is drained on the simulation thread.
+The firmware runs its own `main` (compiled as `micras_firmware_main`) in its own
+thread. This is not concurrency: it is a **strict handoff**, a mutex and a
+condition variable around a `Turn` flag, and the two threads are never runnable
+at the same time. The firmware thread runs until the host timer yields, then
+blocks; the simulation thread advances physics, then wakes it. A
+ThreadSanitizer build reported no race, which is what the design predicts;
+nothing in the repo runs that build routinely.
 
 `finish()` latches `stopping` before checking `joinable`, and if the program
 refuses to stop it says so on stderr and calls `std::_Exit`. It does not detach:
 a detached thread running over a destroyed world is worse than a loud exit.
 `yield_tick()` returns false instead of parking when the thread is stopping
-during unwinding, which is how a firmware test that throws gets to leave.
-
-The thread body is called `thread_body()` and not `main()`, because the hardware
-test executables compile the firmware's `main` under `-Dmain=micras_test_main`,
-which would rename a member called `main` too.
+during unwinding. The thread body is called `thread_body()` and not `main()`,
+because the firmware's `main` is renamed with `-Dmain=...`, which would rename a
+member called `main` too.
 
 ### The viewer draws on the simulation thread
 
-There is no render thread, and therefore no snapshot and no mutex around the
-proxy state — the snapshot only ever existed to protect a render thread that was
-never built. `MujocoViewer` draws inside `on_after_tick` and blocks inside
-`on_before_tick` while paused. Rendering dominated wall time when it was last
-measured, roughly 70 % of it; `--viewer-fps` is the lever, and the figure is an
-estimate rather than something the repo records.
+There is no render thread. `MujocoViewer` draws inside `on_after_tick` and
+blocks inside `on_before_tick` while paused; `--viewer-fps` is the lever on wall
+time. The panel and the overlay are declarative (D12): a target returns a
+`PanelSpec` of buttons, switches, lamps and readouts and an `OverlaySpec` of
+lines, and the view draws them without knowing the robot. The first touch of a
+board control hands the run over: the scenario stops driving the inputs and the
+run is marked `interactive`. Panel input uses ImGui **edges**
+(`IsItemActivated`/`IsItemDeactivated`); writing every frame from the held state
+would overwrite a scripted press.
 
 EGL and GLX contexts cannot both be current on one thread. `--viewer --video`
 therefore requires that `VideoRecorder` make its EGL context current in
@@ -112,271 +142,252 @@ therefore requires that `VideoRecorder` make its EGL context current in
 GLFW context current first. Without that pair the run dies with
 `BadAccess X_GLXMakeCurrent` and leaves an empty CSV.
 
-## The shadow proxy layer
+## The host HAL (D3, D4)
 
-`config/` and `include/micras/proxy/` shadow the real `micras_proxy`. Include
-order matters: `config` and `include` come before `MicrasFirmware/include` so
-the firmware picks up ours. `MicrasFirmware/src/main.cpp`, `micras_hal` and
-`micras_proxy` are excluded from the build.
+`hal_host/` implements every `micras_hal` class the firmware uses on a PC, and
+includes nothing but `micras_hal` headers and its own. `Board` is a registry of
+ports (`GpioPort`, `PwmPort`, `PwmDmaPort`, `AdcPort`, `UartPort`, `FlashPort`,
+`McuPort`, `EncoderPort`, `SamplePort`) **keyed by the address of the Cube handle
+or GPIO port** that names them, so the firmware's own `target.hpp` is the key:
+`.handle = &htim4` there and `Board::pwm(&htim4, ...)` in a binding reach the same
+port. Nothing in `hal_host` knows a physics engine; the target's bindings connect
+ports to devices.
 
-Proxies are constructed as members of `Micras`, initialised at their
-declarations from the `*_config` globals in `config/target.hpp`. There is no
-constructor to inject anything into. So each `Config` carries a
-`sim::SimulationContext*`, and `SimulationContext::instance()` is a
-function-local static, so it is constructed on first use and never before
-whoever depends on it. Exactly three places name it: `config/target.hpp`, once
-per `Config`; `Application`'s member initialiser, which is where the process's
-one context is picked up; and the context's own file, for the yield helper the
-proxies call. **No proxy and nothing else in `sim/` may call it** — they receive
-the facet they need
-(`MujocoWorld&`, `Clock&`, `SerialBus&`, `ProxyState&`) through the `Config`. A
-proxy built without a context, or before a model is loaded, throws at
-construction. Tests build their own `SimulationContext` and pass it through the
-same field.
+A port the firmware used that no binding claimed is counted, reported on stdout
+and written to `meta.json` as `unbound_ports`; the gate expects zero. So do
+`watchdog_expiries` and `emergency_stops`, which `Mcu` counts instead of
+resetting a process.
 
-`tests/unit/shadow_conformance_test.cpp` instantiates every shadow `Config` with
-the firmware's own designated initialisers, which is what catches a field that
-drifted (it already caught `Storage::Config`'s `start_page` against
-`start_sector`).
+`hal_host/include/stm32_host.h` holds the handle types and HAL constants. The
+Cube layer the firmware includes (`main.h`, `tim.h`, `adc.h`, ...) is written by
+hand per robot in `targets/micras/cube/`, with the handles configured as
+CubeMX configures them on the board (timer clock 275 MHz, TIM4 centre-aligned at
+PSC 274 / ARR 250, and so on), because the host `Pwm` and `Timer` compute
+frequencies and duties from those registers.
 
-`tools/check_config_drift.py` diffs `config/constants.hpp` and
-`config/target.hpp` against the firmware's field by field and fails on anything
-not in the allowlist at the top of the script. Entries still marked `TODO` there
-are known divergences not yet written into the `constants.hpp` `@note`.
+Of the firmware, everything compiles unchanged except `micras_hal` (replaced by
+`hal_host`) and the proxies of the two SPI chips, `Imu` and `RotarySensor`
+(replaced by `targets/micras/proxy/`): the IMU proxy reads the IMU device's
+samples from a `SamplePort`, the rotary sensor reads `hal::Encoder`.
+`FmacFilter` is left out because nothing uses it and it needs the FMAC.
+`hal::Spi` and `hal::Encoder` exist in `hal_host`; the host SPI is chipless.
 
-### Stopwatch, the one that bites
+## The robot description (D7)
 
-`Stopwatch` reports **simulated** time, and it is honest: it returns what the
-clock actually says. That alone deadlocks, because the firmware busy-waits on it
-while physics is frozen. So it has spin guards, and they are deliberately
-asymmetric: `elapsed_time_us` yields on the **second** repeated read at the same
-simulated instant (`max_repeated_reads = 2`), `elapsed_time_ms` only on the
-**fourth** (`max_repeated_ms_reads = 4`), because the firmware legitimately reads
-the same millisecond twice in one tick when it classifies a button release.
-`sleep_us` yields until the target passes.
+`targets/micras/robot.toml` is the robot's physical truth, written by hand from
+the CAD, the board and the datasheets. Every value is either a number or
+`{ value, source }` naming where it came from, and `RobotDescription` rejects a
+missing key, an unknown key, a wrong type and an unknown schema version. The
+engine generates the MJCF from it (`robot_mjcf`) and composes it with the arena
+(`Maze::mjcf`, attached under the prefix `maze_`); the composed model is saved to
+`<out>/model.xml` and hashed into `meta.json`.
 
-`reset_us` and `reset_ms` move `counter`, which is the point of them. What
-deliberately **survives a reset** are `last_read_us` and the two spin counters.
-This looks wrong and is load-bearing: `Fan::update` resets its own stopwatch every call, so a counter
-that reset with it would never reach the threshold, and `test_fan` would spin
-forever. The constructor seeds `counter = now_us - us_per_tick`, so the
-firmware's first loop reads the nominal period instead of zero.
+`robot.hpp` in the firmware is the firmware's *belief*, and the two are never
+forced equal. `just micras robot-report` prints them side by side. Today they
+differ in the emitter half angle (3 deg datasheet against 5.2 deg with mounting
+tolerance), the gyro noise (datasheet against a third more), the maze wall
+thickness (12 mm arena against 12.6 mm) and the front length (53.5 mm board
+against 54.9 mm with the sensor housings), all on purpose.
 
-## The CSV
+Things in `robot.toml` that look arbitrary and are not:
 
-85 columns: the tick, the simulated time and the firmware's own loop time, then
-33 of MuJoCo ground truth, 29 from the firmware pool, and 20 of what crossed the
-proxy boundary.
+- **The tyres have no rolling friction** (condim 4, not 6). MuJoCo's convex
+  contact separates two surfaces in proportion to how fast their friction is
+  slipping, and a rolling wheel keeps a rolling-friction constraint slipping all
+  the time. With it the tyres lost the floor on 18 % of steps at 0.4 m/s and 55 %
+  at 1.5 m/s, at every timestep tried (125, 62.5 and 31.25 us), and so did a
+  bare sphere. The same separation happens where tyres really slide, in a pivot;
+  a tyre soft enough (`contact_time_constant` 5 ms or more) absorbs it inside its
+  own deflection. 8 ms is the estimate for the 1 mm silicone band. With the old
+  2 ms the hopping wheels hardly scrubbed, and a pivot at 0.6 V spun at 3.2 rad/s
+  instead of 1.1.
+- **The timestep is 125 us**, one firmware loop (R3). Halving it changed neither
+  the contacts nor the trace.
+- **The chassis mass is 62 g**, not 70: the firmware's 70 g and 2.9e-5 kg m^2 are
+  the whole robot, and the wheels are modelled separately.
+- **Each wall sensor has a gain.** `tools/wall_calibration` places the robot
+  where the firmware calibrates (centred in a corridor for the side sensors,
+  facing a wall for the front ones) and sets each gain so that the simulated
+  reading equals the robot's `reference_readings` in `target.hpp`. Without the
+  gains the readings were about four times low and the localizer corrected
+  against them. `--sweep` shows how the firmware's distances then follow the
+  true ones.
+- **Two skids the CAD does not have.** The robot rests on the edges of its board:
+  the rear one at rest, since the centre of mass is 0.8 mm behind the axle, and
+  the front one with the fan on, since the fan pulls 17.5 mm ahead of it. Two
+  1 mm spheres stand in for those edges. They are frictionless because a sliding
+  frictional contact separates in MuJoCo like the tyres above; the board's own
+  friction would lift it off the floor.
+- **The fan pulls straight down**, not along the board's normal: its actuator's
+  reference is a site fixed in the world. With the fan on, the board tilts onto
+  its nose and a pull along its normal has a backward part, about 1 % of it. On
+  the robot the friction of the board edge holds that. On the frictionless skids
+  it rolled the robot 4 mm into the back wall while it waited 5 s for the fan.
+- **The fan's 3 N is the owner's figure**, at full speed on the charged pack
+  (`nominal_voltage` 12.3 V). The nose carries a third of it, so the tyres get
+  2 N, and they sink 0.15 mm into the floor under it. Their rolling radius is
+  then 0.6 % short of 11 mm, and the firmware's odometry runs 0.6 % long with the
+  fan on. The same is expected of the real band, so calibrate the wheel radius
+  with the fan running.
+
+## The CSV (D11)
+
+One row per tick, or per `--record-every` ticks. The engine's block first: the
+tick, the simulated time, the body pose and velocity. Then the robot's ground
+truth columns, then the firmware's own monitoring variables, then each device's
+columns. Two sources naming the same column is an error at the first row.
 
 - A MuJoCo free joint splits its six velocity dofs across two frames, so the
   linear columns are `vx_world`, `vy_world`, `vz_world` and the angular one is
   `wz_body`. `v_forward` is the world linear velocity projected on the body
-  forward axis, `-vx_world*sin(yaw) + vy_world*cos(yaw)`; the model's forward
-  axis is body +y.
-- `left_penetration` and `right_penetration` are `nan` on ticks where the geom
-  had no contact at all. `0` means "in contact, exactly touching".
-- The `proxy_*` block is what the firmware read and wrote at the **start** of
-  the tick, so those sensor columns are one tick behind the ground truth on the
-  same row. That is the true boundary, not a rounding choice.
-- `grid_pose` is the cell the robot is *moving into*, so it legitimately leads
-  the ground-truth cell by one cell for most of a run. `grid_pose_side` follows
-  `nav::Side` (RIGHT=0, UP=1, LEFT=2, DOWN=3) and `fsm_state` follows
-  `Micras::State` (INIT=0, IDLE=1, WAIT_FOR_RUN=2, RUN=3, WAIT_FOR_CALIBRATE=4,
-  CALIBRATE=5, ERROR=6).
+  forward axis, which for this robot is body +x.
+- `*_penetration` is `nan` on ticks where the geom had no contact at all. `0`
+  means "in contact, exactly touching".
+- The variable columns come from the firmware's `VariablePool`, read through a
+  read-only accessor (D5), and are named from its own variable names. State ids
+  and names come from the firmware too (R6); nothing in the simulator hard-codes
+  them. The device columns are what the simulated hardware produced: the
+  `lsm6dsv_*` IMU samples, the `wall_*` ADC readings, the `motor_*_voltage` the
+  bridge applied, `pack_voltage`.
 
-Columns the firmware never feeds are **not** in the CSV. The battery voltage and
-the LED/ARGB/buzzer block were removed once measured: this build never reads the
-battery, and the only call that reaches those proxies is the `buzzer->update()`
-in `Micras::update`, so the columns were constant. `ProxyState` still carries `interface_output`, because the panel shows
-it.
+What the recording decimates, the event log does not: collisions and state
+changes are detected every tick and written to `meta.json`'s `events`. A
+collision is a chassis geom touching anything but the floor after having been
+clear of everything for 50 ms; a robot pressed against a wall makes and breaks
+contact every few steps, and that is one collision, not hundreds.
 
 The CSV is flushed after every row, and a SIGSEGV/SIGABRT handler writes
 `firmware crashed at tick N` to stderr before re-raising, so a firmware crash
 still leaves an analysable run behind.
 
-## Telemetry and the bus
+## The link and the bridge
 
-`BluetoothSerial` is an in-process byte queue. At tick 0 the harness injects one
-`SERIAL_VARIABLE_MAP_REQUEST` and names the pool columns from the response. The
-firmware clears its whole receive deque after framing one packet, so **never
-inject more than one packet per tick** — the `SerialBus` enforces exactly that,
-which is also what keeps a burst from a connected monitor out of the run's
-determinism.
+The firmware's radio is a UART behind `hal::UartDma`; the `SerialLink` device
+moves bytes between it and the engine's `SerialBus` no faster than the configured
+baud rate, and the bus keeps whatever is pending (up to 64 KiB, counting what it
+drops in `serial_dropped_bytes`). There is no framing in the simulator: the
+firmware's `comm::Link` does its own.
 
-The map reports types through `core::type_name`, so they arrive fully qualified
-(`micras::nav::GridPose`, `micras::nav::State`, alongside plain `float` and
-`unsigned char`). The decoder matches on the last component only and expands custom serializables into one column per field.
+The monitor bridge carries raw bytes both ways (R9). Incoming bytes land in a
+mutex-guarded buffer on an IXWebSocket thread and are handed to the bus on the
+simulation thread in `on_before_tick`; each tick's output goes out as one binary
+frame in `on_after_tick`, through a bounded queue and a sender thread, so a
+client that stops reading loses frames (`bridge_dropped_frames`) instead of
+stalling the run. A port already taken is a warning, not a failure.
 
-The monitor bridge is the same bus with a socket on it. Incoming bytes land in a
-mutex-guarded `PacketFramer` on an IXWebSocket thread and are drained on the
-simulation thread in `on_before_tick`; the tick's output goes out as one binary
-frame in `on_after_tick`. A port already taken is a warning, not a failure.
+Note what the gate proves: `check-monitor` compares a bridged run **with nobody
+connected** against a plain one. A run a client talks to is marked `interactive`
+and is not reproducible, by definition.
 
-That one-packet-per-tick rule is what keeps a burst from a connected monitor out
-of the run, but note what the gate actually proves: `check-monitor` compares a
-bridged run **with nobody connected** against a plain one. The bridged run that
-does have a client attached is not compared against anything, so immunity to a
-talking monitor is enforced by construction and not yet by a test.
+## Scenarios (D13)
 
-## Real versus stub proxies
-
-- Backed by MuJoCo: `Motor`/`Locomotion`, `Fan`, `RotarySensor`, `Imu`,
-  `TWallSensors<4>`.
-- Deterministic but synthetic: `Stopwatch` (sim clock), `Battery` (constant),
-  `BluetoothSerial` (in-process), `Storage` (in-memory, blank every run).
-- Stubs recording the last value: `Led`, `TArgb<2>`, `Buzzer`, `Button`,
-  `TDipSwitch<4>`, `TTorqueSensors<2>` (always 0).
-
-`Button` and `TDipSwitch` read `ProxyState::interface_input`, written by the
-scenario or by the panel. `config/target.hpp` uses the firmware button delays,
-`long_press_delay = 500` and `extra_long_press_delay = 2000`, and
-`Button::update` classifies on `elapsed_time_ms` strictly greater than each, so
-the scenario holds the button for 250 ms, 501 ms and 2001 ms.
-
-The panel hands over rather than fights: the first touch of any board control
-sets `driven_by_human`, and `Scenario::on_before_tick` returns early from then
-on. Panel input uses ImGui **edges** (`IsItemActivated`/`IsItemDeactivated`), not
-`IsItemActive`; writing every frame from the held state overwrites the scripted
-press and silently turns an `extra_long` into a `SHORT_PRESS`.
+A scenario is a TOML file: the arena, the duration, the seed, the start pose,
+timed events (`press` an input for a time, `set` it, `send` a link command,
+`push` the body) and a stop condition on a firmware variable. CLI flags override
+what they name. Starts go through the robot's real paths: a short press of the
+button starts an exploration, exactly as on the robot (R12).
 
 ## The firmware submodule
 
-`MicrasFirmware/` sits on `feature/sim-harness`, branched from `ad34254`.
-**Edit it only with intent**, in the firmware's own style
-(`.clang-format`, Doxygen on every declaration), and only with changes that make
-sense on the real robot too. What is there now:
-
-- `Micras::run` sets `navigation_failed` when `push_exploring` queues nothing,
-  stops locomotion and logs; `RunState` turns that into `State::ERROR` the way
-  `check_crash` does. Before this the firmware popped an empty deque and crashed.
-- `ActionQueuer::pop` returns the pre-built stop action instead of popping an
-  empty deque, because every caller dereferences the result unchecked.
-- New monitoring variables, appended after the existing ones so no id shifts:
-  `FSM State`, `Grid Pose`, `Odometry State`, `Left/Right Command`,
-  `Linear/Angular PID Integral`, `Odometry Linear Raw`, plus the accessors they
-  need (`core::Fsm::get_current_state`, `core::PidController::get_error_acc`,
-  `nav::SpeedController::get_pid_error_acc`,
-  `nav::Odometry::get_raw_linear_velocity`).
-- The Butterworth fixes described below.
-
-`nav::TMaze::get_next_goal` returns the default `GridPose{{0, 0}, RIGHT}` when no
-side qualifies: every open neighbour must beat the initial `current_cost` (0x1FFF),
-so a cell whose open neighbours are all still at `max_cost` yields the default and
-`push_exploring` then matches none of its four cases. That is reached through
-odometry drift writing walls into the wrong cells, not through a bug in the search.
+`targets/micras/MicrasFirmware/` follows the firmware's `high-level-review`
+branch. **Edit it only with intent**, in the firmware's own style, and only with
+changes that make sense on the real robot too. The simulator needs three
+accessors that are not there upstream: `Micras::get_instance()`,
+`get_variables()` and `get_state()`, for the variable columns, the state events
+and the stop conditions. Nothing else in the simulator reaches into the firmware.
 
 ## Style
 
-The firmware's `.clang-format` and `.clang-tidy`, with the tidy header filter
-anchored to this repo. Doxygen on every declaration. **No comments inside
-function bodies** — if something needs explaining, it goes in an `@note` on the
-declaration, where a reader finds it before reading the code. Every `NOLINT`
-names its check and says why. `just lint` is clean and stays clean.
+The firmware's `.clang-format` and `.clang-tidy`, pinned to version 18 (a newer
+clang-format reflows the code), with the tidy header filter anchored to this
+repo. Doxygen on every declaration. **No comments inside function bodies** — if
+something needs explaining, it goes in an `@note` on the declaration, where a
+reader finds it before reading the code. Every `NOLINT` names its check and says
+why. `just lint` is clean and stays clean.
 
-## State of the tuning (2026-09-16)
+## State of the port (2026-09-25)
 
-`models/robot_v2.xml` plus the retuned `config/constants.hpp` **reach the goal**:
-a 120 s explore on `models/maze.txt` touches a goal cell at 38.8 s, returns to
-`{0, 0}` and goes IDLE at 94.6 s. The run that follows, started automatically,
-still trips `ERROR` at 98.2 s. The same binary on `models/maze2.txt` (the 2019
-Portugal qualifier) does not reach the goal and dies at 69.2 s, so the tuning is
-not maze independent yet.
+The firmware runs on the host HAL end to end. Every proxy that
+`Micras::check_initialization` checks comes up, so INIT reaches IDLE on the first
+tick (R10). A button press starts an exploration through the firmware's own
+paths. The checked runs end with no unbound port, no watchdog expiry and no
+emergency stop. `--flash` carries a saved map into the next run.
 
-What was measured and fixed, in order:
+**The whole contest runs clean on ten mazes.** `scenarios/explore_solve.toml`:
+- A short press explores. The firmware comes back to the start on its own and saves
+  the map.
+- A long press then plans and runs the fastest route with the fan.
 
-1. **Butterworth sampling frequency and normalisation.** `core::ButterworthFilter`
-   normalised the analog prototype by `f_c` rather than by `2 * pi * f_c`, and
-   every call site took the 100 Hz default `sampling_frequency` while being fed at
-   `loop_frequency` (959.7 Hz). The two errors compounded into a factor of
-   `loop_frequency / (2 * pi * 100) = 1.527`: the real cutoffs were 1.527 times
-   the configured numbers, i.e. the filters were *faster* than intended. Both are
-   fixed in the firmware, `sampling_frequency` is now an explicit field with no
-   default, and every `filter_cutoff` was restated as the cutoff actually in
-   effect, so the tuning carried over unchanged and the fix is behaviour-neutral.
-   `FollowWall::check_posts` reads `get_adc_reading`, which is unfiltered, so
-   filter lag never affected post detection at all.
-2. **Speed PIDs closed.** Both were `kp = 0`, i.e. identically zero. They now
-   carry the firmware structure rescaled by the feed-forward gain of each axis.
-   The decisive term was `ki`: `TurnAction` is open loop in time, so the 4 %
-   steady-state angular error that `ki = 1` could not close inside a 1.6 s pivot
-   came straight out as a 21 deg heading error on every 180 deg turn. Executed
-   turn angle 0.886 -> 0.987 of the commanded one.
-3. **Post correction.** Left at `post_reference = 0.44 * cell_size` and
-   `post_threshold = 400`. Lowering the threshold is a clear negative:
-   `-d(adc_reading)/d(distance)` on the side sensors peaks at 32 (left) and 456
-   (right) over a whole 120 s run, so at 400 the correction fires about four times
-   and at 100 or below it fires constantly and *injects* error. Thresholds
-   400/100/50/30/20 give a first ERROR at 98.2/45.8/40.8/40.8/40.8 s on maze 1 and
-   the goal is only reached at 400. The reference is what is wrong, not the
-   sensitivity, and fixing it needs a measurement of where the sim post edge
-   actually falls.
-4. **Chassis clearance.** The `base` geom is raised 2.5 mm in `robot_v2.xml`,
-   putting the chassis 3 mm above the floor instead of 0.5 mm. Floor scraping went
-   from 63 % of ticks to under 1 %.
-5. **Exploring curve radius.** `exploring.max_centrifugal_acceleration` 1.0 -> 2.0
-   shrinks the exploring curve from a 90 mm to a 45 mm radius. A 90 mm curve does
-   not fit a 167.4 mm corridor with a 66 mm wide chassis.
-6. **Linear PID `ki` 10 -> 40.** `Micras::run` calls `speed_controller.reset()` at
-   every action boundary, and an exploring action is 45 to 180 mm long, so the
-   integral only gets 0.16 to 0.6 s to close the 5 % steady-state speed error
-   before being wiped. That error is not cosmetic: `TurnAction` holds a constant
-   linear speed for a fixed time, so at -5.5 % the exploring curve displaces
-   41.7 mm instead of the 45 mm `ActionQueuer` assumes, and `MoveAction` measures
-   distance travelled rather than position in the cell, so the missing millimetres
-   never come back. First ERROR 22.3 -> 29.0 s, maximum odometry error 131 ->
-   57 mm. Raising the feed-forward `linear_speed` instead changed nothing
-   measurable — the PID simply unwound the same amount — and was reverted.
-7. **The lateral loop was bang-bang.** This was the one that mattered.
-   `FollowWall` returns `state.velocity.linear * pid(left_error - right_error)`;
-   around the corridor centre that error is 5.34 per metre of lateral offset, so
-   with `kp = 30` the proportional term alone reached the old `saturation = 1.0` at
-   6.2 mm of offset. Past that the loop was pure bang-bang at +-v rad/s and
-   limit-cycled with a 1.9 s period, half a metre of travel per swing: the robot
-   crossed the centre line with its full heading error still on it, entered the
-   next curve 8 deg off and walked into the wall. `saturation` 1.0 -> 4.0 keeps the
-   loop proportional out to 25 mm, a full half corridor, and `kd` 0.008 -> 0.05
-   damps what is left. Over a 120 s explore: lateral rms 25.0 -> 8.7 mm, first
-   ERROR 29.0 -> 98.2 s, goal reached at 38.8 s instead of never. `kd` above 0.05
-   lets the derivative kick on the step the reading takes when a wall ends.
+The mazes are maze1, maze2, apec2016 to apec2019, japan2013ef, japan2017ef, uk2016f
+and alljapan-033-2012-exp-fin, in `engine/arenas/maze/mazes/`. Every one reaches the
+goal with no collision, with the fan alone and with every switch on (fan, racing line,
+boost, risky: `scenarios/explore_solve_all.toml`). Diagonals are always on; the switch
+that used to allow them selects the racing line.
 
-**The remaining failure mode is the 180 deg spin.** `push_exploring` queues `stop`
-(`cell_size / 2`), `turn_back`, `move_half`, and `turn_back` pivots about the body
-origin with no safety margin. The chassis mesh puts the front tip at
-`sqrt(15.5^2 + 66^2) = 67.8` mm from that origin and the corridor half-width is
-83.7 mm, so the spin needs the body origin within **15.9 mm** of the cell centre.
-It never is: `tools/turn_stats.py` shows every spin in every run starting 16 to
-18 mm past the cell centre, because the `stop` action starts wherever the
-accumulated longitudinal error left the robot and only measures 90 mm of travel
-from there. Every spin therefore scrapes, and on maze 2 the spin at 25.7 s is the
-first chassis contact of the run and the start of the 2.19 m odometry runaway that
-kills it at 69.2 s. The spin is the least forgiving action in the repertoire and
-the only one with no geometric margin; the exploring path has nothing equivalent
-to the `curve_safety_margin` that `ActionQueuer::get_trim_distances` applies on
-the solving path.
+The search takes 72 to 120 s before the fast run starts. The fast run takes, with the
+fan, 4.2 s on maze 1 and 3.9 to 9.2 s on the others. With every switch on it takes 3.7 s
+on maze 1 and 3.6 to 8.6 s on the others.
 
-Worth noting alongside that: the chassis mesh in `robot_v2.xml` is 66 mm wide and
-99 mm long (-33..+66 in body y), while the sibling Micrasverse repo's `src/config/constants.hpp`
-models the same robot as 50 x 80 mm. The mesh is 32 % wider and 24 % longer than
-the other simulator's idea of the robot, and the wheels stick out a further 4 mm
-each side. If the Micrasverse numbers are the measured robot then the mesh is
-simply wrong, and correcting it would take the spin margin from 15.9 to about
-25 mm. That is a measurement on the real chassis, not a simulation choice, so
-nothing was changed here.
+That took twenty-four changes to the firmware. `targets/micras/FIRMWARE_CHANGES.md` has
+each one, with its evidence and what it means on the robot. The ones that decided the
+fast modes:
+- **The edge tracker times a wall edge by the reading and only names it from the map.**
+  It is the only reference along a corridor, and it used to lose the edges whenever
+  the estimate ran ahead of the robot.
+- **The odometry rolls on a radius the load flattens.** With the fan the tyres carry
+  four times the load, and the estimate ran 0.67 % long.
+- **Boost asks for 0.65 of the traction.** At 0.75 the tyres slid 10 to 20 mm sideways
+  in every boosted turn.
+- **The wall observer keeps voting through the search turns.** Without it the search
+  stopped and spun in the middle of about 25 cells on maze 1.
+- **A range is corrected for the angle it meets the wall at.** Along a diagonal the
+  diagonal sensors meet the walls square on and read them 16 % short, which pulled the
+  estimate 20 to 30 mm off on the long diagonals at 3 m/s.
+- **Eight turns of two bends inside one cell**, on a planner of labels that only drops
+  one when another is as fast for every route. The fast runs with every switch on are
+  3.5 % faster in total, 9 % on maze 2. The planner advances by edges, not nodes, and
+  `just micras turn-designs` designs the turns, which the compiler then checks.
+- **Turns are braked and accelerated through as their curvature allows.** 1.5 to 1.8 %
+  faster in every profile.
+- **The tyres slide to the outside of a curve**, 4.8 mm/s per m/s^2 of lateral
+  acceleration. The localizer predicts it and the controller points into it.
+- **The racing line.** Through the cells of the planned route, at 0.8 of the lateral grip
+  and 15 mm from the walls, it is 5.5 % faster than the route with fan and boost. At the
+  full grip or at 10 mm it hit walls. With risky on, the robot also optimizes the line through
+  the route of the risky turns and drives it only when it plans faster (2 of 10 mazes).
+
+Findings worth checking on the robot:
+
+1. **Front sensor parallax.** Each front emitter sits 6.5 mm above its receiver and
+   the receiver's lobe is 10 degrees, so the reading falls slower than 1/d^2. The
+   firmware now models it (`receiver_offset`, `receiver_half_angle`). A bench sweep
+   toward a wall confirms both.
+2. **The rolling radius.** 56 um less per newton on a tyre in the simulation. Driving a
+   known distance with the fan on and off measures the real one.
+3. **The fan tips the robot onto its nose.** It pulls 17.5 mm ahead of the axle,
+   and a thin-gap flow estimate puts its centre of suction at 14 to 16 mm. So a
+   third of the 3 N rests on the front edge of the board, which also drags. Scales
+   under the wheels and under the nose, with the fan running, measure the share.
+4. **A wall start is seen early.** Toward the start of a wall a diagonal sensor also
+   lights the wall's end face, by the wall thickness times the slope of the beam.
+5. **Past 120 mm the readings come out long**, because part of the beam lands on the
+   floor. The localizer stops at 120 mm and the wall observer at 130 mm.
+6. **The mass, inertia and tyre friction are estimates**, and so is the fan's
+   position. `robot-report` lists what differs from the firmware's belief.
+7. **The lateral compliance of the tyres.** `robot.hpp` has the simulation's 4.8 mm/s per
+   m/s^2. A circle of known radius driven at a few speeds with the fan on measures the real
+   one, and the racing line depends on it.
 
 ## Known gaps
 
 - **No "new run" from the panel.** It would need `RunControl::RESTART`,
-  restartable listeners (the recorder would have to reopen into `run_002/`), and
-  a fresh `FirmwareThread` and `Micras`, because the FSM, the maze map and the
-  in-memory `Storage` all carry state. That is an `Application` lifecycle change.
-- **The video path is ungated.** `just check` proves a window and a bridge change
-  nothing, through `check-viewer` and `check-monitor`. There is no `check-video`,
-  and `just video` writes into `runs/explore_v2`, the very directory the baseline
-  comparison reads. Determinism under `--video` is believed, not tested.
-- **`PlotTrace` drops its oldest sample with `erase(begin())`** rather than
-  being a real ring buffer. At 2048 samples and 30 fps it does not show, but it
-  is the wrong data structure.
-- **Nine of the seventeen hardware tests are not built**: the human-interface
-  ones (`led`, `argb`, `buzzer`, `button`, `dip_switch`), plus `storage`,
-  `stopwatch`, `torque_sensors` and `comm_service`. `test_fan` needs `--button short`; the other seven run
-  unscripted.
+  restartable listeners, and a fresh `FirmwareThread` and firmware, because the
+  FSM, the maze map and the flash all carry state.
+- **The firmware's hardware tests are not built** (R11). The design supports
+  them, since each is a program with its own `main` over the same HAL, but
+  `test_imu` spins forever when the IMU is not initialised and two tests were
+  deleted upstream; they are out of scope for now.
+- **No minimum wall clearance in the baselines.** D10 names it; the event log has
+  collisions but nothing measures the distance to the nearest wall yet.
+- **No pinned container.** Byte identity is only checked between runs on one
+  machine (D10 C).
