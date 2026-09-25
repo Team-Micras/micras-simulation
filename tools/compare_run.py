@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Compare a run directory against a baseline run.
+"""Compare two run directories made on the same machine.
 
 data.csv is compared byte for byte, or, with --columns-subset, on every column
-the baseline has (new columns may only be appended at the end). meta.json is
+the reference has (new columns may only be appended at the end). meta.json is
 compared on the behaviour fields only; provenance such as compiler or arguments
-is ignored. Baseline files may be gzip compressed (data.csv.gz).
+is ignored. Either file may be gzip compressed (data.csv.gz).
+
+This is how a window, a monitor or a video is proven to change nothing. The
+stored baselines are summaries, compared by ``tools/baseline.py``.
 """
 
 import argparse
@@ -15,15 +18,24 @@ from pathlib import Path
 
 BEHAVIOUR_FIELDS = (
     "model_sha256",
+    "robot_sha256",
+    "firmware_sha",
+    "seed",
+    "ideal",
     "loop_time_us",
     "timestep",
     "steps_per_tick",
+    "record_every",
     "ticks",
     "sim_time",
+    "stopped_at",
     "final_z",
-    "pool_columns",
-    "telemetry_resyncs",
     "warnings_total",
+    "unbound_ports",
+    "watchdog_expiries",
+    "emergency_stops",
+    "serial_dropped_bytes",
+    "events",
 )
 
 

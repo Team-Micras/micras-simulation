@@ -1,4 +1,4 @@
 [submodule "MicrasFirmware"]
-	path = MicrasFirmware
+	path = targets/micras/MicrasFirmware
 	url = git@github.com:Team-Micras/MicrasFirmware.git
-	branch = feature/sim-harness
+	branch = high-level-review

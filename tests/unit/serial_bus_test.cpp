@@ -47,24 +47,31 @@ TEST(SerialBus, DropsFirmwareOutputWhenNobodyIsListening) {
     EXPECT_NO_THROW(bus.send_from_firmware(std::vector<uint8_t>{1}));
 }
 
-TEST(SerialBus, HandsTheFirmwareOnePacketAtATime) {
+TEST(SerialBus, HandsTheFirmwareTheBytesInTheOrderTheyWereQueued) {
     SerialBus bus;
     bus.queue_for_firmware(std::vector<uint8_t>{1, 2});
     bus.queue_for_firmware(std::vector<uint8_t>{3});
 
-    EXPECT_EQ(bus.pending_packets(), 2U);
-    EXPECT_EQ(bus.take_for_firmware(), (std::vector<uint8_t>{1, 2}));
-    EXPECT_EQ(bus.take_for_firmware(), (std::vector<uint8_t>{3}));
-    EXPECT_TRUE(bus.take_for_firmware().empty());
-    EXPECT_EQ(bus.pending_packets(), 0U);
+    EXPECT_EQ(bus.take_for_firmware(2), (std::vector<uint8_t>{1, 2}));
+    EXPECT_EQ(bus.take_for_firmware(5), (std::vector<uint8_t>{3}));
+    EXPECT_TRUE(bus.take_for_firmware(1).empty());
 }
 
-TEST(SerialBus, ClearDropsEveryQueuedPacket) {
-    SerialBus bus;
-    bus.queue_for_firmware(std::vector<uint8_t>{1});
-    bus.clear();
+TEST(SerialBus, DropsAndCountsBytesPastTheBound) {
+    SerialBus                  bus;
+    const std::vector<uint8_t> bytes(SerialBus::max_pending_bytes + 3, 7);
 
-    EXPECT_TRUE(bus.take_for_firmware().empty());
+    bus.queue_for_firmware(bytes);
+
+    EXPECT_EQ(bus.dropped_bytes(), 3U);
+    EXPECT_EQ(bus.take_for_firmware(SerialBus::max_pending_bytes * 2).size(), SerialBus::max_pending_bytes);
+}
+
+TEST(SerialBus, CountsWhatTheFirmwareSent) {
+    SerialBus bus;
+    bus.send_from_firmware(std::vector<uint8_t>{1, 2, 3});
+
+    EXPECT_EQ(bus.sent_bytes(), 3U);
 }
 }  // namespace
 }  // namespace micras::sim

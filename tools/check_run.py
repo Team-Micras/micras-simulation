@@ -7,12 +7,12 @@ fails the build when a run is not clean:
 * ``warnings_total`` is 0 (no MuJoCo solver or constraint warnings),
 * no non-finite samples (the ``*_penetration`` NaN sentinel is excluded by
   ``analyze.py`` itself, every other NaN is a defect),
-* exactly ``--pool-columns`` firmware pool CSV columns were decoded (custom
-  serializable variables expand into one column per field, so this counts
-  columns and not pool variables),
-* the telemetry decoder never had to resynchronise,
-* every tick that was asked for actually ran,
-* nobody reached into the run through a window.
+* every tick that was asked for actually ran, unless the scenario's stop
+  condition ended the run,
+* nobody reached into the run through a window or a monitor,
+* each ``--expect key=value`` holds for the robot target's own ``meta.json``
+  fields, for example ``unbound_ports=0``,
+* with ``--expect-state NAME``, the last state the run logged is NAME.
 
 Exit code 0 when every run passes, 1 otherwise.
 """
@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 
-def check(run: Path, pool_columns: int) -> list[str]:
+def check(run: Path, expected: dict[str, int], state: str | None = None) -> list[str]:
     """Return the list of failures for one run directory."""
     failures: list[str] = []
 
@@ -45,17 +45,22 @@ def check(run: Path, pool_columns: int) -> list[str]:
     if meta.get("warnings_total") != 0:
         failures.append(f"warnings_total is {meta.get('warnings_total')}, expected 0")
 
-    if meta.get("pool_columns") != pool_columns:
-        failures.append(f"pool_columns is {meta.get('pool_columns')}, expected {pool_columns}")
-
-    if meta.get("telemetry_resyncs", 0) != 0:
-        failures.append(f"telemetry_resyncs is {meta.get('telemetry_resyncs')}, expected 0")
+    for key, value in expected.items():
+        if meta.get(key) != value:
+            failures.append(f"{key} is {meta.get(key)!r}, expected {value}")
 
     if meta.get("interactive") is not False:
         failures.append(f"interactive is {meta.get('interactive')!r}; an interactive run is not reproducible")
 
-    if meta.get("ticks") != meta.get("requested_ticks"):
+    stopped = meta.get("stopped_at", -1) is not None and meta.get("stopped_at", -1) >= 0
+
+    if meta.get("ticks") != meta.get("requested_ticks") and not stopped:
         failures.append(f"only {meta.get('ticks')} of {meta.get('requested_ticks')} ticks ran")
+
+    states = [event["detail"] for event in meta.get("events", []) if event.get("kind") == "state"]
+
+    if state is not None and (not states or states[-1] != state):
+        failures.append(f"the last state is {states[-1] if states else None!r}, expected {state}")
 
     nonfinite = report.get("nonfinite", {})
 
@@ -71,13 +76,21 @@ def check(run: Path, pool_columns: int) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("runs", type=Path, nargs="+")
-    parser.add_argument("--pool-columns", type=int, default=29)
+    parser.add_argument(
+        "--expect", action="append", default=[], metavar="KEY=VALUE", help="an integer meta.json field that must hold"
+    )
+    parser.add_argument("--expect-state", default=None, metavar="NAME", help="the state every run must end in")
     arguments = parser.parse_args()
+    expected = {}
+
+    for item in arguments.expect:
+        key, _, value = item.partition("=")
+        expected[key] = int(value)
 
     failed = 0
 
     for run in arguments.runs:
-        failures = check(run, arguments.pool_columns)
+        failures = check(run, expected, arguments.expect_state)
 
         if failures:
             failed += 1

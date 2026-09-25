@@ -1,4 +1,7 @@
-#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -8,89 +11,126 @@
 namespace micras::sim {
 namespace {
 /**
- * @brief Ground truth header of every run recorded so far, in order.
- *
- * @note Transcribed from baseline/v0/idle/data.csv. Changing it breaks the
- *       comparison against every run already on disk, so it is pinned here
- *       instead of being derived from the code under test.
+ * @brief Ground truth of the tiny robot: one column of each kind the probes cover.
  */
-const std::vector<std::string> baseline_columns{
-    "tick",
-    "sim_time",
-    "fw_loop_time",
-    "x",
-    "y",
-    "z",
-    "roll",
-    "pitch",
-    "yaw",
-    "vx_world",
-    "vy_world",
-    "vz_world",
-    "wz_body",
-    "v_forward",
-    "wheel_qvel_left",
-    "wheel_qvel_right",
-    "ctrl_left",
-    "ctrl_right",
-    "act_force_left",
-    "act_force_right",
-    "left_ncon",
-    "left_fn",
-    "left_slip",
-    "left_penetration",
-    "right_ncon",
-    "right_fn",
-    "right_slip",
-    "right_penetration",
-    "caster_ncon",
-    "ncon_total",
-    "solver_niter",
-    "warnings_total",
-    "wheel_qpos_left",
-    "wheel_qpos_right",
-    "caster_fn",
-    "base_ncon"
+GroundTruthConfig tiny_config() {
+    return {
+        .body = "robot",
+        .forward_axis = ForwardAxis::X,
+        .columns =
+            {
+                {.name = "wheel_speed", .probe = Probe::JOINT_VELOCITY, .object = "wheel"},
+                {.name = "wheel_angle", .probe = Probe::JOINT_POSITION, .object = "wheel"},
+                {.name = "command", .probe = Probe::ACTUATOR_CONTROL, .object = "motor"},
+                {.name = "torque", .probe = Probe::ACTUATOR_FORCE, .object = "motor"},
+                {.name = "chassis_ncon", .probe = Probe::CONTACT_COUNT, .object = "chassis"},
+                {.name = "chassis_fn", .probe = Probe::CONTACT_NORMAL_FORCE, .object = "chassis"},
+                {.name = "chassis_slip", .probe = Probe::CONTACT_SLIP, .object = "chassis"},
+                {.name = "chassis_penetration", .probe = Probe::CONTACT_PENETRATION, .object = "chassis"},
+                {.name = "ncon", .probe = Probe::CONTACT_TOTAL, .object = ""},
+                {.name = "iterations", .probe = Probe::SOLVER_ITERATIONS, .object = ""},
+                {.name = "warnings", .probe = Probe::WARNINGS_TOTAL, .object = ""},
+            },
+    };
+}
+
+/**
+ * @brief A column source with fixed names and values.
+ */
+class FixedColumns : public ColumnSource {
+public:
+    explicit FixedColumns(std::size_t cells_per_row) : cells_per_row{cells_per_row} { }
+
+    std::vector<std::string> names() override { return {"first", "second"}; }
+
+    void append(std::vector<CsvCell>& row) override {
+        for (std::size_t i = 0; i < this->cells_per_row; i++) {
+            row.emplace_back(static_cast<int64_t>(i));
+        }
+    }
+
+private:
+    std::size_t cells_per_row;
 };
 
-TEST(GroundTruth, ColumnsMatchTheRecordedBaseline) {
-    EXPECT_EQ(GroundTruth::columns(), baseline_columns);
-}
-
-TEST(CsvRecorder, ProxyColumnsMatchTheProxyStateSections) {
-    const std::vector<std::string> expected{
-        "proxy_left_command",   "proxy_right_command", "proxy_fan_speed",  "proxy_encoder_left", "proxy_encoder_right",
-        "proxy_gyro_x",         "proxy_gyro_y",        "proxy_gyro_z",     "proxy_accel_x",      "proxy_accel_y",
-        "proxy_accel_z",        "proxy_wall_adc_0",    "proxy_wall_adc_1", "proxy_wall_adc_2",   "proxy_wall_adc_3",
-        "proxy_button_pressed", "proxy_dip_0",         "proxy_dip_1",      "proxy_dip_2",        "proxy_dip_3"
-    };
-
-    EXPECT_EQ(CsvRecorder::proxy_columns(), expected);
-
-    const std::size_t actuators = 3;
-    const std::size_t sensors = Sensors::wheel_count + (2 * Sensors::axis_count) + Sensors::wall_sensor_count;
-    const std::size_t input = 1 + InterfaceInput::dip_switch_count;
-    EXPECT_EQ(CsvRecorder::proxy_columns().size(), actuators + sensors + input);
-}
-
-TEST(CsvRecorder, ProxyColumnsComeAfterEveryBaselineColumn) {
-    for (const std::string& column : CsvRecorder::proxy_columns()) {
-        EXPECT_TRUE(column.starts_with("proxy_")) << column;
-        EXPECT_EQ(std::count(baseline_columns.begin(), baseline_columns.end(), column), 0) << column;
+class Recording : public testing::Test {
+protected:
+    void SetUp() override {
+        this->world.load(MICRAS_TEST_MODEL);
+        this->world.reset();
     }
+
+    /**
+     * @brief Read back the first line of the CSV.
+     */
+    std::string header() const {
+        std::ifstream file(this->path);
+        std::string   line;
+        std::getline(file, line);
+        return line;
+    }
+
+    // NOLINTBEGIN(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
+    MujocoWorld           world;
+    std::filesystem::path path{std::filesystem::temp_directory_path() / "micras_sim_recorder_test.csv"};
+    // NOLINTEND(*-non-private-member-variables-in-classes)
+};
+
+TEST_F(Recording, StartsEveryRowWithTheBodyBlockThenTheRobotColumns) {
+    const GroundTruth              ground_truth(this->world, tiny_config());
+    const std::vector<std::string> columns = ground_truth.columns();
+
+    ASSERT_EQ(columns.size(), 13U + tiny_config().columns.size());
+    EXPECT_EQ(columns.front(), "tick");
+    EXPECT_EQ(columns.at(12), "v_forward");
+    EXPECT_EQ(columns.at(13), "wheel_speed");
+    EXPECT_EQ(columns.back(), "warnings");
 }
 
-TEST(CsvRecorder, TurnsPoolNamesIntoTheBaselineColumnNames) {
-    EXPECT_EQ(CsvRecorder::column_name("Grid Pose"), "grid_pose");
-    EXPECT_EQ(CsvRecorder::column_name("Desired Linear Speed"), "desired_linear_speed");
-    EXPECT_EQ(CsvRecorder::column_name("Wall Sensors 0"), "wall_sensors_0");
-    EXPECT_EQ(CsvRecorder::column_name("Linear/Angular PID"), "linear_angular_pid");
+TEST_F(Recording, WritesTheTickAndOneCellPerColumn) {
+    GroundTruth                ground_truth(this->world, tiny_config());
+    const std::vector<CsvCell> row = ground_truth.sample(7);
+
+    ASSERT_EQ(row.size(), ground_truth.columns().size());
+    EXPECT_EQ(std::get<uint64_t>(row.at(0)), 7U);
+    EXPECT_DOUBLE_EQ(std::get<double>(row.at(1)), this->world.data()->time);
 }
 
-TEST(CsvRecorder, TrimsSeparatorsAtTheEdgesOfPoolNames) {
-    EXPECT_EQ(CsvRecorder::column_name("  Spaced  "), "spaced");
-    EXPECT_EQ(CsvRecorder::column_name("Trailing!"), "trailing");
-    EXPECT_EQ(CsvRecorder::column_name("!!!"), "");
+TEST_F(Recording, RejectsAnObjectTheModelDoesNotHave) {
+    GroundTruthConfig config = tiny_config();
+    config.columns.push_back({.name = "ghost", .probe = Probe::JOINT_VELOCITY, .object = "ghost"});
+
+    EXPECT_THROW(GroundTruth(this->world, config), std::runtime_error);
+}
+
+TEST_F(Recording, AppendsTheSourcesAfterTheGroundTruth) {
+    FixedColumns source(2);
+
+    {
+        CsvRecorder recorder(this->world, tiny_config(), this->path);
+        recorder.add_source(source);
+        recorder.sample(0);
+    }
+
+    EXPECT_TRUE(this->header().ends_with(",warnings,first,second"));
+}
+
+TEST_F(Recording, RejectsASourceThatFillsTooFewCells) {
+    FixedColumns source(1);
+    CsvRecorder  recorder(this->world, tiny_config(), this->path);
+    recorder.add_source(source);
+
+    EXPECT_THROW(recorder.sample(0), std::logic_error);
+}
+
+TEST_F(Recording, RejectsTwoSourcesWritingTheSameColumn) {
+    FixedColumns first(2);
+    FixedColumns second(2);
+    CsvRecorder  recorder(this->world, tiny_config(), this->path);
+    recorder.add_source(first);
+    recorder.add_source(second);
+
+    EXPECT_THROW(recorder.sample(0), std::runtime_error);
 }
 }  // namespace
 }  // namespace micras::sim

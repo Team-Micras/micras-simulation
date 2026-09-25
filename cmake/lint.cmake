@@ -2,8 +2,10 @@
 ## Format and lint targets (clang-format / clang-tidy from the firmware configs)
 ###############################################################################
 
-find_program(CLANG_FORMAT clang-format)
-find_program(CLANG_TIDY clang-tidy)
+# Pinned to one major version, like the firmware's container: clang-format 19 and later
+# lay designated initializers out differently, so a newer one would reformat every file.
+find_program(CLANG_FORMAT NAMES clang-format-18 clang-format)
+find_program(CLANG_TIDY NAMES clang-tidy-18 clang-tidy)
 
 function(micras_add_lint_targets)
     set(SOURCES ${ARGN})
@@ -30,9 +32,12 @@ function(micras_add_lint_targets)
     list(FILTER SOURCES INCLUDE REGEX "\\.cpp$")
 
     # Anchored so the pinned firmware submodule headers are never linted.
+    # The firmware computes the shape of every turn in a constant expression, which takes more
+    # evaluation steps than clang allows by default; the step limit is the firmware's own lint's.
     add_custom_target(lint
         COMMAND "${CLANG_TIDY}" --quiet --warnings-as-errors=*
-                "--header-filter=^${CMAKE_SOURCE_DIR}/(include|config|tests)/"
+                "--header-filter=^${CMAKE_SOURCE_DIR}/(engine|view|bridge|app|tests|targets/[a-z_]+/(include|config|tests))/"
+                --extra-arg=-fconstexpr-steps=1000000000
                 -p "${CMAKE_BINARY_DIR}" ${SOURCES}
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         COMMENT "Linting harness sources"

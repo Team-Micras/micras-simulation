@@ -12,6 +12,24 @@ FetchContent_Declare(picosha2
 )
 FetchContent_MakeAvailable(picosha2)
 
+# Robot descriptions and scenarios are TOML (SPEC_2_DECISIONS.md, D7 and D13).
+FetchContent_Declare(tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+)
+FetchContent_MakeAvailable(tomlplusplus)
+
+# ST's register driver of the LSM6DSV, the tag the firmware fetches. Only its header
+# is used: the IMU proxy's configuration names the driver's enums.
+FetchContent_Declare(lsm6dsv
+    GIT_REPOSITORY https://github.com/STMicroelectronics/lsm6dsv-pid.git
+    GIT_TAG        v5.1.1
+)
+FetchContent_MakeAvailable(lsm6dsv)
+
+add_library(lsm6dsv_headers INTERFACE)
+target_include_directories(lsm6dsv_headers SYSTEM INTERFACE "${lsm6dsv_SOURCE_DIR}")
+
 if(MICRAS_VIEWER)
     # Neither ships a CMakeLists, so both are compiled here from their sources.
     FetchContent_Declare(imgui

@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
 
 namespace micras::sim {
@@ -46,7 +47,7 @@ protected:
     }
 
     // NOLINTNEXTLINE(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
-    SimulationContext context;
+    RunContext context;
 
     /**
      * @brief Stands in for the firmware: yields once per tick and never ends.

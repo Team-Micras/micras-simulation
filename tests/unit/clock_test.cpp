@@ -31,32 +31,17 @@ TEST(Clock, AdvancesOneTickAtATime) {
 
     EXPECT_EQ(clock.tick_count(), 2U);
     EXPECT_EQ(clock.now_us(), 2084U);
-
-    clock.reset();
-    EXPECT_EQ(clock.tick_count(), 0U);
-    EXPECT_EQ(clock.now_us(), 0U);
 }
 
 TEST(Clock, CountsTheTicksOfTheRecordedScenarios) {
-    const Clock clock = harness_clock();
-    EXPECT_EQ(clock.total_ticks(4.0), 3838U);
-    EXPECT_EQ(clock.total_ticks(8.0), 7677U);
+    EXPECT_EQ(Clock::total_ticks(4.0, 1042), 3838U);
+    EXPECT_EQ(Clock::total_ticks(8.0, 1042), 7677U);
 }
 
 TEST(Clock, RoundsInstantsToTheNearestTick) {
     const Clock clock = harness_clock();
     EXPECT_EQ(clock.tick_at(0.5), 480U);
     EXPECT_EQ(clock.tick_at(0.0), 0U);
-}
-
-TEST(Clock, CountsTheTicksTheButtonMustBeHeldFor) {
-    const Clock clock = harness_clock();
-
-    for (const uint32_t target : {250U, 501U, 2001U}) {
-        const uint64_t ticks = clock.ticks_for_elapsed_ms(target);
-        EXPECT_GE(ticks * clock.us_per_tick() / 1000, target);
-        EXPECT_LT((ticks - 1) * clock.us_per_tick() / 1000, target);
-    }
 }
 }  // namespace
 }  // namespace micras::sim

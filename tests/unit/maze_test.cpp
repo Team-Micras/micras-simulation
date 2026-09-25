@@ -1,0 +1,171 @@
+#include <filesystem>
+#include <fstream>
+#include <span>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include <gtest/gtest.h>
+
+#include "micras/sim/arenas/maze.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+
+namespace micras::sim {
+namespace {
+/**
+ * @brief A two by two maze: the start at the lower left, a goal above it, one wall inside each row.
+ */
+constexpr std::string_view small_maze{"o---o---o\n"
+                                      "| G     |\n"
+                                      "o   o---o\n"
+                                      "| S |   |\n"
+                                      "o---o---o\n"};
+
+/**
+ * @brief Read a whole file.
+ *
+ * @param path Path of the file.
+ * @return Its contents.
+ */
+std::string read_file(const std::filesystem::path& path) {
+    const std::ifstream file(path);
+    std::ostringstream  text;
+    text << file.rdbuf();
+    return text.str();
+}
+
+TEST(Maze, ReadsTheSizeOfTheDrawing) {
+    const Maze maze = Maze::parse(small_maze);
+
+    EXPECT_EQ(maze.width(), 2U);
+    EXPECT_EQ(maze.height(), 2U);
+}
+
+TEST(Maze, ReadsTheWallsBottomUp) {
+    const Maze maze = Maze::parse(small_maze);
+
+    EXPECT_TRUE(maze.south_wall(0, 0));
+    EXPECT_TRUE(maze.south_wall(1, 0));
+    EXPECT_FALSE(maze.south_wall(0, 1));
+    EXPECT_TRUE(maze.south_wall(1, 1));
+    EXPECT_TRUE(maze.south_wall(0, 2));
+    EXPECT_TRUE(maze.south_wall(1, 2));
+
+    EXPECT_TRUE(maze.west_wall(0, 0));
+    EXPECT_TRUE(maze.west_wall(1, 0));
+    EXPECT_TRUE(maze.west_wall(2, 0));
+    EXPECT_TRUE(maze.west_wall(0, 1));
+    EXPECT_FALSE(maze.west_wall(1, 1));
+    EXPECT_TRUE(maze.west_wall(2, 1));
+}
+
+TEST(Maze, ReportsNoWallOutsideTheDrawing) {
+    const Maze maze = Maze::parse(small_maze);
+
+    EXPECT_FALSE(maze.south_wall(2, 0));
+    EXPECT_FALSE(maze.south_wall(0, 3));
+    EXPECT_FALSE(maze.west_wall(3, 0));
+    EXPECT_FALSE(maze.west_wall(0, 2));
+}
+
+TEST(Maze, ReadsTheStartAndTheGoals) {
+    const Maze maze = Maze::parse(small_maze);
+
+    EXPECT_EQ(maze.start(), (std::pair<std::size_t, std::size_t>{0, 0}));
+    ASSERT_EQ(maze.goals().size(), 1U);
+    EXPECT_EQ(maze.goals().front(), (std::pair<std::size_t, std::size_t>{0, 1}));
+}
+
+TEST(Maze, StartsAtTheLowerLeftWhenTheDrawingMarksNoStart) {
+    const Maze maze = Maze::parse("o---o---o\n|   | S |\no---o---o\n");
+    const Maze unmarked = Maze::parse("o---o---o\n|       |\no---o---o\n");
+
+    EXPECT_EQ(maze.start(), (std::pair<std::size_t, std::size_t>{1, 0}));
+    EXPECT_EQ(unmarked.start(), (std::pair<std::size_t, std::size_t>{0, 0}));
+    EXPECT_TRUE(unmarked.goals().empty());
+}
+
+TEST(Maze, IgnoresTrailingSpacesCarriageReturnsAndBlankLines) {
+    const Maze maze = Maze::parse("o---o---o   \r\n| G     |\r\no   o---o\r\n| S |   |  \r\no---o---o\r\n\n\n");
+
+    EXPECT_EQ(maze.width(), 2U);
+    EXPECT_EQ(maze.height(), 2U);
+    EXPECT_FALSE(maze.west_wall(1, 1));
+    EXPECT_TRUE(maze.west_wall(1, 0));
+    EXPECT_EQ(maze.goals().size(), 1U);
+}
+
+TEST(Maze, RejectsADrawingWithAnEvenNumberOfLines) {
+    EXPECT_THROW(Maze::parse("o---o\n|   |\no---o\n|   |\n"), std::runtime_error);
+}
+
+TEST(Maze, RejectsADrawingTooShortToHoldACell) {
+    EXPECT_THROW(Maze::parse(""), std::runtime_error);
+    EXPECT_THROW(Maze::parse("o---o\n"), std::runtime_error);
+    EXPECT_THROW(Maze::parse("o\n|\no\n"), std::runtime_error);
+}
+
+TEST(Maze, RefusesAFileThatDoesNotExist) {
+    EXPECT_THROW(Maze::load(std::filesystem::path{MICRAS_TEST_MAZES_DIR} / "no_such_maze.txt"), std::runtime_error);
+}
+
+TEST(Maze, LoadsABundledMazeClosedAllAround) {
+    const Maze maze = Maze::load(std::filesystem::path{MICRAS_TEST_MAZES_DIR} / "maze1.txt");
+
+    ASSERT_EQ(maze.width(), 16U);
+    ASSERT_EQ(maze.height(), 16U);
+    EXPECT_EQ(maze.start(), (std::pair<std::size_t, std::size_t>{0, 0}));
+    EXPECT_FALSE(maze.goals().empty());
+
+    for (std::size_t i = 0; i < 16; i++) {
+        EXPECT_TRUE(maze.south_wall(i, 0)) << "bottom edge, column " << i;
+        EXPECT_TRUE(maze.south_wall(i, 16)) << "top edge, column " << i;
+        EXPECT_TRUE(maze.west_wall(0, i)) << "left edge, row " << i;
+        EXPECT_TRUE(maze.west_wall(16, i)) << "right edge, row " << i;
+    }
+}
+
+TEST(Maze, GeneratesAnArenaAWorldCanAttach) {
+    const Maze  maze = Maze::parse(small_maze);
+    MujocoWorld world;
+
+    world.build(read_file(MICRAS_TEST_MODEL), "robot", maze.mjcf({}), Maze::body_name, {.x = 0.09, .y = 0.09});
+
+    EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "maze_floor"));
+    EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "maze_south_1_1"));
+    EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "maze_west_1_0"));
+    EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "maze_post_2_2"));
+    EXPECT_THROW(world.require_id(mjOBJ_GEOM, "maze_west_1_1"), std::runtime_error);
+    EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "chassis"));
+    EXPECT_FALSE(world.composed_xml().empty());
+}
+
+TEST(Maze, PlacesTheWallsOnTheCellEdges) {
+    const Maze       maze = Maze::parse(small_maze);
+    const MazeConfig config{.cell_size = 0.2};
+    MujocoWorld      world;
+
+    world.build(read_file(MICRAS_TEST_MODEL), "robot", maze.mjcf(config), Maze::body_name, {.x = 0.1, .y = 0.1});
+    world.reset();
+
+    const std::span<const mjtNum> positions(
+        world.data()->geom_xpos, static_cast<std::size_t>(3 * world.model()->ngeom)
+    );
+    const auto first = static_cast<std::size_t>(3 * world.require_id(mjOBJ_GEOM, "maze_south_1_1"));
+
+    EXPECT_NEAR(positions[first], 0.3, 1e-9);
+    EXPECT_NEAR(positions[first + 1], 0.2, 1e-9);
+    EXPECT_NEAR(positions[first + 2], config.wall_height / 2, 1e-9);
+}
+
+TEST(Maze, SeesTheFloorDarkAndEverythingElseAsWall) {
+    const MazeConfig config{.wall_reflectance = 0.7, .floor_reflectance = 0.1};
+
+    EXPECT_DOUBLE_EQ(Maze::reflectance("maze_floor", config), 0.1);
+    EXPECT_DOUBLE_EQ(Maze::reflectance("floor", config), 0.1);
+    EXPECT_DOUBLE_EQ(Maze::reflectance("maze_south_0_0", config), 0.7);
+    EXPECT_DOUBLE_EQ(Maze::reflectance("maze_post_1_1", config), 0.7);
+}
+}  // namespace
+}  // namespace micras::sim

@@ -11,47 +11,65 @@ namespace micras::sim {
 namespace {
 TEST(RunMetadata, SerializesInTheBaselineLayout) {
     const RunMetadata metadata{
-        .firmware_sha = "ad342541267bb3c8db263630f27fc7edafba5b09",
-        .model_path = "models/robot_v2.xml",
-        .model_sha256 = "3ef384df",
-        .maze_path = "",
-        .mujoco_version = "3.3.6",
-        .compiler = "GNU 13.3.0",
+        .target = "tiny",
+        .firmware_sha = "0be27df",
+        .robot_path = "robot.toml",
+        .robot_sha256 = "a1",
+        .scenario_path = "idle.toml",
+        .maze_path = "maze1.txt",
+        .model_sha256 = "b2",
+        .mujoco_version = "3.14.0",
+        .compiler = "GNU 13.4.0",
         .build_type = "RelWithDebInfo",
-        .args = "--model models/robot_v2.xml --seconds 4 --out runs/idle",
-        .loop_time_us = 1042,
-        .timestep = 0.000521,
-        .steps_per_tick = 2,
-        .requested_ticks = 3838,
-        .ticks = 3838,
-        .sim_time = 3.9992,
-        .final_z = 0.000806901,
-        .pool_columns = 29,
-        .telemetry_resyncs = 0,
+        .args = "--out runs/idle",
+        .seed = 1,
+        .ideal = false,
+        .loop_time_us = 125,
+        .timestep = 0.000125,
+        .steps_per_tick = 1,
+        .record_every = 1,
+        .requested_ticks = 32000,
+        .ticks = 32000,
+        .sim_time = 4,
+        .stopped_at = -1,
+        .final_z = 0.0001,
+        .target_fields = {{.name = "unbound_ports", .value = 0}},
         .warnings_total = 0,
         .interactive = false,
+        .events = {{.time = 0.5, .kind = "state", .detail = "IDLE"}},
     };
 
     const std::string expected = "{\n"
-                                 "  \"firmware_sha\": \"ad342541267bb3c8db263630f27fc7edafba5b09\",\n"
-                                 "  \"model_path\": \"models/robot_v2.xml\",\n"
-                                 "  \"model_sha256\": \"3ef384df\",\n"
-                                 "  \"maze_path\": \"\",\n"
-                                 "  \"mujoco_version\": \"3.3.6\",\n"
-                                 "  \"compiler\": \"GNU 13.3.0\",\n"
+                                 "  \"target\": \"tiny\",\n"
+                                 "  \"firmware_sha\": \"0be27df\",\n"
+                                 "  \"robot_path\": \"robot.toml\",\n"
+                                 "  \"robot_sha256\": \"a1\",\n"
+                                 "  \"scenario_path\": \"idle.toml\",\n"
+                                 "  \"maze_path\": \"maze1.txt\",\n"
+                                 "  \"model_sha256\": \"b2\",\n"
+                                 "  \"mujoco_version\": \"3.14.0\",\n"
+                                 "  \"compiler\": \"GNU 13.4.0\",\n"
                                  "  \"build_type\": \"RelWithDebInfo\",\n"
-                                 "  \"args\": \"--model models/robot_v2.xml --seconds 4 --out runs/idle\",\n"
-                                 "  \"loop_time_us\": 1042,\n"
-                                 "  \"timestep\": 0.000521,\n"
-                                 "  \"steps_per_tick\": 2,\n"
-                                 "  \"requested_ticks\": 3838,\n"
-                                 "  \"ticks\": 3838,\n"
-                                 "  \"sim_time\": 3.9992,\n"
-                                 "  \"final_z\": 0.000806901,\n"
-                                 "  \"pool_columns\": 29,\n"
-                                 "  \"telemetry_resyncs\": 0,\n"
+                                 "  \"args\": \"--out runs/idle\",\n"
+                                 "  \"seed\": 1,\n"
+                                 "  \"ideal\": false,\n"
+                                 "  \"loop_time_us\": 125,\n"
+                                 "  \"timestep\": 0.000125,\n"
+                                 "  \"steps_per_tick\": 1,\n"
+                                 "  \"record_every\": 1,\n"
+                                 "  \"requested_ticks\": 32000,\n"
+                                 "  \"ticks\": 32000,\n"
+                                 "  \"sim_time\": 4,\n"
+                                 "  \"stopped_at\": -1,\n"
+                                 "  \"final_z\": 0.0001,\n"
+                                 "  \"unbound_ports\": 0,\n"
                                  "  \"warnings_total\": 0,\n"
-                                 "  \"interactive\": false\n"
+                                 "  \"serial_dropped_bytes\": 0,\n"
+                                 "  \"bridge_dropped_frames\": 0,\n"
+                                 "  \"interactive\": false,\n"
+                                 "  \"events\": [\n"
+                                 "    {\"time\": 0.5, \"kind\": \"state\", \"detail\": \"IDLE\"}\n"
+                                 "  ]\n"
                                  "}\n";
 
     EXPECT_EQ(metadata.to_json(), expected);
@@ -76,14 +94,14 @@ TEST(RunMetadata, HashesFilesWithSha256) {
 }
 
 TEST(RunMetadata, JoinsArgumentsAfterTheProgramName) {
-    std::array<std::string, 4> arguments{"bin", "--model", "m.xml", "--out"};
+    std::array<std::string, 4> arguments{"bin", "--maze", "maze1", "--out"};
     std::array<char*, 4>       argv{};
 
     for (std::size_t i = 0; i < arguments.size(); i++) {
         argv.at(i) = arguments.at(i).data();
     }
 
-    EXPECT_EQ(RunMetadata::join_args(argv), "--model m.xml --out");
+    EXPECT_EQ(RunMetadata::join_args(argv), "--maze maze1 --out");
     EXPECT_EQ(RunMetadata::join_args(std::span(argv).first(1)), "");
 }
 }  // namespace
