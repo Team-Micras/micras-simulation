@@ -323,7 +323,7 @@ japan2013ef, japan2017ef, uk2016f and alljapan-033-2012-exp-fin, in
 `engine/arenas/maze/mazes/`. Diagonals are always allowed; the second switch selects
 the racing line.
 
-The search takes 63 to 118 s before the fast run starts. The fast run takes, with the
+The search takes 64 to 118 s before the fast run starts. The fast run takes, with the
 fan, 4.2 s on maze 1 and 3.9 to 9.2 s on the others; with every switch on, 3.7 s on
 maze 1 and 3.6 to 8.6 s on the others.
 
@@ -345,9 +345,9 @@ firmware commit that made it:
 - **The tyres slide to the outside of a curve**, 4.8 mm/s per m/s^2 of lateral
   acceleration. The localizer predicts it and the controller points into it.
 - **The racing line**, through the cells of the planned route, at 0.8 of the lateral
-  grip and 15 mm from the walls. With risky on, the robot also optimizes the line
-  through the route of the risky turns and drives it only when it plans faster and
-  keeps the same margin, which a line that stays on a risky turn does not.
+  grip and 15 mm from the walls. With risky on, the line goes through the route planned
+  without the risky turns, since it keeps their margin, and replaces the risky route
+  only when it plans faster.
 
 Findings worth checking on the robot:
 
