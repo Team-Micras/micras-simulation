@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "micras/sim/core/firmware_thread.hpp"
-#include "micras/sim/core/panel_spec.hpp"
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "micras/sim/core/variable_source.hpp"
@@ -24,6 +23,7 @@
 #include "micras/sim/recording/run_metadata.hpp"
 #include "micras/sim/robot/robot_description.hpp"
 #include "micras/sim/scenario/scenario.hpp"
+#include "micras/sim/view/panel_spec.hpp"
 
 namespace micras::sim {
 /**
@@ -51,21 +51,12 @@ struct CliOption {
 /**
  * @brief How a robot target plugs into one run.
  *
- * @note Listener order is part of what a run records, so it is fixed here: the
- *       crash reporter, the inputs, the monitor bridge, the observers, the
- *       recorder, the video, the window.
+ * @note Listener order is part of what a run records, so the application fixes
+ *       it: the crash reporter, the scenario, the monitor bridge, the event log,
+ *       the recorder, the video, the window. The robot's devices run between
+ *       the listeners, as the run loop says.
  */
 struct Wiring {
-    /**
-     * @brief Listeners that feed the firmware, run before the monitor bridge.
-     */
-    std::vector<IRunListener*> inputs;
-
-    /**
-     * @brief Listeners that decode the firmware, run after the bridge and before the recorder.
-     */
-    std::vector<IRunListener*> observers;
-
     /**
      * @brief Column blocks written after the ground truth, in this order.
      */
@@ -77,12 +68,7 @@ struct Wiring {
     const VariableSource* variables{nullptr};
 
     /**
-     * @brief Hands bytes from a monitor to the firmware; null queues them as they came.
-     */
-    std::function<void(std::span<const uint8_t>)> monitor_inbound;
-
-    /**
-     * @brief What the panel shows.
+     * @brief What the panel shows, which the application completes with the handover.
      */
     PanelSpec panel;
 
@@ -117,9 +103,9 @@ struct WorldInfo {
  *
  * @note Everything the engine must not know lives behind this interface: the
  *       firmware, its loop period, the model's names, the robot's own options,
- *       columns, panel and listeners. The application calls it in this order:
- *       options(), check_options(), context(), program(), wire(), and after
- *       the run metadata() and unwire().
+ *       columns and panel. The application calls it in this order: options(),
+ *       context(), program(), wire(), and after the run metadata() and
+ *       unwire().
  */
 class Target {
 public:
@@ -161,13 +147,6 @@ public:
     virtual std::vector<CliOption> options() { return {}; }
 
     /**
-     * @brief Reject combinations of options the robot cannot honour.
-     *
-     * @note Called once the whole command line was read.
-     */
-    virtual void check_options() const { }
-
-    /**
      * @brief Get the context the run advances.
      *
      * @note The application builds the world in it and configures its clock.
@@ -184,14 +163,7 @@ public:
     virtual std::filesystem::path robot_file() const = 0;
 
     /**
-     * @brief Get the scenario a run plays when the command line names none.
-     *
-     * @return Path of a scenario file, or empty for none.
-     */
-    virtual std::string default_scenario() const { return {}; }
-
-    /**
-     * @brief Get the body, forward axis and robot columns of the ground truth.
+     * @brief Get the body and robot columns of the ground truth.
      *
      * @return The recorder configuration.
      */
@@ -212,14 +184,14 @@ public:
     virtual FirmwareThread::Program program() = 0;
 
     /**
-     * @brief Build what the robot adds to the run: its devices, listeners, columns and panel.
+     * @brief Build what the robot adds to the run: its devices, columns and panel.
      *
      * @note Called once the world is built and the clock configured; the devices
      *       it adds to the context's run in the order added.
      *
      * @param firmware Thread that will run the program.
      * @param world The robot the world was built from, and the arena's surfaces.
-     * @return Listeners, columns, variables and panel of the robot.
+     * @return Columns, variables, panel and scenario hooks of the robot.
      */
     virtual Wiring wire(FirmwareThread& firmware, const WorldInfo& world) = 0;
 

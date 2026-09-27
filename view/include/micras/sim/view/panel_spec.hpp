@@ -4,8 +4,8 @@
  * @brief What a robot target shows on the panel and the video overlay, as data.
  */
 
-#ifndef MICRAS_SIM_CORE_PANEL_SPEC_HPP
-#define MICRAS_SIM_CORE_PANEL_SPEC_HPP
+#ifndef MICRAS_SIM_VIEW_PANEL_SPEC_HPP
+#define MICRAS_SIM_VIEW_PANEL_SPEC_HPP
 
 #include <cstdint>
 #include <functional>
@@ -21,8 +21,6 @@ struct Colour {
     uint8_t red{0};
     uint8_t green{0};
     uint8_t blue{0};
-
-    bool operator==(const Colour&) const = default;
 };
 
 /**
@@ -119,7 +117,7 @@ struct StateLabel {
 /**
  * @brief Everything a robot target puts on the control panel.
  *
- * @note Controls are declared, not drawn: the engine draws every robot the same
+ * @note Controls are declared, not drawn: the view draws every robot the same
  *       way and owns the details that are easy to get wrong, such as reacting to
  *       press and release edges rather than to the held state.
  */
@@ -157,8 +155,9 @@ struct PanelSpec {
     /**
      * @brief Called once, on the first button or switch a human touches.
      *
-     * @note A scripted run hands the board over at that moment, so the script
-     *       and the human never fight over the same input.
+     * @note Set by the application, not by the robot target: a scripted run hands
+     *       the board over at that moment, so the script and the human never
+     *       fight over the same input.
      */
     std::function<void()> take_over;
 };
@@ -199,4 +198,4 @@ struct OverlaySpec {
 };
 }  // namespace micras::sim
 
-#endif  // MICRAS_SIM_CORE_PANEL_SPEC_HPP
+#endif  // MICRAS_SIM_VIEW_PANEL_SPEC_HPP

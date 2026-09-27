@@ -67,14 +67,10 @@ public:
     /**
      * @brief Get how many ticks a duration spans.
      *
-     * @note Also available before a model is loaded, which is when the command
-     *       line is parsed; that is why it takes the tick length explicitly.
-     *
      * @param seconds Duration in simulated seconds.
-     * @param us_per_tick Simulated microseconds per firmware tick.
      * @return Number of whole ticks that fit in the duration.
      */
-    static uint64_t total_ticks(double seconds, uint32_t us_per_tick);
+    uint64_t total_ticks(double seconds) const;
 
     /**
      * @brief Get the tick an instant falls on.

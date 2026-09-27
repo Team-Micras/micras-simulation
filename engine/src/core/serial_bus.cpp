@@ -18,10 +18,7 @@ void SerialBus::remove_listener(const ISerialListener& listener) {
 }
 
 void SerialBus::send_from_firmware(std::span<const uint8_t> bytes) {
-    this->sent += bytes.size();
-    const std::vector<ISerialListener*> delivering = this->listeners;
-
-    for (ISerialListener* listener : delivering) {
+    for (ISerialListener* listener : this->listeners) {
         listener->on_firmware_bytes(bytes);
     }
 }

@@ -170,6 +170,22 @@ int MujocoWorld::sensor_address(const std::string& name) const {
     return addresses[static_cast<std::size_t>(id)];
 }
 
+int MujocoWorld::joint_dof(const std::string& name) const {
+    const int                  id = this->require_id(mjOBJ_JOINT, name);
+    const std::span<const int> addresses(
+        this->model_handle->jnt_dofadr, static_cast<std::size_t>(this->model_handle->njnt)
+    );
+    return addresses[static_cast<std::size_t>(id)];
+}
+
+int MujocoWorld::joint_qpos(const std::string& name) const {
+    const int                  id = this->require_id(mjOBJ_JOINT, name);
+    const std::span<const int> addresses(
+        this->model_handle->jnt_qposadr, static_cast<std::size_t>(this->model_handle->njnt)
+    );
+    return addresses[static_cast<std::size_t>(id)];
+}
+
 double MujocoWorld::sensor_value(int address) const {
     this->require_loaded();
     const std::span<const mjtNum> readings(

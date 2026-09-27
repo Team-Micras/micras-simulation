@@ -1,25 +1,14 @@
 #include <gtest/gtest.h>
 
 #include "micras/sim/core/serial_bus.hpp"
+#include "support.hpp"
 
 namespace micras::sim {
 namespace {
-/**
- * @brief Listener that keeps every byte it was handed.
- */
-class RecordingListener : public ISerialListener {
-public:
-    void on_firmware_bytes(std::span<const uint8_t> bytes) override {
-        this->received.insert(this->received.end(), bytes.begin(), bytes.end());
-    }
-
-    std::vector<uint8_t> received;
-};
-
 TEST(SerialBus, FansFirmwareOutputOutToEveryListener) {
-    SerialBus         bus;
-    RecordingListener first;
-    RecordingListener second;
+    SerialBus     bus;
+    ByteCollector first;
+    ByteCollector second;
 
     bus.add_listener(first);
     bus.add_listener(second);
@@ -31,8 +20,8 @@ TEST(SerialBus, FansFirmwareOutputOutToEveryListener) {
 }
 
 TEST(SerialBus, StopsDeliveringToARemovedListener) {
-    SerialBus         bus;
-    RecordingListener listener;
+    SerialBus     bus;
+    ByteCollector listener;
 
     bus.add_listener(listener);
     bus.send_from_firmware(std::vector<uint8_t>{1});
@@ -65,13 +54,6 @@ TEST(SerialBus, DropsAndCountsBytesPastTheBound) {
 
     EXPECT_EQ(bus.dropped_bytes(), 3U);
     EXPECT_EQ(bus.take_for_firmware(SerialBus::max_pending_bytes * 2).size(), SerialBus::max_pending_bytes);
-}
-
-TEST(SerialBus, CountsWhatTheFirmwareSent) {
-    SerialBus bus;
-    bus.send_from_firmware(std::vector<uint8_t>{1, 2, 3});
-
-    EXPECT_EQ(bus.sent_bytes(), 3U);
 }
 }  // namespace
 }  // namespace micras::sim

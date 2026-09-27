@@ -67,7 +67,6 @@ void Pwm::set_frequency(uint32_t frequency) {
     const uint32_t prescaler = this->handle->Instance->PSC;
 
     this->handle->Instance->ARR = this->handle->Instance->kernel_clock / ((prescaler + 1) * frequency) - 1;
-    this->handle->Instance->CNT = 0;
 
     host::PwmPort& port = host::Board::pwm(this->handle, this->channel);
     port.touched = true;

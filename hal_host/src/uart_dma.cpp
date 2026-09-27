@@ -16,8 +16,6 @@ UartDma::UartDma(const Config& config) : handle{config.handle} {
     if (this->handle->gState == HAL_UART_STATE_RESET) {
         config.init_function();
     }
-
-    host::Board::uart(this->handle).baud_rate = this->handle->Init.BaudRate;
 }
 
 bool UartDma::start_rx(std::span<uint8_t> buffer) {

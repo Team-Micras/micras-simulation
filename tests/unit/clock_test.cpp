@@ -5,7 +5,7 @@
 namespace micras::sim {
 namespace {
 /**
- * @brief The pair every recorded run uses: a 521 us timestep and a 1042 us loop.
+ * @brief A timestep that divides the loop into two steps.
  */
 Clock harness_clock() {
     return Clock::from_model(0.000521, 1042);
@@ -33,9 +33,10 @@ TEST(Clock, AdvancesOneTickAtATime) {
     EXPECT_EQ(clock.now_us(), 2084U);
 }
 
-TEST(Clock, CountsTheTicksOfTheRecordedScenarios) {
-    EXPECT_EQ(Clock::total_ticks(4.0, 1042), 3838U);
-    EXPECT_EQ(Clock::total_ticks(8.0, 1042), 7677U);
+TEST(Clock, CountsTheWholeTicksOfADuration) {
+    const Clock clock = harness_clock();
+    EXPECT_EQ(clock.total_ticks(4.0), 3838U);
+    EXPECT_EQ(clock.total_ticks(8.0), 7677U);
 }
 
 TEST(Clock, RoundsInstantsToTheNearestTick) {

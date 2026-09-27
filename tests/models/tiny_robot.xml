@@ -1,7 +1,6 @@
 <!--
   The smallest robot the engine tests need: a box on a free joint, one driven wheel
-  and a plane to stand on. The timestep divides a 1042 us loop into two steps, like
-  the robots the tests stand in for.
+  and a plane to stand on. The timestep divides a 1042 us loop into two steps.
 -->
 <mujoco model="tiny robot">
   <option timestep="0.000521"/>

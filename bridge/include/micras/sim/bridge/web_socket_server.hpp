@@ -17,9 +17,9 @@ namespace micras::sim {
 /**
  * @brief Serves binary frames to whoever connects, and hands back what they send.
  *
- * @note A facade on purpose: the harness only needs start, stop, broadcast and
- *       a callback, so the library behind it can be replaced without touching
- *       anything that uses it. Callbacks arrive on the server's own threads.
+ * @note A facade on purpose: it keeps IXWebSocket out of every header, and lets
+ *       -DMICRAS_BRIDGE=OFF build a stub in its place. Callbacks arrive on the
+ *       server's own threads.
  */
 class WebSocketServer {
 public:

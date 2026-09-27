@@ -8,7 +8,6 @@
 #define MICRAS_SIM_BRIDGE_MONITOR_BRIDGE_HPP
 
 #include <cstdint>
-#include <functional>
 #include <mutex>
 #include <span>
 #include <string>
@@ -23,26 +22,19 @@ namespace micras::sim {
  * @brief Carries the firmware's bytes to a monitor and the monitor's bytes back.
  *
  * @note Bytes only: the bridge frames nothing. What a monitor sends is collected
- *       on a server thread and handed over on the simulation thread, before the
- *       tick, to the robot target's inbound handler, which decides how the bytes
- *       reach the firmware. The firmware's output leaves as one frame per tick.
+ *       on a server thread and queued for the firmware on the simulation thread,
+ *       before the tick. The firmware's output leaves as one frame per tick.
  */
 class MonitorBridge : public ISerialListener, public IRunListener {
 public:
     /**
-     * @brief Receives what the monitors sent since the last tick, on the simulation thread.
-     */
-    using Inbound = std::function<void(std::span<const uint8_t>)>;
-
-    /**
      * @brief Open the bridge on a port.
      *
      * @param serial Bus the firmware reads from and writes to.
-     * @param inbound Hands the monitors' bytes to the firmware.
      * @param port TCP port to listen on.
      * @param error Filled with a human readable reason when the port cannot be taken.
      */
-    MonitorBridge(SerialBus& serial, Inbound inbound, int port, std::string& error);
+    MonitorBridge(SerialBus& serial, int port, std::string& error);
 
     MonitorBridge(const MonitorBridge&) = delete;
     MonitorBridge(MonitorBridge&&) = delete;
@@ -86,7 +78,7 @@ public:
     void on_firmware_bytes(std::span<const uint8_t> bytes) override;
 
     /**
-     * @brief Hand what the monitors sent to the inbound handler.
+     * @brief Queue what the monitors sent for the firmware.
      *
      * @param simulation Run about to advance.
      * @return Always RunControl::RUN; a monitor never stops a run.
@@ -107,11 +99,6 @@ private:
      * @note Bound for the life of the bridge; the context outlives it.
      */
     SerialBus& serial;  // NOLINT(*-avoid-const-or-ref-data-members)
-
-    /**
-     * @brief Hands the monitors' bytes to the firmware.
-     */
-    Inbound inbound;
 
     /**
      * @brief Whether the port was taken.

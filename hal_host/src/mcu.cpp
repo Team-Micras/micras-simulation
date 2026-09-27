@@ -73,6 +73,5 @@ void Mcu::refresh_watchdog() {
     }
 
     mcu.last_refresh = clock.now();
-    mcu.refreshes++;
 }
 }  // namespace micras::hal

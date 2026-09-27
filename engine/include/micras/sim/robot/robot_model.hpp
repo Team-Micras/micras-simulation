@@ -34,12 +34,8 @@ struct RobotModelNames {
     std::string imu{"imu"};
     std::string gyro{"imu_gyro"};
     std::string accelerometer{"imu_accelerometer"};
-    ///@}
 
-    /**
-     * @brief Geom group every robot geom is in, which range sensors skip.
-     */
-    static constexpr int robot_group{3};
+    ///@}
 
     /**
      * @brief Get the names a description's model uses.
@@ -59,13 +55,9 @@ struct RobotModelNames {
  *       the electrical part implicitly. The rotor inertia reflected through the
  *       gears is the wheel joint's armature, and the brushes' friction, the
  *       no-load current times the torque constant, its friction loss. The fan's
- *       downforce is a force actuator on a site, pulling straight down: its
- *       reference is a site fixed in the world. The suction pulls normal to the
- *       board, but the board tilts onto its front edge with the fan on, and
- *       the few percent of the pull that the tilt turns backwards is held on
- *       the robot by the friction of that edge. The skids that stand in for the
- *       edges are frictionless, so a pull along the tilted board would roll the
- *       robot backwards while it waits for the fan.
+ *       downforce is a force actuator pulling straight down, its reference a
+ *       site fixed in the world, so the board tilted onto its nose adds no
+ *       backward pull that the frictionless skids could not hold.
  *
  * @param robot The description.
  * @return The MJCF text.

@@ -2,11 +2,20 @@
  * @file
  */
 
-#include <algorithm>
-#include <limits>
-#include <utility>
-
 #include "micras/sim/view/control_panel.hpp"
+
+#ifdef MICRAS_VIEWER
+
+    #include <algorithm>
+    #include <format>
+    #include <limits>
+    #include <utility>
+
+    #include <GLFW/glfw3.h>
+    #include <imgui.h>
+    #include <imgui_impl_glfw.h>
+    #include <imgui_impl_opengl3.h>
+    #include <implot.h>
 
 namespace micras::sim {
 PlotTrace::PlotTrace(std::string variable) : variable{std::move(variable)} { }
@@ -18,19 +27,7 @@ void PlotTrace::sample(double time, const VariableSource* variables) {
     this->next = (this->next + 1) % capacity;
     this->count = std::min(this->count + 1, capacity);
 }
-}  // namespace micras::sim
 
-#ifdef MICRAS_VIEWER
-
-    #include <format>
-
-    #include <GLFW/glfw3.h>
-    #include <imgui.h>
-    #include <imgui_impl_glfw.h>
-    #include <imgui_impl_opengl3.h>
-    #include <implot.h>
-
-namespace micras::sim {
 namespace {
 /**
  * @brief Range of the speed limiter, in simulated seconds per wall second.
@@ -117,6 +114,7 @@ PanelRequest ControlPanel::draw(const Simulation& simulation, bool paused) {
     ImGui::Separator();
 
     this->request.paused_changed = false;
+    this->request.step = false;
     this->draw_board(paused);
     ImGui::Separator();
     this->draw_plots();
@@ -140,7 +138,7 @@ void ControlPanel::draw_board(bool paused) {
     ImGui::SameLine();
 
     if (ImGui::Button("step")) {
-        this->request.steps++;
+        this->request.step = true;
     }
 
     ImGui::SameLine();
@@ -221,22 +219,7 @@ void ControlPanel::draw_plots() {
 #else  // MICRAS_VIEWER
 
 namespace micras::sim {
-ControlPanel::ControlPanel(GLFWwindow* /*window*/, std::string title, PanelSpec spec, const VariableSource* variables) :
-    title{std::move(title)}, spec{std::move(spec)}, variables{variables} { }
-
 ControlPanel::~ControlPanel() = default;
-
-void ControlPanel::sample(double /*time*/) { }
-
-PanelRequest ControlPanel::draw(const Simulation& /*simulation*/, bool /*paused*/) {
-    return this->request;
-}
-
-void ControlPanel::draw_board(bool /*paused*/) { }
-
-void ControlPanel::draw_plots() { }
-
-void ControlPanel::take_over() { }
 }  // namespace micras::sim
 
 #endif  // MICRAS_VIEWER

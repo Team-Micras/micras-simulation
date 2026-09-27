@@ -14,13 +14,10 @@
     #include <GLFW/glfw3.h>
     #include <imgui.h>
 
+    #include "camera.hpp"
+
 namespace micras::sim {
 namespace {
-/**
- * @brief How far a drag moves the camera, as a fraction of the window.
- */
-constexpr double drag_scale{1.0};
-
 /**
  * @brief How much one scroll step zooms.
  */
@@ -106,8 +103,7 @@ std::unique_ptr<MujocoViewer> MujocoViewer::create(
     mjv_defaultPerturb(&viewer->perturb);
     mjr_defaultContext(&viewer->context);
 
-    viewer->option.flags[mjVIS_RANGEFINDER] = 1;
-    std::ranges::fill(viewer->option.geomgroup, 1);
+    show_everything(viewer->option);
 
     mjv_makeScene(world.model(), &viewer->scene, 2000);
     mjr_makeContext(world.model(), &viewer->context, mjFONTSCALE_150);
@@ -145,30 +141,12 @@ MujocoViewer::~MujocoViewer() {
 }
 
 bool MujocoViewer::select_camera(const std::string& name, std::string& error) {
-    const mjModel* model = this->world->model();
-
     if (name == "free") {
-        mjv_defaultFreeCamera(model, &this->camera);
+        mjv_defaultFreeCamera(this->world->model(), &this->camera);
         return true;
     }
 
-    const int id = mj_name2id(model, mjOBJ_CAMERA, name.c_str());
-
-    if (id < 0) {
-        error = "model has no camera named '" + name + "'; it has";
-
-        for (int i = 0; i < model->ncam; i++) {
-            const char* found = mj_id2name(model, mjOBJ_CAMERA, i);
-            error += std::string(" '") + (found == nullptr ? "?" : found) + "'";
-        }
-
-        error += " and 'free'";
-        return false;
-    }
-
-    this->camera.type = mjCAMERA_FIXED;
-    this->camera.fixedcamid = id;
-    return true;
+    return select_model_camera(this->world->model(), name, this->camera, error);
 }
 
 void MujocoViewer::on_start(const Simulation& simulation) {
@@ -213,7 +191,7 @@ bool MujocoViewer::wait_for_speed_limit() const {
 }
 
 bool MujocoViewer::was_interactive() const {
-    return this->interactive or (this->panel != nullptr and this->panel->was_touched());
+    return this->interactive or this->panel->was_touched();
 }
 
 void MujocoViewer::on_after_tick(const Simulation& simulation) {
@@ -273,17 +251,15 @@ void MujocoViewer::draw(const Simulation& simulation) {
     this->speed = request.speed;
     this->quit_requested = request.quit;
 
-    if (request.steps > this->consumed_steps) {
-        this->pending_steps += request.steps - this->consumed_steps;
-        this->consumed_steps = request.steps;
+    if (request.step and this->paused) {
+        this->pending_steps++;
     }
 
     glfwSwapBuffers(this->window);
-    this->frames++;
 }
 
 void MujocoViewer::on_key(int key) {
-    if (this->panel != nullptr and ImGui::GetIO().WantCaptureKeyboard) {
+    if (ImGui::GetIO().WantCaptureKeyboard) {
         return;
     }
 
@@ -293,7 +269,10 @@ void MujocoViewer::on_key(int key) {
             break;
 
         case GLFW_KEY_RIGHT:
-            this->pending_steps++;
+            if (this->paused) {
+                this->pending_steps++;
+            }
+
             break;
 
         case GLFW_KEY_ESCAPE:
@@ -301,9 +280,7 @@ void MujocoViewer::on_key(int key) {
             break;
 
         case GLFW_KEY_TAB:
-            this->camera.type = this->camera.type == mjCAMERA_FREE ? mjCAMERA_FIXED : mjCAMERA_FREE;
-            this->camera.fixedcamid =
-                (this->camera.fixedcamid + 1) % std::max(1, static_cast<int>(this->world->model()->ncam));
+            this->next_camera();
             break;
 
         case GLFW_KEY_C:
@@ -327,8 +304,21 @@ void MujocoViewer::on_key(int key) {
     }
 }
 
+void MujocoViewer::next_camera() {
+    const auto cameras = static_cast<int>(this->world->model()->ncam);
+
+    if (this->camera.type == mjCAMERA_FIXED and this->camera.fixedcamid + 1 < cameras) {
+        this->camera.fixedcamid++;
+    } else if (this->camera.type == mjCAMERA_FIXED or cameras == 0) {
+        this->camera.type = mjCAMERA_FREE;
+    } else {
+        this->camera.type = mjCAMERA_FIXED;
+        this->camera.fixedcamid = 0;
+    }
+}
+
 void MujocoViewer::on_mouse_button(int button, bool pressed) {
-    if (this->panel != nullptr and ImGui::GetIO().WantCaptureMouse) {
+    if (ImGui::GetIO().WantCaptureMouse) {
         this->left_held = false;
         this->right_held = false;
         this->middle_held = false;
@@ -365,7 +355,7 @@ void MujocoViewer::on_mouse_button(int button, bool pressed) {
 }
 
 void MujocoViewer::on_mouse_move(double x, double y) {
-    if (this->panel != nullptr and ImGui::GetIO().WantCaptureMouse) {
+    if (ImGui::GetIO().WantCaptureMouse) {
         this->last_x = x;
         this->last_y = y;
         return;
@@ -384,8 +374,8 @@ void MujocoViewer::on_mouse_move(double x, double y) {
     int height = 0;
     glfwGetWindowSize(this->window, &width, &height);
 
-    const double relative_x = drag_scale * dx / std::max(1, width);
-    const double relative_y = drag_scale * dy / std::max(1, height);
+    const double relative_x = dx / std::max(1, width);
+    const double relative_y = dy / std::max(1, height);
 
     if (this->perturb.active != 0) {
         mjv_movePerturb(
@@ -407,7 +397,7 @@ void MujocoViewer::on_mouse_move(double x, double y) {
 }
 
 void MujocoViewer::on_scroll(double offset) {
-    if (this->panel != nullptr and ImGui::GetIO().WantCaptureMouse) {
+    if (ImGui::GetIO().WantCaptureMouse) {
         return;
     }
 
@@ -430,14 +420,6 @@ bool MujocoViewer::was_interactive() const {
     return this->interactive;
 }
 
-bool MujocoViewer::should_quit() const {
-    return true;
-}
-
-bool MujocoViewer::wait_for_speed_limit() const {
-    return false;
-}
-
 MujocoViewer::~MujocoViewer() = default;
 
 void MujocoViewer::on_start(const Simulation& /*simulation*/) { }
@@ -449,22 +431,6 @@ RunControl MujocoViewer::on_before_tick(const Simulation& /*simulation*/) {
 void MujocoViewer::on_after_tick(const Simulation& /*simulation*/) { }
 
 void MujocoViewer::on_finish(const Simulation& /*simulation*/) { }
-
-void MujocoViewer::draw(const Simulation& /*simulation*/) { }
-
-void MujocoViewer::apply_perturbation() { }
-
-bool MujocoViewer::select_camera(const std::string& /*name*/, std::string& /*error*/) {
-    return true;
-}
-
-void MujocoViewer::on_key(int /*key*/) { }
-
-void MujocoViewer::on_mouse_button(int /*button*/, bool /*pressed*/) { }
-
-void MujocoViewer::on_mouse_move(double /*x*/, double /*y*/) { }
-
-void MujocoViewer::on_scroll(double /*offset*/) { }
 }  // namespace micras::sim
 
 #endif  // MICRAS_VIEWER

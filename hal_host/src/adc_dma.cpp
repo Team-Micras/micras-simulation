@@ -31,7 +31,6 @@ bool AdcDma::start_dma(std::span<uint32_t> buffer) {
     port.touched = true;
     port.buffer32 = buffer;
     port.buffer16 = {};
-    port.conversions = this->handle->Init.NbrOfConversion;
     port.complete = [adc = this->handle] { on_sequence_complete(adc); };
     return true;
 }
@@ -41,7 +40,6 @@ bool AdcDma::start_dma(std::span<uint16_t> buffer) {
     port.touched = true;
     port.buffer16 = buffer;
     port.buffer32 = {};
-    port.conversions = this->handle->Init.NbrOfConversion;
     port.complete = [adc = this->handle] { on_sequence_complete(adc); };
     return true;
 }

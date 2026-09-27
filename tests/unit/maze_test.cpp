@@ -10,6 +10,7 @@
 
 #include "micras/sim/arenas/maze.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/text_file.hpp"
 
 namespace micras::sim {
 namespace {
@@ -21,19 +22,6 @@ constexpr std::string_view small_maze{"o---o---o\n"
                                       "o   o---o\n"
                                       "| S |   |\n"
                                       "o---o---o\n"};
-
-/**
- * @brief Read a whole file.
- *
- * @param path Path of the file.
- * @return Its contents.
- */
-std::string read_file(const std::filesystem::path& path) {
-    const std::ifstream file(path);
-    std::ostringstream  text;
-    text << file.rdbuf();
-    return text.str();
-}
 
 TEST(Maze, ReadsTheSizeOfTheDrawing) {
     const Maze maze = Maze::parse(small_maze);
@@ -130,7 +118,9 @@ TEST(Maze, GeneratesAnArenaAWorldCanAttach) {
     const Maze  maze = Maze::parse(small_maze);
     MujocoWorld world;
 
-    world.build(read_file(MICRAS_TEST_MODEL), "robot", maze.mjcf({}), Maze::body_name, {.x = 0.09, .y = 0.09});
+    world.build(
+        read_text_file(MICRAS_TEST_MODEL, "model"), "robot", maze.mjcf({}), Maze::body_name, {.x = 0.09, .y = 0.09}
+    );
 
     EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "maze_floor"));
     EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "maze_south_1_1"));
@@ -146,7 +136,9 @@ TEST(Maze, PlacesTheWallsOnTheCellEdges) {
     const MazeConfig config{.cell_size = 0.2};
     MujocoWorld      world;
 
-    world.build(read_file(MICRAS_TEST_MODEL), "robot", maze.mjcf(config), Maze::body_name, {.x = 0.1, .y = 0.1});
+    world.build(
+        read_text_file(MICRAS_TEST_MODEL, "model"), "robot", maze.mjcf(config), Maze::body_name, {.x = 0.1, .y = 0.1}
+    );
     world.reset();
 
     const std::span<const mjtNum> positions(

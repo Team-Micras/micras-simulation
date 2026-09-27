@@ -11,27 +11,24 @@
 #ifndef MICRAS_SIM_VIEW_VIEW_OPTIONS_HPP
 #define MICRAS_SIM_VIEW_VIEW_OPTIONS_HPP
 
-#include <array>
 #include <cstdint>
 #include <string>
 
 namespace micras::sim {
 /**
- * @brief Everything the command line can configure about a recording.
+ * @brief How a recording is made: the command line's options, and what the application fills in.
  */
 struct VideoConfig {
     /**
-     * @brief Path of the mp4 file ffmpeg writes.
+     * @brief Path of the mp4 file ffmpeg writes, empty for no recording.
      */
     std::string path;
 
     /**
-     * @brief Model camera name, or "free" for the fixed whole-world view.
-     *
-     * @note A robot target may prefer one of its own cameras; the command line
-     *       overrides either.
+     * @brief Model camera name, "free" for the fixed whole-world view, or empty for the robot
+     *        target's preferred camera.
      */
-    std::string camera{"free"};
+    std::string camera;
 
     /**
      * @brief Frame rate handed to ffmpeg.
@@ -44,26 +41,26 @@ struct VideoConfig {
     bool trail{false};
 
     /**
-     * @brief Color of the trail, red, green and blue in [0, 1].
-     */
-    std::array<float, 3> trail_color{1.0F, 0.35F, 0.05F};
-
-    /**
-     * @brief Whether the robot is drawn in the color of its trail, to tell apart two recordings of one maze.
-     */
-    bool tint{false};
-
-    /**
      * @brief Frame size in pixels.
      */
     ///@{
     int width{1280};
     int height{720};
     ///@}
+
+    /**
+     * @brief Body the trail follows, the robot's own.
+     */
+    std::string body;
+
+    /**
+     * @brief Number of firmware ticks between frames.
+     */
+    uint64_t ticks_per_frame{1};
 };
 
 /**
- * @brief Everything the command line can configure about the window.
+ * @brief How the window is opened: the command line's options, and what the application fills in.
  */
 struct ViewerConfig {
     /**
@@ -96,8 +93,6 @@ struct ViewerConfig {
 
     /**
      * @brief Duration of one firmware tick, which the speed limiter paces against.
-     *
-     * @note No default: it comes from the clock of the loaded run.
      */
     uint32_t us_per_tick{0};
 };

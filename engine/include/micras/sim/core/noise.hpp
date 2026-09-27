@@ -28,7 +28,7 @@ struct NoiseConfig {
 };
 
 /**
- * @brief A stream of Gaussian and uniform samples for one device.
+ * @brief A stream of Gaussian samples for one device.
  *
  * @note The generator is std::mt19937_64, whose sequence the standard fixes, and
  *       the Gaussian comes from a Box-Muller transform written here, because the
@@ -53,13 +53,6 @@ public:
      * @return A sample, or 0 when the world is ideal.
      */
     double gaussian(double sigma);
-
-    /**
-     * @brief Check whether this stream draws anything.
-     *
-     * @return False when the world is ideal.
-     */
-    bool enabled() const { return this->on; }
 
 private:
     /**

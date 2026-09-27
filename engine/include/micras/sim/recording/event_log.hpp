@@ -25,8 +25,8 @@ namespace micras::sim {
  * @brief Logs collisions and state changes every tick, for meta.json.
  *
  * @note A collision is a watched geom starting to touch anything but an ignored
- *       geom, such as the floor, after having been clear of everything for at
- *       least min_separation: a chassis pressed against a wall makes and breaks
+ *       geom, such as the floor, after having been clear of everything but the
+ *       ignored geoms for at least min_separation: a chassis pressed against a wall makes and breaks
  *       contact every few steps, and that is one collision, not hundreds. A
  *       state change is a watched variable taking a
  *       new value, named from its table when it has one. The log keeps the first
@@ -35,14 +35,6 @@ namespace micras::sim {
  */
 class EventLog : public IRunListener {
 public:
-    /**
-     * @brief A variable whose changes are logged.
-     */
-    struct WatchedState {
-        std::string              variable;
-        std::vector<std::string> names;
-    };
-
     /**
      * @brief Most entries kept.
      */
@@ -58,19 +50,10 @@ public:
      *
      * @param geoms Ids of the geoms whose collisions are logged.
      * @param ignored Ids of the geoms touching which is not a collision.
-     * @param states Variables whose changes are logged.
+     * @param states Variables whose changes are logged, with the names of their values.
      * @param variables Where the variables are read, or null.
      */
-    EventLog(
-        std::vector<int> geoms, std::set<int> ignored, std::vector<WatchedState> states, const VariableSource* variables
-    );
-
-    /**
-     * @brief Log a variable's changes too.
-     *
-     * @param state The variable and the names of its values.
-     */
-    void watch(WatchedState state);
+    EventLog(std::vector<int> geoms, std::set<int> ignored, StateNames states, const VariableSource* variables);
 
     /**
      * @brief Look for new contacts and new states.
@@ -119,7 +102,7 @@ private:
 
     std::vector<int>                   geoms;
     std::set<int>                      ignored;
-    std::vector<WatchedState>          states;
+    StateNames                         states;
     const VariableSource*              variables;
     std::vector<double>                last_touch;
     std::vector<std::optional<double>> last_values;

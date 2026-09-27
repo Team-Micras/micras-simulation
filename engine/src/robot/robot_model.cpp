@@ -7,6 +7,7 @@
 #include <format>
 #include <string>
 
+#include "micras/sim/core/mujoco_world.hpp"
 #include "micras/sim/robot/robot_model.hpp"
 
 namespace micras::sim {
@@ -81,9 +82,8 @@ std::string chassis_geoms(const RobotDescription& robot, const RobotModelNames& 
  * @note The tyre has sliding and torsional friction but no rolling friction
  *       (condim 4, not 6). MuJoCo's convex contact separates two surfaces in
  *       proportion to how fast their friction is slipping, and a rolling wheel
- *       keeps a rolling-friction constraint slipping all the time: with it the
- *       tyres lost the floor on 18 % of steps at 0.4 m/s and 55 % at 1.5 m/s, at
- *       any timestep. The same separation during a pivot, where the tyres really
+ *       keeps a rolling-friction constraint slipping all the time, so the tyre
+ *       would hop. The same separation during a pivot, where the tyres really
  *       do scrub, is absorbed by a soft enough tyre, which is part of why
  *       contact_time_constant is what it is.
  */
@@ -237,7 +237,7 @@ std::string robot_mjcf(const RobotDescription& robot) {
         "    <accelerometer name=\"{23}\" site=\"{24}\"/>\n"
         "  </sensor>\n"
         "</mujoco>\n",
-        robot.name, robot.integration.timestep, RobotModelNames::robot_group, board_vertices(robot), names.body,
+        robot.name, robot.integration.timestep, MujocoWorld::unseen_group, board_vertices(robot), names.body,
         text(chassis.center_of_mass), chassis.mass, text(chassis.inertia), chassis_geoms(robot, names),
         sites(robot, names), wheel_body(robot, names.left_wheel, 1.0), wheel_body(robot, names.right_wheel, -1.0),
         names.left_motor, names.right_motor, names.left_wheel, names.right_wheel, gain, -damping,

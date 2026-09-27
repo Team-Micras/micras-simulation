@@ -13,8 +13,10 @@
 #include "micras/sim/core/mujoco_world.hpp"
 #include "micras/sim/core/serial_bus.hpp"
 #include "micras/sim/devices/dc_motor.hpp"
+#include "micras/sim/devices/digital_input.hpp"
 #include "micras/sim/devices/quadrature_encoder.hpp"
 #include "micras/sim/devices/serial_link.hpp"
+#include "support.hpp"
 
 namespace micras::sim {
 namespace {
@@ -32,33 +34,15 @@ DriveDescription tiny_drive() {
         .gear_ratio = 5.0,
         .gear_efficiency = 0.9,
         .supply_voltage = 6.0,
-        .max_motor_speed = 1800.0,
     };
 }
 
 /**
- * @brief Listener that keeps every byte the firmware sent.
- */
-class Collector : public ISerialListener {
-public:
-    void on_firmware_bytes(std::span<const uint8_t> bytes) override {
-        this->received.insert(this->received.end(), bytes.begin(), bytes.end());
-    }
-
-    // NOLINTNEXTLINE(*-non-private-member-variables-in-classes): the test reads what arrived.
-    std::vector<uint8_t> received;
-};
-
-/**
- * @brief The tiny robot's world and a clock with the usual 1042 us tick.
+ * @brief The tiny robot's world and a clock of 1042 us ticks.
  */
 class Devices : public testing::Test {
 protected:
-    void SetUp() override {
-        this->world.load(MICRAS_TEST_MODEL);
-        this->clock = Clock::from_model(this->world.timestep(), 1042);
-        this->world.reset();
-    }
+    void SetUp() override { load_tiny_world(this->world, this->clock); }
 
     /**
      * @brief Get the tiny robot's wheel joint position.
@@ -302,7 +286,7 @@ protected:
 
     // NOLINTBEGIN(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
     SerialBus            bus;
-    Collector            collector;
+    ByteCollector        collector;
     std::deque<uint8_t>  outgoing;
     std::vector<uint8_t> incoming;
     // NOLINTEND(*-non-private-member-variables-in-classes)

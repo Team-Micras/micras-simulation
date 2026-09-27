@@ -10,40 +10,17 @@
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "micras/sim/recording/event_log.hpp"
+#include "support.hpp"
 
 namespace micras::sim {
 namespace {
-/**
- * @brief Variables the test sets by hand, NaN until set.
- */
-class SettableVariables : public VariableSource {
-public:
-    double value_of(const std::string& name) const override {
-        const auto found = this->values.find(name);
-        return found == this->values.end() ? std::nan("") : found->second;
-    }
-
-    /**
-     * @brief Set a variable.
-     *
-     * @param name Name of the variable.
-     * @param value Its new value.
-     */
-    void set(const std::string& name, double value) { this->values[name] = value; }
-
-private:
-    std::map<std::string, double> values;
-};
-
 /**
  * @brief The tiny robot, lifted clear of the floor or lowered onto it at chosen instants.
  */
 class Logging : public testing::Test {
 protected:
     void SetUp() override {
-        this->context.world.load(MICRAS_TEST_MODEL);
-        this->context.clock = Clock::from_model(this->context.world.timestep(), 1042);
-        this->context.world.reset();
+        load_tiny_world(this->context.world, this->context.clock);
         this->chassis = this->context.world.require_id(mjOBJ_GEOM, "chassis");
         this->floor = this->context.world.require_id(mjOBJ_GEOM, "floor");
     }
@@ -66,12 +43,12 @@ protected:
     }
 
     // NOLINTBEGIN(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
-    RunContext        context;
-    FirmwareThread    firmware{[] {}};
-    Simulation        simulation{this->context, this->firmware};
-    SettableVariables variables;
-    int               chassis{-1};
-    int               floor{-1};
+    RunContext     context;
+    FirmwareThread firmware{[] {}};
+    Simulation     simulation{this->context, this->firmware};
+    MapVariables   variables;
+    int            chassis{-1};
+    int            floor{-1};
     // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
@@ -134,7 +111,7 @@ TEST_F(Logging, WatchesOnlyTheGeomsItWasGiven) {
 }
 
 TEST_F(Logging, NamesEachNewStateFromItsTable) {
-    EventLog log({}, {}, {{.variable = "state", .names = {"INIT", "IDLE", "RUN"}}}, &this->variables);
+    EventLog log({}, {}, {{"state", {"INIT", "IDLE", "RUN"}}}, &this->variables);
 
     this->tick(log, 0.0, false);
     this->variables.set("state", 0);
@@ -155,7 +132,7 @@ TEST_F(Logging, NamesEachNewStateFromItsTable) {
 }
 
 TEST_F(Logging, WritesAValueWithNoNameAsANumber) {
-    EventLog log({}, {}, {{.variable = "state", .names = {"INIT"}}}, &this->variables);
+    EventLog log({}, {}, {{"state", {"INIT"}}}, &this->variables);
 
     this->variables.set("state", 7);
     this->tick(log, 0.0, false);
@@ -168,7 +145,7 @@ TEST_F(Logging, WritesAValueWithNoNameAsANumber) {
 }
 
 TEST_F(Logging, SkipsAVariableThatIsNotReportedYet) {
-    EventLog log({}, {}, {{.variable = "state", .names = {"INIT", "IDLE"}}}, &this->variables);
+    EventLog log({}, {}, {{"state", {"INIT", "IDLE"}}}, &this->variables);
 
     this->variables.set("state", 1);
     this->tick(log, 0.0, false);
@@ -181,9 +158,8 @@ TEST_F(Logging, SkipsAVariableThatIsNotReportedYet) {
     EXPECT_EQ(log.entries().front().detail, "IDLE");
 }
 
-TEST_F(Logging, WatchesAVariableAddedLater) {
-    EventLog log({}, {}, {}, &this->variables);
-    log.watch({.variable = "mode", .names = {"SLOW", "FAST"}});
+TEST_F(Logging, WatchesEveryVariableItWasGiven) {
+    EventLog log({}, {}, {{"mode", {"SLOW", "FAST"}}, {"state", {"INIT"}}}, &this->variables);
 
     this->variables.set("mode", 1);
     this->tick(log, 0.0, false);
@@ -194,7 +170,7 @@ TEST_F(Logging, WatchesAVariableAddedLater) {
 }
 
 TEST_F(Logging, KeepsTheFirstEntriesOnlyButKeepsCounting) {
-    EventLog log({this->chassis}, {}, {{.variable = "counter", .names = {}}}, &this->variables);
+    EventLog log({this->chassis}, {}, {{"counter", {}}}, &this->variables);
 
     for (std::size_t i = 0; i < EventLog::max_events + 10; i++) {
         this->variables.set("counter", static_cast<double>(i));

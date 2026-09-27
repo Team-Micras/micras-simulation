@@ -44,8 +44,8 @@ void Clock::advance() {
     this->ticks++;
 }
 
-uint64_t Clock::total_ticks(double seconds, uint32_t us_per_tick) {
-    return static_cast<uint64_t>(seconds * 1e6 / us_per_tick);
+uint64_t Clock::total_ticks(double seconds) const {
+    return static_cast<uint64_t>(seconds * 1e6 / this->tick_us);
 }
 
 uint64_t Clock::tick_at(double seconds) const {

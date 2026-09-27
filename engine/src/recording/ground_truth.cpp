@@ -74,21 +74,18 @@ GroundTruth::GroundTruth(const MujocoWorld& world, GroundTruthConfig config) :
     config{std::move(config)},
     body_id{world.require_id(mjOBJ_BODY, this->config.body)},
     free_joint_qvel{free_joint_dof(world.model(), this->body_id, this->config.body)} {
-    const mjModel* model = world.model();
-
     for (const GroundTruthColumn& column : this->config.columns) {
         int address = 0;
 
         switch (column.probe) {
             case Probe::JOINT_VELOCITY:
-                address = model->jnt_dofadr[world.require_id(mjOBJ_JOINT, column.object)];
+                address = world.joint_dof(column.object);
                 break;
 
             case Probe::JOINT_POSITION:
-                address = model->jnt_qposadr[world.require_id(mjOBJ_JOINT, column.object)];
+                address = world.joint_qpos(column.object);
                 break;
 
-            case Probe::ACTUATOR_CONTROL:
             case Probe::ACTUATOR_FORCE:
                 address = world.require_id(mjOBJ_ACTUATOR, column.object);
                 break;
@@ -100,9 +97,7 @@ GroundTruth::GroundTruth(const MujocoWorld& world, GroundTruthConfig config) :
                 address = world.require_id(mjOBJ_GEOM, column.object);
                 break;
 
-            case Probe::CONTACT_TOTAL:
             case Probe::SOLVER_ITERATIONS:
-            case Probe::WARNINGS_TOTAL:
                 break;
         }
 
@@ -182,9 +177,6 @@ CsvCell GroundTruth::read(const ResolvedColumn& column) {
         case Probe::JOINT_POSITION:
             return data->qpos[column.address];
 
-        case Probe::ACTUATOR_CONTROL:
-            return data->ctrl[column.address];
-
         case Probe::ACTUATOR_FORCE:
             return data->actuator_force[column.address];
 
@@ -200,14 +192,8 @@ CsvCell GroundTruth::read(const ResolvedColumn& column) {
         case Probe::CONTACT_PENETRATION:
             return this->contacts_of(column.address).penetration;
 
-        case Probe::CONTACT_TOTAL:
-            return static_cast<int64_t>(data->ncon);
-
         case Probe::SOLVER_ITERATIONS:
             return static_cast<int64_t>(data->solver_niter[0]);
-
-        case Probe::WARNINGS_TOTAL:
-            return warnings_total(this->world);
     }
 
     throw std::logic_error("unknown ground truth probe");
@@ -219,11 +205,7 @@ std::vector<CsvCell> GroundTruth::sample(uint64_t tick) {
     const auto    euler = to_euler(data->xquat + 4L * this->body_id);
     const mjtNum* velocity = data->qvel + this->free_joint_qvel;
 
-    this->last_body_z = position[2];
-
-    const double forward_speed = this->config.forward_axis == ForwardAxis::Y ?
-                                     -velocity[0] * std::sin(euler[2]) + velocity[1] * std::cos(euler[2]) :
-                                     velocity[0] * std::cos(euler[2]) + velocity[1] * std::sin(euler[2]);
+    const double forward_speed = velocity[0] * std::cos(euler[2]) + velocity[1] * std::sin(euler[2]);
 
     std::vector<CsvCell> cells{
         tick,     data->time,  position[0], position[1], position[2], euler[0],      euler[1],

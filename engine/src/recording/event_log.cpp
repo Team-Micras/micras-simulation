@@ -33,20 +33,13 @@ int other_geom(const mjContact& contact, int geom) {
 }
 }  // namespace
 
-EventLog::EventLog(
-    std::vector<int> geoms, std::set<int> ignored, std::vector<WatchedState> states, const VariableSource* variables
-) :
+EventLog::EventLog(std::vector<int> geoms, std::set<int> ignored, StateNames states, const VariableSource* variables) :
     geoms{std::move(geoms)},
     ignored{std::move(ignored)},
     states{std::move(states)},
     variables{variables},
     last_touch(this->geoms.size(), -std::numeric_limits<double>::infinity()),
     last_values(this->states.size()) { }
-
-void EventLog::watch(WatchedState state) {
-    this->states.push_back(std::move(state));
-    this->last_values.emplace_back();
-}
 
 void EventLog::add(RunEvent event) {
     if (this->logged.size() < max_events) {
@@ -90,18 +83,20 @@ void EventLog::log_collisions(const mjModel* model, std::span<const mjContact> c
 }
 
 void EventLog::log_states(double now) {
-    for (std::size_t index = 0; index < this->states.size(); index++) {
-        const WatchedState& state = this->states[index];
-        const double        value = this->variables->value_of(state.variable);
+    std::size_t index = 0;
 
-        if (std::isnan(value) or this->last_values[index] == value) {
+    for (const auto& [variable, names] : this->states) {
+        const double           value = this->variables->value_of(variable);
+        std::optional<double>& last = this->last_values[index++];
+
+        if (std::isnan(value) or last == value) {
             continue;
         }
 
-        this->last_values[index] = value;
-        const bool  named = value >= 0.0 and value < static_cast<double>(state.names.size());
-        std::string name = named ? state.names[static_cast<std::size_t>(value)] : std::format("{}", value);
-        this->add({.time = now, .kind = state.variable, .detail = std::move(name)});
+        last = value;
+        const bool  named = value >= 0.0 and value < static_cast<double>(names.size());
+        std::string name = named ? names[static_cast<std::size_t>(value)] : std::format("{}", value);
+        this->add({.time = now, .kind = variable, .detail = std::move(name)});
     }
 }
 }  // namespace micras::sim

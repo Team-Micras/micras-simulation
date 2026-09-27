@@ -63,18 +63,6 @@ std::string refusal_of(std::string_view text) {
     return {};
 }
 
-/**
- * @brief Find where a value of the description came from.
- *
- * @param robot The description.
- * @param key Dotted key of the value.
- * @return Its provenance, or an empty one when the key was not read.
- */
-Provenance provenance_of(const RobotDescription& robot, std::string_view key) {
-    const auto found = std::ranges::find(robot.provenance, key, &Provenance::key);
-    return found == robot.provenance.end() ? Provenance{} : *found;
-}
-
 TEST(RobotDescription, ReadsEverySection) {
     const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
 
@@ -85,7 +73,7 @@ TEST(RobotDescription, ReadsEverySection) {
     EXPECT_DOUBLE_EQ(robot.wheels.track, 0.05);
     EXPECT_DOUBLE_EQ(robot.drive.resistance(), 10.5);
     EXPECT_EQ(robot.encoders.counts_per_revolution, 4096U);
-    EXPECT_DOUBLE_EQ(robot.imu.axes[2][2], 1.0);
+    EXPECT_DOUBLE_EQ(robot.imu.axes[1][1], 1.0);
     EXPECT_DOUBLE_EQ(robot.fan.nominal_voltage, 7.4);
     EXPECT_EQ(robot.battery.cells, 2);
     EXPECT_EQ(robot.link.baud_rate, 9600U);
@@ -125,33 +113,6 @@ TEST(RobotDescription, AcceptsPlainValuesAndSourcedTablesAlike) {
     EXPECT_DOUBLE_EQ(plain.drive.resistance(), sourced.drive.resistance());
 }
 
-TEST(RobotDescription, RecordsWhereEveryValueCameFrom) {
-    const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
-
-    const Provenance sourced = provenance_of(robot, "drive.winding_resistance");
-    const Provenance plain = provenance_of(robot, "drive.bridge_resistance");
-    const Provenance nested = provenance_of(robot, "wall_sensors.sensors[0].yaw_deg");
-
-    EXPECT_EQ(sourced.key, "drive.winding_resistance");
-    EXPECT_EQ(sourced.value, "10");
-    EXPECT_EQ(sourced.source, "made up");
-    EXPECT_EQ(plain.key, "drive.bridge_resistance");
-    EXPECT_EQ(plain.value, "0.5");
-    EXPECT_TRUE(plain.source.empty());
-    EXPECT_EQ(nested.key, "wall_sensors.sensors[0].yaw_deg");
-    EXPECT_EQ(nested.value, "90");
-    EXPECT_EQ(nested.source, "made up, to check the conversion");
-}
-
-TEST(RobotDescription, RecordsTheValuesInFileOrder) {
-    const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
-
-    ASSERT_GE(robot.provenance.size(), 2U);
-    EXPECT_EQ(robot.provenance.at(0).key, "schema");
-    EXPECT_EQ(robot.provenance.at(1).key, "name");
-    EXPECT_EQ(robot.provenance.at(1).value, "tiny");
-}
-
 TEST(RobotDescription, RefusesAMissingKeyNamingIt) {
     const std::string message = refusal_of(replaced(tiny_text(), "bridge_resistance = 0.5\n", ""));
 
@@ -181,14 +142,14 @@ TEST(RobotDescription, RefusesAValueOfTheWrongTypeNamingIt) {
     const std::string text_instead = refusal_of(replaced(tiny_text(), "cells = 2", "cells = \"two\""));
     const std::string fraction = refusal_of(replaced(tiny_text(), "cells = 2", "cells = 2.5"));
     const std::string short_vector =
-        refusal_of(replaced(tiny_text(), "chip_z = [0.0, 0.0, 1.0]", "chip_z = [0.0, 1.0]"));
+        refusal_of(replaced(tiny_text(), "chip_y = [0.0, 1.0, 0.0]", "chip_y = [0.0, 1.0]"));
     const std::string sourced = refusal_of(replaced(
         tiny_text(), R"(mass = { value = 0.05, source = "made up" })", R"(mass = { value = "heavy", source = "x" })"
     ));
 
     EXPECT_TRUE(text_instead.contains("battery.cells must be a whole number")) << text_instead;
     EXPECT_TRUE(fraction.contains("battery.cells must be a whole number")) << fraction;
-    EXPECT_TRUE(short_vector.contains("imu.chip_z must be 3 numbers")) << short_vector;
+    EXPECT_TRUE(short_vector.contains("imu.chip_y must be 3 numbers")) << short_vector;
     EXPECT_TRUE(sourced.contains("chassis.mass must be a number")) << sourced;
 }
 

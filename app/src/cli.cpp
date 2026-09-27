@@ -3,7 +3,6 @@
  */
 
 #include <algorithm>
-#include <array>
 #include <charconv>
 #include <functional>
 #include <stdexcept>
@@ -68,39 +67,6 @@ void parse_size(const std::string& value, const std::string& option, int& width,
 }
 
 /**
- * @brief Parse a color written as its red, green and blue parts, each in [0, 1].
- *
- * @param value Text of the color, like 0.2,0.6,1.
- * @param option Name of the option, for the error message.
- * @param color Filled with the three parts.
- */
-void parse_color(const std::string& value, const std::string& option, std::array<float, 3>& color) {
-    const std::size_t first = value.find(',');
-    const std::size_t second = first == std::string::npos ? first : value.find(',', first + 1);
-
-    if (second == std::string::npos) {
-        throw std::runtime_error(option + " must look like 0.2,0.6,1, got " + value);
-    }
-
-    color = {
-        require_number<float>(value.substr(0, first), option),
-        require_number<float>(value.substr(first + 1, second - first - 1), option),
-        require_number<float>(value.substr(second + 1), option),
-    };
-
-    if (std::ranges::any_of(color, [](float part) { return part < 0.0F or part > 1.0F; })) {
-        throw std::runtime_error(option + " parts must be between 0 and 1, got " + value);
-    }
-}
-
-/**
- * @brief Options being built.
- */
-struct ParsedOptions {
-    CliOptions parsed;
-};
-
-/**
  * @brief Reads the value that follows the option being applied.
  */
 using ValueReader = std::function<std::string()>;
@@ -160,22 +126,14 @@ bool apply_monitor_option(const std::string& argument, const ValueReader& value,
 bool apply_video_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
     if (argument == "--video") {
         options.video.path = value();
-        options.video_enabled = true;
     } else if (argument == "--video-fps") {
         options.video.fps = require_number<int>(value(), argument);
     } else if (argument == "--video-camera") {
         options.video.camera = value();
-        options.video_camera_given = true;
     } else if (argument == "--video-size") {
         parse_size(value(), "--video-size", options.video.width, options.video.height);
     } else if (argument == "--video-trail") {
         options.video.trail = true;
-    } else if (argument == "--video-trail-color") {
-        parse_color(value(), argument, options.video.trail_color);
-        options.video.trail = true;
-    } else if (argument == "--video-tint") {
-        options.video.trail = true;
-        options.video.tint = true;
     } else {
         return false;
     }
@@ -219,7 +177,7 @@ void validate(const CliOptions& options) {
         throw std::runtime_error("--monitor-port must be a TCP port");
     }
 
-    if (not options.video_enabled) {
+    if (options.video.path.empty()) {
         return;
     }
 
@@ -240,27 +198,26 @@ void validate(const CliOptions& options) {
  * @param options Options to fill.
  * @return False when the name is not an option at all.
  */
-bool apply_option(const std::string& argument, const ValueReader& value, ParsedOptions& options) {
+bool apply_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
     if (argument == "--out") {
-        options.parsed.out = value();
+        options.out = value();
     } else if (argument == "--scenario") {
-        options.parsed.scenario = value();
+        options.scenario = value();
     } else if (argument == "--maze") {
-        options.parsed.maze = value();
+        options.maze = value();
     } else if (argument == "--seconds") {
-        options.parsed.seconds = require_number<double>(value(), argument);
+        options.seconds = require_number<double>(value(), argument);
     } else if (argument == "--ticks") {
-        options.parsed.ticks = require_number<uint64_t>(value(), argument);
+        options.ticks = require_number<uint64_t>(value(), argument);
     } else if (argument == "--seed") {
-        options.parsed.seed = require_number<uint64_t>(value(), argument);
+        options.seed = require_number<uint64_t>(value(), argument);
     } else if (argument == "--ideal") {
-        options.parsed.ideal = true;
+        options.ideal = true;
     } else if (argument == "--record-every") {
-        options.parsed.record_every = require_number<uint32_t>(value(), argument);
+        options.record_every = require_number<uint32_t>(value(), argument);
     } else {
-        return apply_video_option(argument, value, options.parsed) or
-               apply_viewer_option(argument, value, options.parsed) or
-               apply_monitor_option(argument, value, options.parsed);
+        return apply_video_option(argument, value, options) or apply_viewer_option(argument, value, options) or
+               apply_monitor_option(argument, value, options);
     }
 
     return true;
@@ -269,13 +226,13 @@ bool apply_option(const std::string& argument, const ValueReader& value, ParsedO
 
 std::string Cli::usage(std::string_view program, std::span<const CliOption> target_options) {
     const std::string indent(7 + program.size(), ' ');
-    std::string       text =
-        "usage: " + std::string(program) + " --out <dir> [--scenario <toml>] [--maze <name>|<txt>]\n" + indent +
-        "[--seconds <float> | --ticks <int>] [--seed <int>] [--ideal] [--record-every <ticks>]\n" + indent +
-        "[--video <out.mp4>] [--video-fps <int>] [--video-camera <name>|free]\n" + indent +
-        "[--video-size <width>x<height>] [--video-trail] [--video-trail-color <r,g,b>] [--video-tint]\n" + indent +
-        "[--viewer] [--viewer-camera <name>|free] [--viewer-fps <int>]\n" + indent +
-        "[--viewer-size <width>x<height>]\n" + indent + "[--monitor] [--monitor-port <int>]\n";
+    std::string text = "usage: " + std::string(program) + " --out <dir> [--scenario <toml>] [--maze <name>|<txt>]\n" +
+                       indent +
+                       "[--seconds <float> | --ticks <int>] [--seed <int>] [--ideal] [--record-every <ticks>]\n" +
+                       indent + "[--video <out.mp4>] [--video-fps <int>] [--video-camera <name>|free]\n" + indent +
+                       "[--video-size <width>x<height>] [--video-trail]\n" + indent +
+                       "[--viewer] [--viewer-camera <name>|free] [--viewer-fps <int>]\n" + indent +
+                       "[--viewer-size <width>x<height>]\n" + indent + "[--monitor] [--monitor-port <int>]\n";
 
     for (const CliOption& option : target_options) {
         text += indent + "[" + option.name + (option.argument.empty() ? "" : " " + option.argument) + "]\n";
@@ -285,7 +242,7 @@ std::string Cli::usage(std::string_view program, std::span<const CliOption> targ
 }
 
 CliOptions Cli::parse(std::span<char*> arguments, std::span<const CliOption> target_options) {
-    ParsedOptions options;
+    CliOptions options;
 
     for (std::size_t i = 1; i < arguments.size(); i++) {
         const std::string argument = arguments[i];
@@ -304,7 +261,7 @@ CliOptions Cli::parse(std::span<char*> arguments, std::span<const CliOption> tar
         option->apply(option->argument.empty() ? std::string{} : value());
     }
 
-    validate(options.parsed);
-    return options.parsed;
+    validate(options);
+    return options;
 }
 }  // namespace micras::sim

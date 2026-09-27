@@ -6,18 +6,12 @@
 
 #include <gtest/gtest.h>
 
+#include "micras/sim/core/text_file.hpp"
 #include "micras/sim/recording/csv_writer.hpp"
 
 namespace micras::sim {
 namespace {
-std::string read_file(const std::filesystem::path& path) {
-    const std::ifstream file(path);
-    std::stringstream   buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
-}
-
-TEST(CsvWriter, FormatsCellsLikeTheHarnessAlwaysDid) {
+TEST(CsvWriter, FormatsCellsWithTwelveSignificantDigits) {
     EXPECT_EQ(CsvWriter::format(CsvCell{0.001042}), "0.001042");
     EXPECT_EQ(CsvWriter::format(CsvCell{3.99920000001}), "3.9992");
     EXPECT_EQ(CsvWriter::format(CsvCell{0.00080690123456}), "0.000806901235");
@@ -48,7 +42,7 @@ TEST(CsvWriter, WritesHeaderAndRows) {
         writer.write_row(std::vector<CsvCell>{uint64_t{1}, std::nan(""), int64_t{0}});
     }
 
-    EXPECT_EQ(read_file(path), "tick,x,count\n0,0.5,2\n1,nan,0\n");
+    EXPECT_EQ(read_text_file(path, "CSV"), "tick,x,count\n0,0.5,2\n1,nan,0\n");
     std::filesystem::remove(path);
 }
 

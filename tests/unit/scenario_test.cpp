@@ -17,6 +17,7 @@
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "micras/sim/scenario/scenario.hpp"
+#include "support.hpp"
 
 namespace micras::sim {
 namespace {
@@ -48,32 +49,11 @@ at = 1.0
 set = "switch"
 value = true
 
-[[events]]
-at = 3.0
-push = [0.1, -0.2, 0]
-for = 0.5
-
 [stop]
 when = "state"
 equals = "IDLE"
 after = 5.0
 )"};
-
-/**
- * @brief Variables with fixed values, NaN for any other name.
- */
-class FixedVariables : public VariableSource {
-public:
-    explicit FixedVariables(std::map<std::string, double> values) : values{std::move(values)} { }
-
-    double value_of(const std::string& name) const override {
-        const auto found = this->values.find(name);
-        return found == this->values.end() ? std::nan("") : found->second;
-    }
-
-private:
-    std::map<std::string, double> values;
-};
 
 /**
  * @brief A variable that takes a new value on given ticks, updated before the player reads it.
@@ -108,7 +88,7 @@ private:
  */
 class Probe : public IRunListener {
 public:
-    Probe(const DigitalInput& input, const MujocoWorld& world) : input{input}, world{world} { }
+    explicit Probe(const DigitalInput& input) : input{input} { }
 
     RunControl on_before_tick(const Simulation& simulation) override {
         if (this->input.is_active()) {
@@ -118,25 +98,12 @@ public:
         return RunControl::RUN;
     }
 
-    void on_after_tick(const Simulation& simulation) override {
-        const std::span<const mjtNum> forces(
-            this->world.data()->xfrc_applied, 6 * static_cast<std::size_t>(this->world.model()->nbody)
-        );
-        const int body = this->world.require_id(mjOBJ_BODY, "robot");
-
-        if (forces[6 * static_cast<std::size_t>(body)] != 0.0) {
-            this->pushed_ticks.push_back(simulation.tick());
-        }
-    }
-
     // NOLINTBEGIN(*-non-private-member-variables-in-classes): the test reads what the probe saw.
     std::vector<uint64_t> pressed_ticks;
-    std::vector<uint64_t> pushed_ticks;
     // NOLINTEND(*-non-private-member-variables-in-classes)
 
 private:
     const DigitalInput& input;  // NOLINT(*-avoid-const-or-ref-data-members): the fixture outlives the probe.
-    const MujocoWorld&  world;  // NOLINT(*-avoid-const-or-ref-data-members): the fixture outlives the probe.
 };
 
 /**
@@ -185,7 +152,7 @@ TEST(Scenario, LeavesOutWhatTheFileDoesNotSay) {
 TEST(Scenario, ReadsEveryKindOfEventInTimeOrder) {
     const Scenario scenario = Scenario::parse(full_scenario);
 
-    ASSERT_EQ(scenario.events.size(), 4U);
+    ASSERT_EQ(scenario.events.size(), 3U);
 
     const ScenarioEvent& press = scenario.events.at(0);
     EXPECT_EQ(press.kind, ScenarioEvent::Kind::PRESS);
@@ -201,11 +168,6 @@ TEST(Scenario, ReadsEveryKindOfEventInTimeOrder) {
     const ScenarioEvent& send = scenario.events.at(2);
     EXPECT_EQ(send.kind, ScenarioEvent::Kind::SEND);
     EXPECT_EQ(send.target, "hello");
-
-    const ScenarioEvent& push = scenario.events.at(3);
-    EXPECT_EQ(push.kind, ScenarioEvent::Kind::PUSH);
-    EXPECT_DOUBLE_EQ(push.duration, 0.5);
-    EXPECT_EQ(push.force, (std::array<double, 3>{0.1, -0.2, 0.0}));
 }
 
 TEST(Scenario, ReadsTheStopConditionAsANameOrANumber) {
@@ -249,7 +211,7 @@ TEST(Scenario, RefusesAnEventMissingWhatItNeeds) {
     EXPECT_TRUE(refusal_of("[[events]]\nsend = \"a\"\n").contains("at must be a number"));
     EXPECT_TRUE(refusal_of("[[events]]\nat = 1\npress = \"a\"\n").contains("for must be a number"));
     EXPECT_TRUE(refusal_of("[[events]]\nat = 1\nset = \"a\"\n").contains("true or false"));
-    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\npush = [1, 2]\nfor = 1\n").contains("push is a force"));
+    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\n").contains("exactly one of press, set or send"));
 }
 
 TEST(Scenario, RefusesNegativeTimes) {
@@ -269,18 +231,12 @@ TEST(Scenario, RefusesAFileThatIsNotToml) {
 }
 
 /**
- * @brief A world, a pusher, one input and one message: what a robot target hands a scenario.
+ * @brief A world, one input and one message: what a robot target hands a scenario.
  */
 class Playing : public testing::Test {
 protected:
     void SetUp() override {
-        this->context.world.load(MICRAS_TEST_MODEL);
-        this->context.clock = Clock::from_model(this->context.world.timestep(), 1042);
-        this->context.world.reset();
-
-        auto pusher = std::make_unique<Pusher>(this->context.world, "robot");
-        this->pusher = pusher.get();
-        this->context.devices.push_back(std::move(pusher));
+        load_tiny_world(this->context.world, this->context.clock);
 
         this->hooks.inputs.emplace("button", &this->button);
         this->hooks.messages.emplace("hello", std::vector<uint8_t>{1, 2, 3});
@@ -301,9 +257,8 @@ protected:
         std::string_view text, uint64_t ticks, const VariableSource* variables = nullptr, bool human = false,
         IRunListener* first = nullptr
     ) {
-        auto player = std::make_unique<ScenarioPlayer>(
-            Scenario::parse(text), this->hooks, this->context.serial, *this->pusher, variables
-        );
+        auto player =
+            std::make_unique<ScenarioPlayer>(Scenario::parse(text), this->hooks, this->context.serial, variables);
 
         if (human) {
             player->hand_over();
@@ -324,13 +279,12 @@ protected:
 
     // NOLINTBEGIN(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
     RunContext    context;
-    Pusher*       pusher{nullptr};
     bool          button_level{true};
     DigitalInput  button{{.name = "button", .active_low = true, .drive = [this](bool level) {
                              this->button_level = level;
                          }}};
     ScenarioHooks hooks;
-    Probe         probe{this->button, this->context.world};
+    Probe         probe{this->button};
     uint64_t      completed{0};
 
     /**
@@ -377,16 +331,6 @@ TEST_F(Playing, QueuesAMessageForTheFirmware) {
     EXPECT_EQ(this->context.serial.take_for_firmware(10), (std::vector<uint8_t>{1, 2, 3}));
 }
 
-TEST_F(Playing, PushesTheBodyForTheTimeTheEventSays) {
-    this->play("[[events]]\nat = 0.01\npush = [0.5, 0, 0]\nfor = 0.005\n", 30);
-
-    const uint64_t first = this->context.clock.tick_at(0.01);
-
-    ASSERT_FALSE(this->probe.pushed_ticks.empty());
-    EXPECT_EQ(this->probe.pushed_ticks.front(), first);
-    EXPECT_EQ(this->probe.pushed_ticks.back(), first + this->context.clock.tick_at(0.005) - 1);
-}
-
 TEST_F(Playing, RefusesAnEventOnSomethingTheRobotDoesNotHave) {
     EXPECT_THROW(this->play("[[events]]\nat = 0\npress = \"lever\"\nfor = 1\n", 1), std::runtime_error);
     EXPECT_THROW(this->play("[[events]]\nat = 0\nsend = \"goodbye\"\n", 1), std::runtime_error);
@@ -398,7 +342,7 @@ TEST_F(Playing, RefusesAStopOnAStateTheVariableDoesNotHave) {
 }
 
 TEST_F(Playing, StopsTheRunOnceTheConditionHoldsAfterItsDelay) {
-    const FixedVariables variables({{"state", 1.0}});
+    const MapVariables variables({{"state", 1.0}});
     const auto player = this->play("[stop]\nwhen = \"state\"\nequals = \"IDLE\"\nafter = 0.1\n", 1000, &variables);
 
     const auto stop_tick = static_cast<uint64_t>(std::ceil(0.1 / 1042e-6));
@@ -410,16 +354,16 @@ TEST_F(Playing, StopsTheRunOnceTheConditionHoldsAfterItsDelay) {
 }
 
 TEST_F(Playing, StopsOnANumericValue) {
-    const FixedVariables variables({{"lap", 3.0}});
-    const auto           player = this->play("[stop]\nwhen = \"lap\"\nequals = 3\n", 100, &variables);
+    const MapVariables variables({{"lap", 3.0}});
+    const auto         player = this->play("[stop]\nwhen = \"lap\"\nequals = 3\n", 100, &variables);
 
     EXPECT_EQ(player->stopped_at(), 0.0);
     EXPECT_EQ(this->completed, 0U);
 }
 
 TEST_F(Playing, StopsOnAnyOfSeveralValues) {
-    const FixedVariables variables({{"state", 2.0}});
-    const auto player = this->play("[stop]\nwhen = \"state\"\nequals = [\"IDLE\", \"RUN\"]\n", 100, &variables);
+    const MapVariables variables({{"state", 2.0}});
+    const auto         player = this->play("[stop]\nwhen = \"state\"\nequals = [\"IDLE\", \"RUN\"]\n", 100, &variables);
 
     EXPECT_EQ(player->stopped_at(), 0.0);
     EXPECT_EQ(this->completed, 0U);
@@ -469,8 +413,8 @@ TEST(Scenario, ReadsAnEventConditionAndAStopCount) {
 }
 
 TEST_F(Playing, RunsToTheEndWhileTheConditionDoesNotHold) {
-    const FixedVariables variables({{"state", 2.0}});
-    const auto           player = this->play("[stop]\nwhen = \"state\"\nequals = \"IDLE\"\n", 20, &variables);
+    const MapVariables variables({{"state", 2.0}});
+    const auto         player = this->play("[stop]\nwhen = \"state\"\nequals = \"IDLE\"\n", 20, &variables);
 
     EXPECT_FALSE(player->stopped_at().has_value());
     EXPECT_EQ(this->completed, 20U);

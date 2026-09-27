@@ -18,20 +18,6 @@
 #include <cstdint>
 
 /*****************************************
- * Status
- *****************************************/
-
-/**
- * @brief Result of a vendor HAL call.
- */
-enum HAL_StatusTypeDef : uint8_t {
-    HAL_OK = 0,
-    HAL_ERROR = 1,
-    HAL_BUSY = 2,
-    HAL_TIMEOUT = 3,
-};
-
-/*****************************************
  * GPIO
  *****************************************/
 
@@ -81,7 +67,6 @@ struct TIM_TypeDef {
     uint32_t CCER;
     uint32_t PSC;
     uint32_t ARR;
-    uint32_t CNT;
     uint32_t kernel_clock;
 };
 
@@ -100,7 +85,6 @@ struct TIM_Base_InitTypeDef {
 enum HAL_TIM_StateTypeDef : uint8_t {
     HAL_TIM_STATE_RESET = 0,
     HAL_TIM_STATE_READY = 1,
-    HAL_TIM_STATE_BUSY = 2,
 };
 
 /**
@@ -200,7 +184,6 @@ struct SPI_HandleTypeDef {
 enum HAL_UART_StateTypeDef : uint8_t {
     HAL_UART_STATE_RESET = 0x00,
     HAL_UART_STATE_READY = 0x20,
-    HAL_UART_STATE_BUSY_TX = 0x21,
     HAL_UART_STATE_BUSY_RX = 0x22,
 };
 
@@ -278,7 +261,5 @@ struct CRC_HandleTypeDef {
 struct FMAC_HandleTypeDef {
     uint32_t State;
 };
-
-inline constexpr uint32_t HAL_FMAC_STATE_RESET{0x00000000U};
 
 #endif  // STM32_HOST_H

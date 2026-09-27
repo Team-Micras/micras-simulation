@@ -31,10 +31,10 @@ public:
  * @brief Strict handoff between the simulation and the firmware program.
  *
  * @note The two threads never run at the same time: exactly one of them is
- *       awake at any moment, so the run stays as deterministic as it was when
- *       the firmware was called inline. The firmware gives control back from
- *       inside its own loop, through yield_tick(), which is reached from the
- *       Stopwatch the firmware waits on.
+ *       awake at any moment, so the handoff adds no nondeterminism. The firmware
+ *       gives control back from inside its own loop, through yield_tick(),
+ *       which the host timer's handover calls when a read crosses the end of a
+ *       step.
  *
  * @note The simulation side is single threaded: run_until_yield() and finish()
  *       must be called from the one thread that drives the run.
@@ -42,7 +42,7 @@ public:
 class FirmwareThread {
 public:
     /**
-     * @brief The firmware program to run, typically the Micras loop.
+     * @brief The firmware program to run: the target's main.
      */
     using Program = std::function<void()>;
 
@@ -130,8 +130,8 @@ private:
     /**
      * @brief Body of the firmware thread.
      *
-     * @note Not called main: the hardware tests are compiled with that
-     *       identifier redefined, so nothing reachable from them may use it.
+     * @note Not called main: the firmware is compiled with -Dmain=..., which
+     *       would rename a member called main too.
      */
     void thread_body();
 

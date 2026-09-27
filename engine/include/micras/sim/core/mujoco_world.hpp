@@ -18,11 +18,17 @@ namespace micras::sim {
  * @brief Loads a model, owns its data and resolves model objects by name.
  *
  * @note Every accessor throws a clear error when the model is not loaded yet,
- *       so a proxy built too early fails at construction instead of
+ *       so a device built too early fails at construction instead of
  *       dereferencing a null pointer in the middle of a run.
  */
 class MujocoWorld {
 public:
+    /**
+     * @brief Geom group the range sensors do not see: the robot's own geoms, and what is only paint
+     *        on the arena.
+     */
+    static constexpr int unseen_group{3};
+
     MujocoWorld() = default;
 
     MujocoWorld(const MujocoWorld&) = delete;
@@ -110,6 +116,22 @@ public:
     int sensor_address(const std::string& name) const;
 
     /**
+     * @brief Resolve where a named joint's first velocity dof sits in qvel.
+     *
+     * @param name Name of the joint.
+     * @return Index into mjData::qvel.
+     */
+    int joint_dof(const std::string& name) const;
+
+    /**
+     * @brief Resolve where a named joint's first position coordinate sits in qpos.
+     *
+     * @param name Name of the joint.
+     * @return Index into mjData::qpos.
+     */
+    int joint_qpos(const std::string& name) const;
+
+    /**
      * @brief Read one sensordata entry.
      *
      * @param address Index into mjData::sensordata.
@@ -142,8 +164,8 @@ public:
     /**
      * @brief Get the loaded model.
      *
-     * @note Exposed for the recorder and the renderer, which need the whole
-     *       model; the proxies use the named accessors instead.
+     * @note Exposed for the devices, the recorders and the renderer, which
+     *       read the model's arrays directly.
      *
      * @return Pointer to the model.
      */
@@ -155,8 +177,8 @@ public:
     /**
      * @brief Get the simulation data.
      *
-     * @note Exposed for the recorder and the renderer, which need the whole
-     *       state; the proxies use the named accessors instead.
+     * @note Exposed for the devices, the recorders and the renderer, which
+     *       read and write the state's arrays directly.
      *
      * @return Pointer to the data.
      */

@@ -21,8 +21,8 @@ namespace micras::sim {
 /**
  * @brief A battery measured by an ADC through a divider.
  *
- * @note Open circuit voltage of charged cells, less the internal resistance times
- *       the load; the load is what the loads report.
+ * @note The open circuit voltage of charged cells, which the loads do not pull
+ *       down.
  */
 class Battery : public Device {
 public:
@@ -36,7 +36,6 @@ public:
         double                        adc_reference;
         double                        adc_max_counts;
         double                        adc_noise_counts;
-        std::function<double()>       load_current;
         std::function<void(uint32_t)> write;
     };
 

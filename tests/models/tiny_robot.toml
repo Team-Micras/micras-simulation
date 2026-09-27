@@ -49,7 +49,6 @@ rotor_inertia = 4.0e-9
 gear_ratio = 5.0
 gear_efficiency = 0.9
 supply_voltage = 6.0
-max_motor_speed = 1800.0
 
 [encoders]
 counts_per_revolution = { value = 4096, source = "made up" }
@@ -58,7 +57,6 @@ counts_per_revolution = { value = 4096, source = "made up" }
 position = [0.0, 0.0, 0.004]
 chip_x = [1.0, 0.0, 0.0]
 chip_y = [0.0, 1.0, 0.0]
-chip_z = [0.0, 0.0, 1.0]
 gyro_noise_density = 5.0e-5
 gyro_bias = 0.005
 gyro_scale_error = 0.001
@@ -79,7 +77,6 @@ time_constant = 0.1
 [battery]
 cells = 2
 cell_voltage = 3.7
-cell_resistance = 0.1
 
 [link]
 baud_rate = 9600

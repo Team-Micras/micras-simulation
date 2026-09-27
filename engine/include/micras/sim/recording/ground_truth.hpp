@@ -18,31 +18,21 @@
 
 namespace micras::sim {
 /**
- * @brief Body axis the robot drives along, which v_forward projects onto.
- */
-enum class ForwardAxis : uint8_t {
-    X,
-    Y,
-};
-
-/**
  * @brief Quantity one ground truth column reads.
  *
  * @note Joint probes name a joint, actuator probes an actuator and contact
- *       probes a geom. The last three read the whole world and take no object.
+ *       probes a geom. The solver iterations read the whole world and take no
+ *       object.
  */
 enum class Probe : uint8_t {
     JOINT_VELOCITY,
     JOINT_POSITION,
-    ACTUATOR_CONTROL,
     ACTUATOR_FORCE,
     CONTACT_COUNT,
     CONTACT_NORMAL_FORCE,
     CONTACT_SLIP,
     CONTACT_PENETRATION,
-    CONTACT_TOTAL,
     SOLVER_ITERATIONS,
-    WARNINGS_TOTAL,
 };
 
 /**
@@ -75,11 +65,6 @@ struct GroundTruthConfig {
     std::string body;
 
     /**
-     * @brief Body axis the robot drives along.
-     */
-    ForwardAxis forward_axis{ForwardAxis::X};
-
-    /**
      * @brief Columns written after the body pose and velocity, in this order.
      */
     std::vector<GroundTruthColumn> columns;
@@ -96,8 +81,7 @@ struct GroundTruthConfig {
  *       the three linear dofs are expressed in the world frame, the three
  *       angular dofs in the body frame. The columns are named accordingly
  *       (vx_world, vy_world, vz_world, wz_body) and v_forward projects the
- *       world linear velocity onto the body forward axis. This is the one class
- *       that indexes the MuJoCo C arrays directly.
+ *       world linear velocity onto the body's x axis, which is forward.
  */
 class GroundTruth {
 public:
@@ -105,7 +89,7 @@ public:
      * @brief Resolve every model id the columns need.
      *
      * @param world Loaded simulation world.
-     * @param config Robot body, forward axis and columns.
+     * @param config Robot body and columns.
      */
     GroundTruth(const MujocoWorld& world, GroundTruthConfig config);
 
@@ -131,13 +115,6 @@ public:
      * @return Total number of warnings.
      */
     static int64_t warnings_total(const MujocoWorld& world);
-
-    /**
-     * @brief Get the robot body height sampled on the last row.
-     *
-     * @return Height of the robot body origin in meters.
-     */
-    double last_z() const { return this->last_body_z; }
 
 private:
     /**
@@ -204,7 +181,7 @@ private:
     const MujocoWorld& world;  // NOLINT(*-avoid-const-or-ref-data-members)
 
     /**
-     * @brief Robot body, forward axis and columns.
+     * @brief Robot body and columns.
      */
     GroundTruthConfig config;
 
@@ -227,11 +204,6 @@ private:
      * @brief Contact statistics of the current row, per geom id.
      */
     std::unordered_map<int, ContactStats> row_contacts;
-
-    /**
-     * @brief Height of the robot body origin on the last sampled row.
-     */
-    double last_body_z{0.0};
 };
 }  // namespace micras::sim
 

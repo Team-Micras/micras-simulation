@@ -17,11 +17,11 @@
 
 #include <mujoco/mujoco.h>
 
-#include "micras/sim/view/view_options.hpp"
-
-#include "micras/sim/core/panel_spec.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "micras/sim/core/variable_source.hpp"
+#include "micras/sim/view/panel_spec.hpp"
+#include "micras/sim/view/view_options.hpp"
 
 namespace micras::sim {
 /**
@@ -35,29 +35,19 @@ public:
     /**
      * @brief Bring up EGL, the MuJoCo render context and the ffmpeg pipe.
      *
-     * @note The caller must have set model->vis.global.offwidth/offheight to at
-     *       least the requested frame size before calling this, because
-     *       mjr_makeContext sizes the offscreen framebuffer from them.
+     * @note Grows the model's offscreen framebuffer to the frame size, since
+     *       mjr_makeContext sizes it from the model.
      *
-     * @param model Model to render.
+     * @param world World whose state is rendered.
      * @param config Recording configuration.
+     * @param overlay What the robot target prints under the simulated time.
+     * @param variables Source of the overlay's values, or null.
      * @param error Filled with a human readable reason when creation fails.
      * @return The recorder, or nullptr if anything failed.
      */
-    static std::unique_ptr<VideoRecorder> create(mjModel* model, const VideoConfig& config, std::string& error);
-
-    /**
-     * @brief Start recording a run, from the world and the variables the overlay prints.
-     *
-     * @param world World whose state is rendered.
-     * @param overlay What the robot target prints under the simulated time.
-     * @param variables Source of the overlay's values, or null.
-     * @param ticks_per_frame Number of firmware ticks between frames.
-     * @param trail_body Body whose path every frame draws behind it, or empty for none.
-     */
-    void attach(
-        MujocoWorld& world, OverlaySpec overlay, const VariableSource* variables, uint64_t ticks_per_frame,
-        const std::string& trail_body
+    static std::unique_ptr<VideoRecorder> create(
+        MujocoWorld& world, const VideoConfig& config, OverlaySpec overlay, const VariableSource* variables,
+        std::string& error
     );
 
     /**
@@ -74,16 +64,6 @@ public:
     VideoRecorder(VideoRecorder&&) = delete;
     VideoRecorder& operator=(const VideoRecorder&) = delete;
     VideoRecorder& operator=(VideoRecorder&&) = delete;
-
-    /**
-     * @brief Render one frame of the current state and write it to ffmpeg.
-     *
-     * @param data Simulation state to render; mjv_updateScene needs a mutable
-     *             pointer but never touches the physics state.
-     * @param labels Overlay labels, one per line.
-     * @param values Overlay values, one per line.
-     */
-    void capture(mjData* data, const std::string& labels, const std::string& values);
 
     /**
      * @brief Release the ffmpeg pipe, the render context and the EGL context.
@@ -113,7 +93,17 @@ private:
      */
     static constexpr float trail_width{3.0F};
 
+    /**
+     * @brief Color of the trail, red, green, blue and alpha.
+     */
+    static constexpr std::array<float, 4> trail_color{1.0F, 0.35F, 0.05F, 1.0F};
+
     VideoRecorder() = default;
+
+    /**
+     * @brief Extend the trail with where the body is now, if it has moved far enough.
+     */
+    void extend_trail();
 
     /**
      * @brief Add the trail to the scene, as one line per pair of points.
@@ -121,14 +111,12 @@ private:
     void draw_trail();
 
     /**
-     * @brief Blend the color of every geom of the robot with the color of its trail.
+     * @brief Render one frame of the current state and write it to ffmpeg.
+     *
+     * @param labels Overlay labels, one per line.
+     * @param values Overlay values, one per line.
      */
-    void tint_robot();
-
-    /**
-     * @brief Share of the trail color in the tinted robot, the rest being its own shading.
-     */
-    static constexpr float tint_share{0.75F};
+    void capture(const std::string& labels, const std::string& values);
 
     /**
      * @brief Make this recorder's offscreen context current.
@@ -143,11 +131,6 @@ private:
      * @brief Let go of this recorder's offscreen context.
      */
     void release_context() const;
-
-    /**
-     * @brief Model being rendered, owned by the World.
-     */
-    mjModel* model{nullptr};
 
     /**
      * @brief Headless context the frames are rendered through.
@@ -191,24 +174,19 @@ private:
     uint64_t frames{0};
 
     /**
-     * @brief World being rendered, set by attach().
+     * @brief World being rendered.
      */
     MujocoWorld* world{nullptr};
 
     /**
-     * @brief Source of the overlay's values, set by attach().
+     * @brief Source of the overlay's values.
      */
     const VariableSource* variables{nullptr};
 
     /**
-     * @brief What the overlay prints under the simulated time, set by attach().
+     * @brief What the overlay prints under the simulated time.
      */
     OverlaySpec overlay;
-
-    /**
-     * @brief Number of firmware ticks between frames.
-     */
-    uint64_t ticks_per_frame{1};
 
     /**
      * @brief Body the trail follows, or -1 for no trail, and the points it has left.

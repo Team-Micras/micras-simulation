@@ -32,8 +32,7 @@ namespace micras::sim {
  * @note The only place that decides what a run is made of: it reads the
  *       scenario, builds the world from the robot's description and the arena,
  *       and registers every listener of one Simulation in the order Wiring
- *       documents, the scenario first. It is also the only layer that knows a
- *       run can have a window.
+ *       documents. It is also the only layer that knows a run can have a window.
  */
 class Application {
 public:
@@ -61,18 +60,6 @@ public:
      * @param arguments Whole command line, recorded in the metadata.
      */
     void run(std::span<char*> arguments);
-
-    /**
-     * @brief Entry point shared by every simulation executable.
-     *
-     * @note Catches everything, prints it with the usage text and returns
-     *       non-zero, so a failed run is loud and never looks successful.
-     *
-     * @param arguments Whole command line.
-     * @param target Robot to run.
-     * @return Process exit code.
-     */
-    static int main(std::span<char*> arguments, Target& target);
 
 private:
     /**
@@ -130,11 +117,6 @@ private:
     FirmwareThread firmware;
 
     /**
-     * @brief Pushes the robot when the scenario says so; owned by the context's devices.
-     */
-    Pusher* pusher{nullptr};
-
-    /**
      * @brief What the target adds to the run.
      */
     Wiring wiring;
@@ -182,6 +164,9 @@ private:
 
 /**
  * @brief Run a robot target from its executable's main.
+ *
+ * @note Catches everything, prints it with the usage text and returns non-zero,
+ *       so a failed run is loud and never looks successful.
  *
  * @param arguments Whole command line.
  * @param target Robot to run.

@@ -61,13 +61,6 @@ public:
      */
     void on_after_tick(const Simulation& simulation) override;
 
-    /**
-     * @brief Get the robot body height sampled on the last row.
-     *
-     * @return Height of the robot body origin in meters.
-     */
-    double last_z() const { return this->ground_truth.last_z(); }
-
 private:
     /**
      * @brief Ask every source for its names and write the header.

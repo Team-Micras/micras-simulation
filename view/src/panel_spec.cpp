@@ -2,7 +2,7 @@
  * @file
  */
 
-#include "micras/sim/core/panel_spec.hpp"
+#include "micras/sim/view/panel_spec.hpp"
 
 namespace micras::sim {
 std::string StateLabel::name_of(double state) const {

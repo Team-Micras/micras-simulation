@@ -30,10 +30,6 @@ Battery::Battery(Config config, const NoiseConfig& noise) :
     terminal_voltage{this->config.description.cells * this->config.description.cell_voltage} { }
 
 void Battery::sample(MujocoWorld& /*world*/, const Clock& /*clock*/) {
-    const BatteryDescription& pack = this->config.description;
-    const double              load = this->config.load_current ? this->config.load_current() : 0.0;
-
-    this->terminal_voltage = pack.cells * (pack.cell_voltage - pack.cell_resistance * load);
     this->config.write(to_counts(
         this->terminal_voltage / this->config.divider, this->config.adc_reference, this->config.adc_max_counts,
         this->noise.gaussian(this->config.adc_noise_counts)

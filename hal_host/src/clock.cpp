@@ -12,9 +12,9 @@ Clock& Clock::instance() {
     return clock;
 }
 
-void Clock::configure(uint32_t cycles_per_microsecond, uint32_t quantum_us) {
+void Clock::configure(uint32_t cycles_per_microsecond) {
     this->cycles_per_us = cycles_per_microsecond;
-    this->quantum = static_cast<uint64_t>(quantum_us) * cycles_per_microsecond;
+    this->quantum = cycles_per_microsecond;
 }
 
 void Clock::set_handover(uint32_t step_us, Handover handover) {

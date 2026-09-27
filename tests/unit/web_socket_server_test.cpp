@@ -22,6 +22,7 @@
 #include "micras/sim/bridge/web_socket_server.hpp"
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
+#include "support.hpp"
 
 namespace micras::sim {
 namespace {
@@ -177,9 +178,7 @@ std::vector<uint8_t> receive_binary(const Socket& socket) {
 
 TEST(MonitorBridge, CarriesRawBytesBothWays) {
     RunContext context;
-    context.world.load(MICRAS_TEST_MODEL);
-    context.clock = Clock::from_model(context.world.timestep(), 1042);
-    context.world.reset();
+    load_tiny_world(context.world, context.clock);
     FirmwareThread   firmware{[&firmware] {
         while (firmware.yield_tick()) { }
     }};
@@ -188,10 +187,7 @@ TEST(MonitorBridge, CarriesRawBytesBothWays) {
     std::vector<uint8_t> inbound;
     std::string          error;
     const uint16_t       port = free_port();
-    MonitorBridge        bridge(
-        context.serial, [&inbound](std::span<const uint8_t> bytes) { inbound.assign(bytes.begin(), bytes.end()); },
-        port, error
-    );
+    MonitorBridge        bridge(context.serial, port, error);
     ASSERT_TRUE(bridge.is_open()) << error;
 
     const Socket client;
@@ -204,6 +200,7 @@ TEST(MonitorBridge, CarriesRawBytesBothWays) {
 
     while (inbound.empty() and steady_clock::now() < deadline) {
         bridge.on_before_tick(simulation);
+        inbound = context.serial.take_for_firmware(command.size());
         std::this_thread::sleep_for(milliseconds(1));
     }
 

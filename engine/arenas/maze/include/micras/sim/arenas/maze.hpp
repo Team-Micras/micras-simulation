@@ -33,10 +33,10 @@ struct MazeConfig {
 /**
  * @brief A maze: which walls stand, where it starts and where the goal is.
  *
- * @note The drawing is the format of tools/gen_maze.py and of the published maze
- *       collections: posts as 'o', horizontal walls as '---', vertical walls as
- *       '|', the start cell marked 'S' and goal cells 'G', read bottom-up so the
- *       start is at the lower left. The world frame puts the lower left post at
+ * @note The drawing is the format of the published maze collections: posts as
+ *       'o', horizontal walls as '---', vertical walls as '|', the start cell
+ *       marked 'S' and goal cells 'G', read bottom-up so the start is at the
+ *       lower left. The world frame puts the lower left post at
  *       the origin, x to the right and y up; a cell (x, y) spans
  *       [x, x + 1) and [y, y + 1) cells.
  */
@@ -46,11 +46,6 @@ public:
      * @brief Name of the arena body, which prefixes every geom once attached.
      */
     static constexpr std::string_view body_name{"maze"};
-
-    /**
-     * @brief Geom group of the paint on top of the walls, which only the eye sees.
-     */
-    static constexpr int paint_group{4};
 
     /**
      * @brief Read a maze drawing from a file.

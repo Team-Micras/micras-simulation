@@ -14,10 +14,10 @@
 #include <mujoco/mujoco.h>
 
 #include "micras/sim/core/mujoco_world.hpp"
-#include "micras/sim/core/panel_spec.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "micras/sim/core/variable_source.hpp"
 #include "micras/sim/view/control_panel.hpp"
+#include "micras/sim/view/panel_spec.hpp"
 #include "micras/sim/view/view_options.hpp"
 
 struct GLFWwindow;
@@ -152,6 +152,11 @@ private:
     void on_key(int key);
 
     /**
+     * @brief Look through the next camera: the free one, then each camera of the model in turn.
+     */
+    void next_camera();
+
+    /**
      * @brief Handle a mouse button change.
      *
      * @note Holding control and the left button drags the robot. Selecting its
@@ -235,11 +240,6 @@ private:
     double speed{0.0};
 
     /**
-     * @brief Steps already taken from the panel's running total.
-     */
-    uint64_t consumed_steps{0};
-
-    /**
      * @brief Mouse state, in window coordinates.
      */
     ///@{
@@ -249,11 +249,6 @@ private:
     bool   right_held{false};
     bool   middle_held{false};
     ///@}
-
-    /**
-     * @brief Number of frames drawn.
-     */
-    uint64_t frames{0};
 
     /**
      * @brief The board and the plots, drawn over the scene.

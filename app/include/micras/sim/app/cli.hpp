@@ -61,17 +61,9 @@ struct CliOptions {
     uint32_t record_every{1};
 
     /**
-     * @brief Offscreen recording, enabled by --video.
+     * @brief Offscreen recording, enabled by --video, which names its file.
      */
-    ///@{
     VideoConfig video;
-    bool        video_enabled{false};
-    ///@}
-
-    /**
-     * @brief Whether --video-camera was given, so the robot's preferred camera must not replace it.
-     */
-    bool video_camera_given{false};
 
     /**
      * @brief Live window, enabled by --viewer.

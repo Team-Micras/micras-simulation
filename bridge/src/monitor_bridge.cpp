@@ -2,13 +2,10 @@
  * @file
  */
 
-#include <utility>
-
 #include "micras/sim/bridge/monitor_bridge.hpp"
 
 namespace micras::sim {
-MonitorBridge::MonitorBridge(SerialBus& serial, Inbound inbound, int port, std::string& error) :
-    serial{serial}, inbound{std::move(inbound)} {
+MonitorBridge::MonitorBridge(SerialBus& serial, int port, std::string& error) : serial{serial} {
     this->server.set_on_binary([this](std::span<const uint8_t> bytes) {
         const std::lock_guard lock(this->mutex);
         this->incoming.insert(this->incoming.end(), bytes.begin(), bytes.end());
@@ -40,7 +37,7 @@ RunControl MonitorBridge::on_before_tick(const Simulation& /*simulation*/) {
 
     if (not bytes.empty()) {
         this->received = true;
-        this->inbound(bytes);
+        this->serial.queue_for_firmware(bytes);
     }
 
     return RunControl::RUN;

@@ -14,9 +14,9 @@ namespace micras::hal::host {
 /**
  * @brief Counts the core cycles the firmware sees, and hands time over to the world.
  *
- * @note Every read of the timer costs a fixed quantum of simulated time, one
- *       microsecond unless configured otherwise, since a read on the robot also
- *       takes time and a loop that polls the timer must see it advance. When a
+ * @note Every read of the timer costs a quantum of simulated time, one
+ *       microsecond, since a read on the robot also takes time and a loop that
+ *       polls the timer must see it advance. When a
  *       read crosses the end of a step, the handover callback runs: whatever
  *       drives the world advances it by one step and returns, and the read
  *       returns after it. So a busy wait runs the world exactly as long as it
@@ -40,12 +40,11 @@ public:
     static Clock& instance();
 
     /**
-     * @brief Set the core frequency and the cost of one read.
+     * @brief Set the core frequency, which makes a read cost one microsecond of cycles.
      *
      * @param cycles_per_microsecond Core clock, in cycles per microsecond.
-     * @param quantum_us Simulated time one read costs, in microseconds.
      */
-    void configure(uint32_t cycles_per_microsecond, uint32_t quantum_us = 1);
+    void configure(uint32_t cycles_per_microsecond);
 
     /**
      * @brief Hand time over to the world at every step.

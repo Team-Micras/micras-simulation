@@ -13,9 +13,10 @@ namespace {
  * @brief Parse a command line written the way a shell would pass it.
  *
  * @param words Arguments after the program name.
+ * @param target_options Options the robot target adds.
  * @return Parsed options.
  */
-CliOptions parse(std::vector<std::string> words) {
+CliOptions parse(std::vector<std::string> words, std::span<const CliOption> target_options = {}) {
     std::vector<std::string> owned{"robot_sim"};
     owned.insert(owned.end(), words.begin(), words.end());
 
@@ -26,7 +27,7 @@ CliOptions parse(std::vector<std::string> words) {
         argv.push_back(word.data());
     }
 
-    return Cli::parse(std::span(argv));
+    return Cli::parse(std::span(argv), target_options);
 }
 
 TEST(Cli, ReadsTheRequiredOptions) {
@@ -38,8 +39,9 @@ TEST(Cli, ReadsTheRequiredOptions) {
     EXPECT_FALSE(options.seed.has_value());
     EXPECT_FALSE(options.ideal);
     EXPECT_EQ(options.record_every, 1U);
-    EXPECT_FALSE(options.video_enabled);
-    EXPECT_FALSE(options.video_camera_given);
+    EXPECT_TRUE(options.video.path.empty());
+    EXPECT_TRUE(options.video.camera.empty());
+    EXPECT_FALSE(options.viewer_enabled);
 }
 
 TEST(Cli, ReadsWhatOverridesTheScenario) {
@@ -60,11 +62,10 @@ TEST(Cli, ReadsWhatOverridesTheScenario) {
 TEST(Cli, ReadsTheRecordingOptions) {
     const CliOptions options = parse(
         {"--out", "o", "--video", "run.mp4", "--video-fps", "60", "--video-camera", "overhead", "--video-size",
-         "640x480"}
+         "640x480", "--video-trail"}
     );
 
-    EXPECT_TRUE(options.video_enabled);
-    EXPECT_TRUE(options.video_camera_given);
+    EXPECT_TRUE(options.video.trail);
     EXPECT_EQ(options.video.path, "run.mp4");
     EXPECT_EQ(options.video.fps, 60);
     EXPECT_EQ(options.video.camera, "overhead");
@@ -73,9 +74,6 @@ TEST(Cli, ReadsTheRecordingOptions) {
 }
 
 TEST(Cli, ReadsTheWindowOptions) {
-    const CliOptions off = parse({"--out", "o"});
-    EXPECT_FALSE(off.viewer_enabled);
-
     const CliOptions options = parse(
         {"--out", "o", "--viewer", "--viewer-camera", "overhead", "--viewer-size", "800x600", "--viewer-fps", "15"}
     );
@@ -89,7 +87,6 @@ TEST(Cli, ReadsTheWindowOptions) {
 
 TEST(Cli, RejectsAnIncompleteCommandLine) {
     EXPECT_THROW(parse({"--seconds", "1"}), std::runtime_error);
-    EXPECT_THROW(parse({"--out", "o", "--model", "m.xml"}), std::runtime_error);
     EXPECT_THROW(parse({"--out"}), std::runtime_error);
     EXPECT_THROW(parse({"--out", "o", "--nonsense"}), std::runtime_error);
 }
@@ -113,15 +110,7 @@ TEST(Cli, HandsTargetOptionsToTheirHandlers) {
         {.name = "--flag", .argument = "", .apply = [&flag](const std::string&) { flag = true; }},
     };
 
-    std::vector<std::string> owned{"robot_sim", "--color", "red", "--maze", "m", "--flag", "--out", "o"};
-    std::vector<char*>       argv;
-    argv.reserve(owned.size());
-
-    for (std::string& word : owned) {
-        argv.push_back(word.data());
-    }
-
-    const CliOptions options = Cli::parse(std::span(argv), target_options);
+    const CliOptions options = parse({"--color", "red", "--maze", "m", "--flag", "--out", "o"}, target_options);
 
     EXPECT_EQ(color, "red");
     EXPECT_TRUE(flag);
@@ -135,9 +124,10 @@ TEST(Cli, UsageNamesEveryOptionItAccepts) {
     EXPECT_TRUE(usage.starts_with("usage: robot_sim "));
 
     for (const std::string option :
-         {"--out", "--scenario", "--maze", "--seconds", "--ticks", "--seed", "--ideal", "--record-every", "--video",
-          "--video-fps", "--video-camera", "--video-size", "--viewer", "--viewer-camera", "--viewer-fps",
-          "--viewer-size", "--monitor", "--monitor-port", "--color <name>"}) {
+         {"--out",          "--scenario",    "--maze",         "--seconds",      "--ticks",
+          "--seed",         "--ideal",       "--record-every", "--video",        "--video-fps",
+          "--video-camera", "--video-size",  "--video-trail",  "--viewer",       "--viewer-camera",
+          "--viewer-fps",   "--viewer-size", "--monitor",      "--monitor-port", "--color <name>"}) {
         EXPECT_NE(usage.find(option), std::string::npos) << option;
     }
 }

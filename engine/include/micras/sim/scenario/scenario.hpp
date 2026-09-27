@@ -7,7 +7,6 @@
 #ifndef MICRAS_SIM_SCENARIO_SCENARIO_HPP
 #define MICRAS_SIM_SCENARIO_SCENARIO_HPP
 
-#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -21,7 +20,7 @@
 #include "micras/sim/core/simulation.hpp"
 #include "micras/sim/core/variable_source.hpp"
 #include "micras/sim/devices/device.hpp"
-#include "micras/sim/devices/serial_link.hpp"
+#include "micras/sim/devices/digital_input.hpp"
 
 namespace micras::sim {
 /**
@@ -39,17 +38,15 @@ struct ScenarioEvent {
         PRESS,
         SET,
         SEND,
-        PUSH,
     };
 
-    Kind                  kind{Kind::PRESS};
-    double                at{0.0};
-    double                duration{0.0};
-    std::string           target;
-    bool                  value{false};
-    std::array<double, 3> force{};
-    std::string           when;
-    std::string           equals;
+    Kind        kind{Kind::PRESS};
+    double      at{0.0};
+    double      duration{0.0};
+    std::string target;
+    bool        value{false};
+    std::string when;
+    std::string equals;
 };
 
 /**
@@ -73,8 +70,8 @@ struct StopCondition {
  * @note The file names the arena, the duration, the seed and optionally the
  *       robot and its start pose; then a timeline of events, and optionally a
  *       stop condition. Events act on what the robot target exposes: its named
- *       inputs (press, set), its named link messages (send), and its body (push).
- *       Command line options override the file's arena, duration and seed.
+ *       inputs (press, set) and its named link messages (send). Command line
+ *       options override the file's arena, duration and seed.
  */
 struct Scenario {
     std::string                           robot;
@@ -104,46 +101,7 @@ struct Scenario {
 };
 
 /**
- * @brief Pushes the robot's body with a force, while a push lasts.
- *
- * @note A device, so the force is applied after every listener ran and removed
- *       exactly when it ends, whatever else writes applied forces.
- */
-class Pusher : public Device {
-public:
-    /**
-     * @brief Find the body.
-     *
-     * @param world Loaded world.
-     * @param body Body to push.
-     */
-    Pusher(const MujocoWorld& world, const std::string& body);
-
-    /**
-     * @brief Push until a tick.
-     *
-     * @param force Force in the world frame, in newtons.
-     * @param until First tick without the force.
-     */
-    void push(const std::array<double, 3>& force, uint64_t until);
-
-    /**
-     * @brief Apply this tick's force.
-     *
-     * @param world World about to be advanced.
-     * @param clock Clock of the run.
-     */
-    void actuate(MujocoWorld& world, const Clock& clock) override;
-
-private:
-    int                   body_id;
-    std::array<double, 3> force{};
-    std::array<double, 3> applied{};
-    uint64_t              until{0};
-};
-
-/**
- * @brief What a robot target exposes to scenarios and to the panel.
+ * @brief What a robot target exposes to scenarios.
  */
 struct ScenarioHooks {
     /**
@@ -157,17 +115,17 @@ struct ScenarioHooks {
     std::map<std::string, std::vector<uint8_t>, std::less<>> messages;
 
     /**
-     * @brief Names of the values of state variables, for stop conditions.
+     * @brief Names of the values of state variables, for conditions and the event log.
      */
-    std::map<std::string, std::vector<std::string>, std::less<>> state_names;
+    StateNames state_names;
 };
 
 /**
  * @brief Plays a scenario's timeline into the run and stops it when its condition holds.
  *
- * @note Writes inputs, the link and the push only, never the physics state or the
- *       clock, so a scripted run is a run a human could have driven by hand. Once
- *       a human takes the board over from the panel it stops touching inputs.
+ * @note Writes inputs and the link only, never the physics state or the clock,
+ *       so a scripted run is a run a human could have driven by hand. Once a
+ *       human takes the board over from the panel it stops touching inputs.
  */
 class ScenarioPlayer : public IRunListener {
 public:
@@ -177,13 +135,9 @@ public:
      * @param scenario The scenario.
      * @param hooks What the robot exposes.
      * @param serial The link's world side.
-     * @param pusher The robot's pusher.
      * @param variables Where stop conditions read, or null.
      */
-    ScenarioPlayer(
-        Scenario scenario, const ScenarioHooks& hooks, SerialBus& serial, Pusher& pusher,
-        const VariableSource* variables
-    );
+    ScenarioPlayer(Scenario scenario, const ScenarioHooks& hooks, SerialBus& serial, const VariableSource* variables);
 
     /**
      * @brief Apply the events of this tick and check the stop condition.
@@ -233,7 +187,7 @@ private:
      * @brief Check the stop condition.
      *
      * @param now Simulated time in seconds.
-     * @return QUIT once the condition holds for the counted time or takes an abort value.
+     * @return QUIT once the condition is reached for the count-th time or takes an abort value.
      */
     RunControl check_stop(double now);
 
@@ -249,7 +203,6 @@ private:
     Scenario              scenario;
     const ScenarioHooks&  hooks;   // NOLINT(*-avoid-const-or-ref-data-members): the target outlives the run.
     SerialBus&            serial;  // NOLINT(*-avoid-const-or-ref-data-members): the run's bus.
-    Pusher&               pusher;  // NOLINT(*-avoid-const-or-ref-data-members): owned by the run's devices.
     const VariableSource* variables;
     std::vector<Release>  releases;
     std::size_t           next_event{0};

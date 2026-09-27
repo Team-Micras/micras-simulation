@@ -7,6 +7,7 @@
 #include <numbers>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <utility>
 
 #include "micras/sim/devices/wall_sensors.hpp"
@@ -78,9 +79,19 @@ WallSensors::WallSensors(const MujocoWorld& world, Config config, const NoiseCon
         this->rays.push_back({{ray[0], ray[1], ray[2]}, ray[3]});
     }
 
+    std::set<int> group_ids;
+
+    for (const WallSensorDescription& sensor : optics.sensors) {
+        group_ids.insert(sensor.group);
+    }
+
+    if (group_ids.size() != this->groups.size()) {
+        throw std::runtime_error(this->config.name + ": the emitters must fire in two groups");
+    }
+
+    std::ranges::copy(group_ids, this->groups.begin());
     std::ranges::fill(this->geom_groups, 1);
-    this->geom_groups.at(static_cast<std::size_t>(this->config.robot_group)) = 0;
-    this->geom_groups.at(static_cast<std::size_t>(this->config.paint_group)) = 0;
+    this->geom_groups.at(MujocoWorld::unseen_group) = 0;
     this->counts.assign(2 * optics.sensors.size(), 0);
     this->intensities.assign(optics.sensors.size(), 0.0);
     this->directions.resize(3 * this->rays.size());
@@ -167,15 +178,8 @@ void WallSensors::sample(MujocoWorld& world, const Clock& clock) {
 
     const WallSensorsDescription& optics = this->config.description;
     const std::size_t             sensors = optics.sensors.size();
-    std::set<int>                 group_ids;
-
-    for (const WallSensorDescription& sensor : optics.sensors) {
-        group_ids.insert(sensor.group);
-    }
-
-    const std::vector<int> groups(group_ids.begin(), group_ids.end());
-    const std::size_t      scan = this->scans % groups.size();
-    const int              lit = groups.at(scan);
+    const std::size_t             scan = this->scans % this->groups.size();
+    const int                     lit = this->groups.at(scan);
 
     for (std::size_t receiver = 0; receiver < sensors; receiver++) {
         double signal = 0.0;
@@ -199,12 +203,10 @@ void WallSensors::sample(MujocoWorld& world, const Clock& clock) {
 
     this->scans++;
 
-    if (scan + 1 == groups.size()) {
+    if (scan + 1 == this->groups.size()) {
         for (std::size_t sensor = 0; sensor < sensors; sensor++) {
-            const auto own = static_cast<std::size_t>(
-                std::distance(groups.begin(), std::ranges::find(groups, optics.sensors.at(sensor).group))
-            );
-            const std::size_t other = own == 0 ? 1 : 0;
+            const std::size_t own = optics.sensors.at(sensor).group == this->groups[0] ? 0 : 1;
+            const std::size_t other = 1 - own;
             this->intensities.at(sensor) = (static_cast<double>(this->counts.at(own * sensors + sensor)) -
                                             static_cast<double>(this->counts.at(other * sensors + sensor))) /
                                            optics.adc_max_counts;

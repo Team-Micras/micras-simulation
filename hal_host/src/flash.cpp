@@ -102,7 +102,6 @@ Flash::Status Flash::write(uint32_t address, std::span<const uint8_t> data) {
 
         const std::span<const uint8_t> bytes{std::bit_cast<const uint8_t*>(word.data()), FlashWord::size};
         std::ranges::copy(bytes, target.begin());
-        port.writes++;
     }
 
     return Status::OK;
@@ -126,7 +125,6 @@ Flash::Status Flash::erase_sectors(uint16_t start_sector, uint16_t number_of_sec
     const auto       count = static_cast<std::ptrdiff_t>(number_of_sectors) * sector_size;
 
     std::fill(port.bytes.begin() + first, port.bytes.begin() + first + count, FlashWord::erased_value);
-    port.erases++;
 
     return Status::OK;
 }

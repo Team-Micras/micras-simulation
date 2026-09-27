@@ -4,16 +4,15 @@
 
 #include <cmath>
 #include <format>
-#include <fstream>
 #include <numbers>
 #include <optional>
 #include <set>
-#include <sstream>
 #include <stdexcept>
 #include <utility>
 
 #include <toml++/toml.hpp>
 
+#include "micras/sim/core/text_file.hpp"
 #include "micras/sim/robot/robot_description.hpp"
 
 namespace micras::sim {
@@ -33,10 +32,8 @@ public:
      *
      * @param table Table to read.
      * @param path Dotted path of the table, for messages.
-     * @param provenance Where every value read is recorded.
      */
-    Section(const toml::table& table, std::string path, std::vector<Provenance>& provenance) :
-        table{&table}, path{std::move(path)}, provenance{provenance} { }
+    Section(const toml::table& table, std::string path) : table{&table}, path{std::move(path)} { }
 
     /**
      * @brief Read a number.
@@ -48,7 +45,6 @@ public:
         const toml::node& node = this->value(key);
 
         if (const auto number = node.value<double>(); number.has_value()) {
-            this->record(key, std::format("{}", *number));
             return *number;
         }
 
@@ -73,7 +69,6 @@ public:
         const toml::node& node = this->value(key);
 
         if (const auto number = node.value<int64_t>(); number.has_value() and node.is_integer()) {
-            this->record(key, std::to_string(*number));
             return *number;
         }
 
@@ -90,7 +85,6 @@ public:
         const toml::node& node = this->value(key);
 
         if (const auto text = node.value<std::string>(); text.has_value()) {
-            this->record(key, *text);
             return *text;
         }
 
@@ -122,7 +116,6 @@ public:
         }
 
         std::vector<std::array<double, 2>> points;
-        std::string                        text;
 
         for (const toml::node& point : *array) {
             const toml::array* pair = point.as_array();
@@ -139,10 +132,8 @@ public:
             }
 
             points.push_back({*x, *y});
-            text += std::format("[{}, {}] ", points.back()[0], points.back()[1]);
         }
 
-        this->record(key, text);
         return points;
     }
 
@@ -160,7 +151,7 @@ public:
             throw std::runtime_error(std::format("{}: [{}] is missing", this->where(), this->child(key)));
         }
 
-        return {*table, this->child(key), this->provenance};
+        return {*table, this->child(key)};
     }
 
     /**
@@ -185,7 +176,7 @@ public:
                 throw std::runtime_error(std::format("{}: {} must be an array of tables", this->where(), key));
             }
 
-            sections.emplace_back(*table, std::format("{}[{}]", this->child(key), i), this->provenance);
+            sections.emplace_back(*table, std::format("{}[{}]", this->child(key), i));
         }
 
         return sections;
@@ -217,8 +208,6 @@ private:
             throw std::runtime_error(std::format("{}: {} is missing", this->where(), this->child(key)));
         }
 
-        this->last_source.clear();
-
         if (const toml::table* sourced = node->as_table(); sourced != nullptr) {
             const toml::node* value = sourced->get("value");
             const auto* const source = sourced->get_as<std::string>("source");
@@ -227,7 +216,6 @@ private:
                 throw this->error(key, "a value or a { value = ..., source = \"...\" } table");
             }
 
-            this->last_source = source->get();
             return *value;
         }
 
@@ -249,7 +237,6 @@ private:
         }
 
         std::vector<double> numbers;
-        std::string         text;
 
         for (const toml::node& element : *array) {
             const std::optional<double> number = element.value<double>();
@@ -259,21 +246,9 @@ private:
             }
 
             numbers.push_back(*number);
-            text += std::format("{} ", numbers.back());
         }
 
-        this->record(key, text);
         return numbers;
-    }
-
-    /**
-     * @brief Record a value read, with its source.
-     *
-     * @param key Key in this table.
-     * @param text The value, as text.
-     */
-    void record(std::string_view key, std::string text) {
-        this->provenance.push_back({this->child(key), std::move(text), this->last_source});
     }
 
     /**
@@ -307,11 +282,9 @@ private:
         return source.path == nullptr ? std::string{"robot.toml"} : std::string{*source.path};
     }
 
-    const toml::table*       table;
-    std::string              path;
-    std::vector<Provenance>& provenance;  // NOLINT(*-avoid-const-or-ref-data-members): outlives every section.
-    std::set<std::string>    used;
-    std::string              last_source;
+    const toml::table*    table;
+    std::string           path;
+    std::set<std::string> used;
 };
 
 /**
@@ -435,7 +408,6 @@ void read_components(Section& root, RobotDescription& robot) {
         .gear_ratio = drive.number("gear_ratio"),
         .gear_efficiency = drive.number("gear_efficiency"),
         .supply_voltage = drive.number("supply_voltage"),
-        .max_motor_speed = drive.number("max_motor_speed"),
     };
     drive.finish();
 
@@ -446,7 +418,7 @@ void read_components(Section& root, RobotDescription& robot) {
     Section imu = root.section("imu");
     robot.imu = {
         .position = imu.vector3("position"),
-        .axes = {imu.vector3("chip_x"), imu.vector3("chip_y"), imu.vector3("chip_z")},
+        .axes = {imu.vector3("chip_x"), imu.vector3("chip_y")},
         .gyro_noise_density = imu.number("gyro_noise_density"),
         .gyro_bias = imu.number("gyro_bias"),
         .gyro_scale_error = imu.number("gyro_scale_error"),
@@ -473,7 +445,6 @@ void read_components(Section& root, RobotDescription& robot) {
     robot.battery = {
         .cells = static_cast<int>(battery.integer("cells")),
         .cell_voltage = battery.number("cell_voltage"),
-        .cell_resistance = battery.number("cell_resistance"),
     };
     battery.finish();
 
@@ -484,15 +455,7 @@ void read_components(Section& root, RobotDescription& robot) {
 }  // namespace
 
 RobotDescription RobotDescription::load(const std::filesystem::path& path) {
-    std::ifstream file(path);
-
-    if (not file.is_open()) {
-        throw std::runtime_error("cannot read the robot description " + path.string());
-    }
-
-    std::ostringstream text;
-    text << file.rdbuf();
-    return parse(text.str(), path.string());
+    return parse(read_text_file(path, "robot description"), path.string());
 }
 
 RobotDescription RobotDescription::parse(std::string_view text, const std::string& origin) {
@@ -505,7 +468,7 @@ RobotDescription RobotDescription::parse(std::string_view text, const std::strin
     }
 
     RobotDescription robot;
-    Section          root{table, "", robot.provenance};
+    Section          root{table, ""};
 
     const int64_t schema = root.integer("schema");
 

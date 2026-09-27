@@ -101,13 +101,6 @@ public:
      */
     uint64_t dropped_bytes() const { return this->dropped; }
 
-    /**
-     * @brief Get how many bytes the firmware sent.
-     *
-     * @return Number of bytes.
-     */
-    uint64_t sent_bytes() const { return this->sent; }
-
 private:
     /**
      * @brief Listeners receiving firmware output, in registration order.
@@ -123,11 +116,6 @@ private:
      * @brief Bytes dropped because the queue was full.
      */
     uint64_t dropped{0};
-
-    /**
-     * @brief Bytes the firmware sent.
-     */
-    uint64_t sent{0};
 };
 }  // namespace micras::sim
 

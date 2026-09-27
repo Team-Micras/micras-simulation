@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
-#include "micras/sim/core/panel_spec.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "micras/sim/core/variable_source.hpp"
+#include "micras/sim/view/panel_spec.hpp"
 
 struct GLFWwindow;
 
@@ -33,9 +33,9 @@ struct PanelRequest {
     ///@}
 
     /**
-     * @brief Ticks the human asked to run while paused.
+     * @brief Whether the human asked for one more tick, in this frame.
      */
-    uint64_t steps{0};
+    bool step{false};
 
     /**
      * @brief Simulated seconds allowed per wall second, zero for no limit.

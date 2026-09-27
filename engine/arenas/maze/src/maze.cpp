@@ -5,11 +5,12 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
-#include <fstream>
 #include <sstream>
 #include <stdexcept>
 
 #include "micras/sim/arenas/maze.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/text_file.hpp"
 
 namespace micras::sim {
 namespace {
@@ -73,15 +74,7 @@ constexpr double floor_margin{2.0};
 }  // namespace
 
 Maze Maze::load(const std::filesystem::path& path) {
-    std::ifstream file(path);
-
-    if (not file.is_open()) {
-        throw std::runtime_error("cannot read the maze " + path.string());
-    }
-
-    std::ostringstream text;
-    text << file.rdbuf();
-    return parse(text.str());
+    return parse(read_text_file(path, "maze"));
 }
 
 Maze Maze::parse(std::string_view text) {
@@ -98,8 +91,6 @@ Maze Maze::parse(std::string_view text) {
     maze.rows = (lines.size() - 1) / 2;
     maze.south.assign(maze.rows + 1, std::vector<bool>(maze.columns, false));
     maze.west.assign(maze.rows, std::vector<bool>(maze.columns + 1, false));
-
-    bool start_found = false;
 
     for (std::size_t row = 0; row <= maze.rows; row++) {
         for (std::size_t column = 0; column < maze.columns; column++) {
@@ -120,15 +111,10 @@ Maze Maze::parse(std::string_view text) {
 
             if (mark == 'S') {
                 maze.start_cell = {column, row};
-                start_found = true;
             } else if (mark == 'G') {
                 maze.goal_cells.emplace_back(column, row);
             }
         }
-    }
-
-    if (not start_found) {
-        maze.start_cell = {0, 0};
     }
 
     return maze;
@@ -242,33 +228,33 @@ std::string Maze::mjcf(const MazeConfig& config) const {
         "  </asset>\n"
         "  <default>\n"
         "    <default class=\"post\">\n"
-        "      <geom type=\"box\" material=\"post\" size=\"{2:.6f} {2:.6f} {3:.6f}\"/>\n"
+        "      <geom type=\"box\" material=\"post\" size=\"{1:.6f} {1:.6f} {2:.6f}\"/>\n"
         "    </default>\n"
         "    <default class=\"horizontal\">\n"
-        "      <geom type=\"box\" material=\"wall\" size=\"{4:.6f} {2:.6f} {3:.6f}\"/>\n"
+        "      <geom type=\"box\" material=\"wall\" size=\"{3:.6f} {1:.6f} {2:.6f}\"/>\n"
         "    </default>\n"
         "    <default class=\"vertical\">\n"
-        "      <geom type=\"box\" material=\"wall\" size=\"{2:.6f} {4:.6f} {3:.6f}\"/>\n"
+        "      <geom type=\"box\" material=\"wall\" size=\"{1:.6f} {3:.6f} {2:.6f}\"/>\n"
         "    </default>\n"
         "    <default class=\"top\">\n"
-        "      <geom type=\"box\" material=\"top\" contype=\"0\" conaffinity=\"0\" group=\"{13}\"/>\n"
+        "      <geom type=\"box\" material=\"top\" contype=\"0\" conaffinity=\"0\" group=\"{12}\"/>\n"
         "    </default>\n"
         "  </default>\n"
         "  <worldbody>\n"
-        "    <body name=\"{5}\">\n"
-        "      <light name=\"sun\" pos=\"{6:.6f} {7:.6f} 3\" dir=\"0 0 -1\" directional=\"true\" castshadow=\"false\" "
+        "    <body name=\"{4}\">\n"
+        "      <light name=\"sun\" pos=\"{5:.6f} {6:.6f} 3\" dir=\"0 0 -1\" directional=\"true\" castshadow=\"false\" "
         "diffuse=\"0.7 0.7 0.7\"/>\n"
-        "      <camera name=\"top\" pos=\"{6:.6f} {7:.6f} 4\" xyaxes=\"1 0 0 0 1 0\" projection=\"orthographic\" "
-        "fovy=\"{8:.6f}\"/>\n"
-        "      <geom name=\"floor\" type=\"plane\" pos=\"{6:.6f} {7:.6f} 0\" size=\"{9:.6f} {10:.6f} 0.1\" "
+        "      <camera name=\"top\" pos=\"{5:.6f} {6:.6f} 4\" xyaxes=\"1 0 0 0 1 0\" projection=\"orthographic\" "
+        "fovy=\"{7:.6f}\"/>\n"
+        "      <geom name=\"floor\" type=\"plane\" pos=\"{5:.6f} {6:.6f} 0\" size=\"{8:.6f} {9:.6f} 0.1\" "
         "material=\"floor\"/>\n"
-        "{11}{12}"
+        "{10}{11}"
         "    </body>\n"
         "  </worldbody>\n"
         "</mujoco>\n",
-        1.0 / cell, this->rows, half_thickness, half_height, half_length, body_name, width / 2, height / 2,
+        1.0 / cell, half_thickness, half_height, half_length, body_name, width / 2, height / 2,
         std::max(width, height) + 0.2, width / 2 + floor_margin * cell, height / 2 + floor_margin * cell, geoms, caps,
-        paint_group
+        MujocoWorld::unseen_group
     );
 }
 }  // namespace micras::sim

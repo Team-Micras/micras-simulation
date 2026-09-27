@@ -72,8 +72,6 @@ TEST(Noise, DrawsACentredGaussianOfTheRequestedSpread) {
 TEST(Noise, DrawsNothingInAnIdealWorld) {
     Noise noise({.seed = 3, .ideal = true}, "gyro");
 
-    EXPECT_FALSE(noise.enabled());
-
     for (int i = 0; i < 100; i++) {
         EXPECT_EQ(noise.gaussian(1.0), 0.0);
     }
@@ -82,7 +80,6 @@ TEST(Noise, DrawsNothingInAnIdealWorld) {
 TEST(Noise, DrawsNothingForAZeroSigma) {
     Noise noise({.seed = 3}, "gyro");
 
-    EXPECT_TRUE(noise.enabled());
     EXPECT_EQ(noise.gaussian(0.0), 0.0);
 }
 }  // namespace

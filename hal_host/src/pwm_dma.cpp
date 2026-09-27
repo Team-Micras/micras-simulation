@@ -25,7 +25,6 @@ void start(TIM_HandleTypeDef* handle, uint32_t channel, std::span<const T> compa
     port.compares.assign(compares.begin(), compares.end());
     port.period = handle->Instance->ARR + 1;
     port.busy = true;
-    port.transfers++;
 
     const uint64_t cycles_per_count = static_cast<uint64_t>(handle->Instance->PSC + 1) *
                                       host::Clock::instance().cycles_per_microsecond() * 1000000ULL /

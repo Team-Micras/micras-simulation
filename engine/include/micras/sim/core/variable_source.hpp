@@ -7,15 +7,24 @@
 #ifndef MICRAS_SIM_CORE_VARIABLE_SOURCE_HPP
 #define MICRAS_SIM_CORE_VARIABLE_SOURCE_HPP
 
+#include <functional>
+#include <map>
 #include <string>
+#include <vector>
 
 namespace micras::sim {
 /**
+ * @brief Names of the values of the variables that hold a state, by variable, starting at zero.
+ */
+using StateNames = std::map<std::string, std::vector<std::string>, std::less<>>;
+
+/**
  * @brief Looks up the current value of a firmware variable by name.
  *
- * @note What the panel plots and the video overlay prints. The engine never
- *       knows how the values are obtained; a robot target implements this over
- *       its own telemetry.
+ * @note What the panel plots, the video overlay prints, the event log watches
+ *       and the scenario conditions wait for. The engine never knows how the
+ *       values are obtained; a robot target implements this over its own
+ *       telemetry.
  */
 class VariableSource {
 public:

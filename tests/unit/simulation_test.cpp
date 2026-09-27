@@ -5,6 +5,7 @@
 
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
+#include "support.hpp"
 
 namespace micras::sim {
 namespace {
@@ -36,15 +37,11 @@ private:
 };
 
 /**
- * @brief A world and a clock configured like every recorded run.
+ * @brief The tiny robot's world and a clock of two steps per tick.
  */
 class Run : public testing::Test {
 protected:
-    void SetUp() override {
-        this->context.world.load(MICRAS_TEST_MODEL);
-        this->context.clock = Clock::from_model(this->context.world.timestep(), 1042);
-        this->context.world.reset();
-    }
+    void SetUp() override { load_tiny_world(this->context.world, this->context.clock); }
 
     // NOLINTNEXTLINE(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
     RunContext context;

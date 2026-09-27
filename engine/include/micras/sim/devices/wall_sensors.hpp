@@ -25,8 +25,9 @@ namespace micras::sim {
  * @note The emitters fire in groups: every scan period one group is lit and every
  *       receiver is converted, the lit group's own receivers reading their
  *       emitter and the others reading whatever the lit group throws their way,
- *       which is the cross-talk. The sequence the firmware sees is one scan per
- *       group, in group order, and completes after the last one.
+ *       which is the cross-talk. There are two groups, so the other group's scan
+ *       is each sensor's dark reading. The sequence the firmware sees is one scan
+ *       per group, in group order, and completes after the second one.
  *
  * @note Light model: each emitter is a cone of rays whose intensity falls off as
  *       2^-(angle / half angle)^2 around its axis, down to 2.5 half angles. Each
@@ -77,22 +78,16 @@ public:
 
         /**
          * @brief Reflectance of an arena geom, by id.
+         *
+         * @note The rays pass through the geoms of MujocoWorld::unseen_group.
          */
         std::function<double(int)> reflectance;
-
-        /**
-         * @brief Geom group of the robot itself, which the rays pass through.
-         */
-        int robot_group;
-
-        /**
-         * @brief Geom group of what is only paint on the arena, which the rays pass through too.
-         */
-        int paint_group;
     };
 
     /**
      * @brief Find the sites and lay out the ray cone.
+     *
+     * @note Throws unless the sensors fall in exactly two groups.
      *
      * @param world Loaded world.
      * @param config The sensors.
@@ -122,16 +117,6 @@ public:
      */
     void append(std::vector<CsvCell>& row) const override;
 
-    /**
-     * @brief Compute the irradiance one emitter puts on one receiver.
-     *
-     * @param world The world.
-     * @param emitter Index of the emitting sensor.
-     * @param receiver Index of the receiving sensor.
-     * @return Irradiance in W/m^2.
-     */
-    double irradiance(MujocoWorld& world, std::size_t emitter, std::size_t receiver);
-
 private:
     /**
      * @brief One ray of an emitter's cone, in the emitter's frame.
@@ -146,11 +131,22 @@ private:
      */
     static constexpr double cutoff{0.5};
 
+    /**
+     * @brief Compute the irradiance one emitter puts on one receiver.
+     *
+     * @param world The world.
+     * @param emitter Index of the emitting sensor.
+     * @param receiver Index of the receiving sensor.
+     * @return Irradiance in W/m^2.
+     */
+    double irradiance(MujocoWorld& world, std::size_t emitter, std::size_t receiver);
+
     Config                 config;
     Noise                  noise;
     std::vector<int>       emitter_sites;
     std::vector<int>       receiver_sites;
     std::vector<Ray>       rays;
+    std::array<int, 2>     groups{};
     std::vector<uint32_t>  counts;
     std::vector<double>    intensities;
     std::array<uint8_t, 6> geom_groups{};

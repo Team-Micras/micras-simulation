@@ -134,7 +134,7 @@ public:
     /**
      * @brief Forget every port and name.
      *
-     * @note For tests. References to ports obtained before are dangling after.
+     * @note Called at the start of every run. References to ports obtained before are dangling after.
      */
     static void reset();
 };

@@ -31,10 +31,10 @@ add_library(micras_sim_engine STATIC
     engine/src/core/firmware_thread.cpp
     engine/src/core/mujoco_world.cpp
     engine/src/core/noise.cpp
-    engine/src/core/panel_spec.cpp
     engine/src/core/serial_bus.cpp
     engine/src/core/simulation.cpp
     engine/src/devices/dc_motor.cpp
+    engine/src/devices/digital_input.cpp
     engine/src/devices/device.cpp
     engine/src/devices/imu.cpp
     engine/src/devices/power.cpp
@@ -60,6 +60,7 @@ target_link_libraries(micras_sim_engine PUBLIC mujoco::mujoco PRIVATE picosha2 t
 add_library(micras_sim_view STATIC
     view/src/control_panel.cpp
     view/src/mujoco_viewer.cpp
+    view/src/panel_spec.cpp
     view/src/video_recorder.cpp
 )
 add_library(micras::sim_view ALIAS micras_sim_view)

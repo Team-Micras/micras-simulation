@@ -97,7 +97,6 @@ struct DriveDescription {
     double gear_ratio{};
     double gear_efficiency{};
     double supply_voltage{};
-    double max_motor_speed{};
 
     /**
      * @brief Resistance a motor current flows through: winding and bridge.
@@ -121,9 +120,9 @@ struct ImuDescription {
     Vector3 position{};
 
     /**
-     * @brief The chip's x, y and z axes, expressed in the robot frame.
+     * @brief The chip's x and y axes, expressed in the robot frame; z is their cross product.
      */
-    std::array<Vector3, 3> axes{};
+    std::array<Vector3, 2> axes{};
 
     double gyro_noise_density{};
     double gyro_bias{};
@@ -160,7 +159,7 @@ struct WallSensorDescription {
     /**
      * @brief Sensitivity of this pair relative to the nominal optics: part spread and alignment.
      */
-    double gain{1.0};
+    double gain{};
 };
 
 /**
@@ -189,7 +188,6 @@ struct WallSensorsDescription {
 struct BatteryDescription {
     int    cells{};
     double cell_voltage{};
-    double cell_resistance{};
 };
 
 /**
@@ -204,15 +202,6 @@ struct LinkDescription {
  */
 struct IntegrationDescription {
     double timestep{};
-};
-
-/**
- * @brief One value of the file with where it came from, for reports.
- */
-struct Provenance {
-    std::string key;
-    std::string value;
-    std::string source;
 };
 
 /**
@@ -241,11 +230,6 @@ struct RobotDescription {
     WallSensorsDescription wall_sensors;
     BatteryDescription     battery;
     LinkDescription        link;
-
-    /**
-     * @brief Every value read, in file order, with its source.
-     */
-    std::vector<Provenance> provenance;
 
     /**
      * @brief Read and check a description.

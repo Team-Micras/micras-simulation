@@ -113,7 +113,7 @@ MujocoWorld::Placement start_of(const Maze& maze, const MazeConfig& config, cons
  * @return The scenario, empty when there is none.
  */
 Scenario read_scenario(const CliOptions& options, const Target& target, std::filesystem::path& path) {
-    path = options.scenario.empty() ? std::filesystem::path{target.default_scenario()} : options.scenario;
+    path = options.scenario;
 
     if (path.empty()) {
         return {};
@@ -161,16 +161,16 @@ RunContext& prepare(
  *
  * @param options Parsed command line.
  * @param scenario The scenario.
- * @param target Robot to run.
+ * @param context The run's context, with its clock configured.
  * @return Number of ticks.
  */
-uint64_t ticks_of(const CliOptions& options, const Scenario& scenario, const Target& target) {
+uint64_t ticks_of(const CliOptions& options, const Scenario& scenario, const RunContext& context) {
     if (options.ticks.has_value()) {
         return *options.ticks;
     }
 
     const double   seconds = options.seconds.value_or(scenario.seconds > 0.0 ? scenario.seconds : default_seconds);
-    const uint64_t ticks = Clock::total_ticks(seconds, target.loop_time_us());
+    const uint64_t ticks = context.clock.total_ticks(seconds);
 
     if (ticks == 0) {
         throw std::runtime_error(std::to_string(seconds) + " s is shorter than one firmware loop period");
@@ -199,21 +199,15 @@ uint64_t ticks_per_frame(int fps, const Clock& clock) {
  *
  * @param options Parsed command line.
  * @param serial Bus the bridge attaches to.
- * @param inbound Hands the monitors' bytes to the firmware, or null to queue them as they came.
  * @return The bridge, or null when disabled or when the port was taken.
  */
-std::unique_ptr<MonitorBridge>
-    make_monitor(const CliOptions& options, SerialBus& serial, MonitorBridge::Inbound inbound) {
+std::unique_ptr<MonitorBridge> make_monitor(const CliOptions& options, SerialBus& serial) {
     if (not options.monitor_enabled) {
         return nullptr;
     }
 
-    if (not inbound) {
-        inbound = [&serial](std::span<const uint8_t> bytes) { serial.queue_for_firmware(bytes); };
-    }
-
     std::string error;
-    auto        bridge = std::make_unique<MonitorBridge>(serial, std::move(inbound), options.monitor_port, error);
+    auto        bridge = std::make_unique<MonitorBridge>(serial, options.monitor_port, error);
 
     if (not bridge->is_open()) {
         std::cerr << "monitor disabled: " << error << '\n';
@@ -227,14 +221,19 @@ std::unique_ptr<MonitorBridge>
 /**
  * @brief Open the live window if the command line asked for it.
  *
+ * @note The first board control a human touches hands the board over from the
+ *       scenario, which then stops driving the inputs.
+ *
  * @param options Parsed command line.
  * @param context Context the window draws.
  * @param target Robot whose name and body the window uses.
  * @param wiring What the robot put on the panel.
+ * @param player The scenario, which gives the board up to the human.
  * @return The viewer, or null when disabled or when no window could open.
  */
-std::unique_ptr<MujocoViewer>
-    make_viewer(const CliOptions& options, RunContext& context, const Target& target, const Wiring& wiring) {
+std::unique_ptr<MujocoViewer> make_viewer(
+    const CliOptions& options, RunContext& context, const Target& target, const Wiring& wiring, ScenarioPlayer& player
+) {
     if (not options.viewer_enabled) {
         return nullptr;
     }
@@ -245,8 +244,11 @@ std::unique_ptr<MujocoViewer>
     config.ticks_per_frame = ticks_per_frame(options.viewer_fps, context.clock);
     config.us_per_tick = context.clock.us_per_tick();
 
+    PanelSpec panel = wiring.panel;
+    panel.take_over = [&player] { player.hand_over(); };
+
     std::string error;
-    auto        viewer = MujocoViewer::create(context.world, wiring.panel, wiring.variables, config, error);
+    auto        viewer = MujocoViewer::create(context.world, std::move(panel), wiring.variables, config, error);
 
     if (viewer == nullptr) {
         std::cerr << "viewer disabled: " << error << '\n';
@@ -264,45 +266,45 @@ std::unique_ptr<MujocoViewer>
  *
  * @param options Parsed command line.
  * @param context Context the recorder draws.
+ * @param target Robot whose camera and body the recording uses.
+ * @param wiring What the robot prints on the overlay.
  * @return The recorder, or null when disabled or when EGL is unavailable.
  */
-std::unique_ptr<VideoRecorder> make_video_recorder(const CliOptions& options, RunContext& context) {
-    if (not options.video_enabled) {
+std::unique_ptr<VideoRecorder>
+    make_video_recorder(const CliOptions& options, RunContext& context, const Target& target, const Wiring& wiring) {
+    if (options.video.path.empty()) {
         return nullptr;
     }
 
-    mjModel* model = context.world.model();
-    model->vis.global.offwidth = std::max(model->vis.global.offwidth, options.video.width);
-    model->vis.global.offheight = std::max(model->vis.global.offheight, options.video.height);
+    VideoConfig config = options.video;
+    config.camera = config.camera.empty() ? target.video_camera() : config.camera;
+    config.body = target.ground_truth().body;
+    config.ticks_per_frame = ticks_per_frame(config.fps, context.clock);
 
     std::string error;
-    auto        recorder = VideoRecorder::create(model, options.video, error);
+    auto        recorder = VideoRecorder::create(context.world, config, wiring.overlay, wiring.variables, error);
 
     if (recorder == nullptr) {
         std::cerr << "video disabled: " << error << '\n';
         return nullptr;
     }
 
-    std::cout << "recording " << options.video.path << " at " << options.video.width << "x" << options.video.height
-              << " " << options.video.fps << " fps, camera '" << options.video.camera << "', one frame every "
-              << ticks_per_frame(options.video.fps, context.clock) << " ticks\n";
+    std::cout << "recording " << config.path << " at " << config.width << "x" << config.height << " " << config.fps
+              << " fps, camera '" << config.camera << "', one frame every " << config.ticks_per_frame << " ticks\n";
 
     return recorder;
 }
 
 /**
- * @brief Build what the target adds, and the pusher every scenario may use.
+ * @brief Build what the target adds to the run.
  *
  * @param target Robot to run.
  * @param firmware Thread that will run the program.
  * @param robot The robot's description.
  * @param config The maze's surfaces.
- * @param pusher Filled with the pusher, which the context's devices own.
  * @return The target's wiring.
  */
-Wiring wire(
-    Target& target, FirmwareThread& firmware, const RobotDescription& robot, const MazeConfig& config, Pusher*& pusher
-) {
+Wiring wire(Target& target, FirmwareThread& firmware, const RobotDescription& robot, const MazeConfig& config) {
     RunContext&     context = target.context();
     const WorldInfo world{
         .robot = &robot,
@@ -313,18 +315,16 @@ Wiring wire(
             },
     };
 
-    Wiring wiring = target.wire(firmware, world);
-    auto   owned = std::make_unique<Pusher>(context.world, target.ground_truth().body);
-    pusher = owned.get();
-    context.devices.push_back(std::move(owned));
-    return wiring;
+    return target.wire(firmware, world);
 }
 
 /**
- * @brief Collect the robot's geoms other than its wheels, whose wall contacts are collisions.
+ * @brief Collect the geoms attached to the robot's body itself, whose contacts are collisions.
+ *
+ * @note The wheels hang on bodies of their own, so they are not among them.
  *
  * @param world The world.
- * @param config The robot's ground truth, naming its wheels.
+ * @param config The robot's ground truth, naming its body.
  * @return Geom ids.
  */
 std::vector<int> chassis_geoms(const MujocoWorld& world, const GroundTruthConfig& config) {
@@ -350,26 +350,22 @@ Application::Application(const CliOptions& options, Target& target) :
     robot{RobotDescription::load(target.robot_file())},
     maze_path{resolve_maze(maze_name(options, this->scenario))},
     context{prepare(this->robot, this->maze_path, this->maze_config, options, this->scenario, target)},
-    ticks{ticks_of(options, this->scenario, target)},
+    ticks{ticks_of(options, this->scenario, this->context)},
     firmware{target.program()},
-    wiring{wire(target, this->firmware, this->robot, this->maze_config, this->pusher)},
-    player{this->scenario, this->wiring.hooks, this->context.serial, *this->pusher, this->wiring.variables},
+    wiring{wire(target, this->firmware, this->robot, this->maze_config)},
+    player{this->scenario, this->wiring.hooks, this->context.serial, this->wiring.variables},
     events{
         chassis_geoms(this->context.world, target.ground_truth()),
         {this->context.world.require_id(mjOBJ_GEOM, std::string{Maze::body_name} + "_floor")},
-        {},
+        this->wiring.hooks.state_names,
         this->wiring.variables
     },
     device_columns{this->context.devices},
     recorder{this->context.world, target.ground_truth(), options.out / "data.csv", options.record_every},
-    video{make_video_recorder(options, this->context)},
-    viewer{make_viewer(options, this->context, target, this->wiring)},
-    monitor{make_monitor(options, this->context.serial, this->wiring.monitor_inbound)},
+    video{make_video_recorder(options, this->context, target, this->wiring)},
+    viewer{make_viewer(options, this->context, target, this->wiring, this->player)},
+    monitor{make_monitor(options, this->context.serial)},
     simulation{this->context, this->firmware} {
-    for (const auto& [variable, names] : this->wiring.hooks.state_names) {
-        this->events.watch({.variable = variable, .names = names});
-    }
-
     for (ColumnSource* source : this->wiring.columns) {
         this->recorder.add_source(*source);
     }
@@ -379,27 +375,14 @@ Application::Application(const CliOptions& options, Target& target) :
     this->simulation.add_listener(CrashReporter::instance());
     this->simulation.add_listener(this->player);
 
-    for (IRunListener* listener : this->wiring.inputs) {
-        this->simulation.add_listener(*listener);
-    }
-
     if (this->monitor != nullptr) {
         this->simulation.add_listener(*this->monitor);
-    }
-
-    for (IRunListener* listener : this->wiring.observers) {
-        this->simulation.add_listener(*listener);
     }
 
     this->simulation.add_listener(this->events);
     this->simulation.add_listener(this->recorder);
 
     if (this->video != nullptr) {
-        this->video->attach(
-            this->context.world, this->wiring.overlay, this->wiring.variables,
-            ticks_per_frame(options.video.fps, this->context.clock),
-            options.video.trail ? target.ground_truth().body : std::string{}
-        );
         this->simulation.add_listener(*this->video);
     }
 
@@ -422,6 +405,10 @@ void Application::run(std::span<char*> arguments) {
 
     const auto    wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_start).count();
     const int64_t warnings = GroundTruth::warnings_total(this->context.world);
+    const int     body = this->context.world.require_id(mjOBJ_BODY, this->target.ground_truth().body);
+    const std::span<const mjtNum> positions(
+        this->context.world.data()->xpos, 3 * static_cast<std::size_t>(this->context.world.model()->nbody)
+    );
 
     const RunMetadata metadata{
         .target = this->target.name(),
@@ -445,7 +432,7 @@ void Application::run(std::span<char*> arguments) {
         .ticks = this->simulation.completed_ticks(),
         .sim_time = this->context.world.time(),
         .stopped_at = this->player.stopped_at().value_or(-1.0),
-        .final_z = this->recorder.last_z(),
+        .final_z = positions[(3 * static_cast<std::size_t>(body)) + 2],
         .target_fields = this->target.metadata(),
         .warnings_total = warnings,
         .serial_dropped_bytes = this->context.serial.dropped_bytes(),
@@ -472,7 +459,7 @@ void Application::run(std::span<char*> arguments) {
     std::cout << '\n';
 }
 
-int Application::main(std::span<char*> arguments, Target& target) {
+int run(std::span<char*> arguments, Target& target) {
     const std::vector<CliOption> target_options = target.options();
     const std::string            program =
         arguments.empty() ? target.name() : std::filesystem::path(arguments.front()).filename().string();
@@ -486,13 +473,7 @@ int Application::main(std::span<char*> arguments, Target& target) {
             return 1;
         }
 
-        CliOptions options = Cli::parse(arguments, target_options);
-        target.check_options();
-
-        if (not options.video_camera_given) {
-            options.video.camera = target.video_camera();
-        }
-
+        const CliOptions options = Cli::parse(arguments, target_options);
         std::filesystem::create_directories(options.out);
 
         Application application(options, target);
@@ -502,9 +483,5 @@ int Application::main(std::span<char*> arguments, Target& target) {
         std::cerr << "error: " << error.what() << '\n' << Cli::usage(program, target_options);
         return 1;
     }
-}
-
-int run(std::span<char*> arguments, Target& target) {
-    return Application::main(arguments, target);
 }
 }  // namespace micras::sim

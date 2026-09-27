@@ -6,19 +6,18 @@
 #include <charconv>
 #include <cmath>
 #include <format>
-#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
 #include <numbers>
 #include <set>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <utility>
 
 #include <toml++/toml.hpp>
 
+#include "micras/sim/core/text_file.hpp"
 #include "micras/sim/scenario/scenario.hpp"
 
 namespace micras::sim {
@@ -138,15 +137,15 @@ StopCondition read_stop(const toml::table& table, const std::string& where) {
  * @return The event.
  */
 ScenarioEvent read_event(const toml::table& table, const std::string& where) {
-    refuse_unknown(table, {"at", "press", "for", "set", "value", "send", "push", "when", "equals"}, where);
+    refuse_unknown(table, {"at", "press", "for", "set", "value", "send", "when", "equals"}, where);
 
     ScenarioEvent event;
     event.at = require_number(table, "at", where);
     const int kinds = static_cast<int>(table.contains("press")) + static_cast<int>(table.contains("set")) +
-                      static_cast<int>(table.contains("send")) + static_cast<int>(table.contains("push"));
+                      static_cast<int>(table.contains("send"));
 
     if (kinds != 1) {
-        throw std::runtime_error(where + ": an event is exactly one of press, set, send or push");
+        throw std::runtime_error(where + ": an event is exactly one of press, set or send");
     }
 
     if (const auto press = table["press"].value<std::string>(); press.has_value()) {
@@ -163,23 +162,15 @@ ScenarioEvent read_event(const toml::table& table, const std::string& where) {
         }
 
         event.value = *value;
-    } else if (const auto send = table["send"].value<std::string>(); send.has_value()) {
+    } else {
+        const std::optional<std::string> send = table["send"].value<std::string>();
+
+        if (not send.has_value()) {
+            throw std::runtime_error(where + ": send must name a message");
+        }
+
         event.kind = ScenarioEvent::Kind::SEND;
         event.target = *send;
-    } else {
-        const toml::array* force = table["push"].as_array();
-
-        if (force == nullptr or force->size() != 3) {
-            throw std::runtime_error(where + ": push is a force [x, y, z] in newtons");
-        }
-
-        event.kind = ScenarioEvent::Kind::PUSH;
-
-        for (std::size_t axis = 0; axis < 3; axis++) {
-            event.force.at(axis) = force->at(axis).value<double>().value_or(0.0);
-        }
-
-        event.duration = require_number(table, "for", where);
     }
 
     if (event.at < 0.0 or event.duration < 0.0) {
@@ -207,15 +198,7 @@ ScenarioEvent read_event(const toml::table& table, const std::string& where) {
 }  // namespace
 
 Scenario Scenario::load(const std::filesystem::path& path) {
-    std::ifstream file(path);
-
-    if (not file.is_open()) {
-        throw std::runtime_error("cannot read the scenario " + path.string());
-    }
-
-    std::ostringstream text;
-    text << file.rdbuf();
-    return parse(text.str(), path.string());
+    return parse(read_text_file(path, "scenario"), path.string());
 }
 
 Scenario Scenario::parse(std::string_view text, const std::string& origin) {
@@ -270,29 +253,10 @@ Scenario Scenario::parse(std::string_view text, const std::string& origin) {
     return scenario;
 }
 
-Pusher::Pusher(const MujocoWorld& world, const std::string& body) : body_id{world.require_id(mjOBJ_BODY, body)} { }
-
-void Pusher::push(const std::array<double, 3>& force, uint64_t until) {
-    this->force = force;
-    this->until = until;
-}
-
-void Pusher::actuate(MujocoWorld& world, const Clock& clock) {
-    const std::span<mjtNum> forces(world.data()->xfrc_applied, static_cast<std::size_t>(6 * world.model()->nbody));
-    const auto              first = 6 * static_cast<std::size_t>(this->body_id);
-    const bool              active = clock.tick_count() < this->until;
-
-    for (std::size_t axis = 0; axis < 3; axis++) {
-        forces[first + axis] -= this->applied.at(axis);
-        this->applied.at(axis) = active ? this->force.at(axis) : 0.0;
-        forces[first + axis] += this->applied.at(axis);
-    }
-}
-
 ScenarioPlayer::ScenarioPlayer(
-    Scenario scenario, const ScenarioHooks& hooks, SerialBus& serial, Pusher& pusher, const VariableSource* variables
+    Scenario scenario, const ScenarioHooks& hooks, SerialBus& serial, const VariableSource* variables
 ) :
-    scenario{std::move(scenario)}, hooks{hooks}, serial{serial}, pusher{pusher}, variables{variables} {
+    scenario{std::move(scenario)}, hooks{hooks}, serial{serial}, variables{variables} {
     for (const ScenarioEvent& event : this->scenario.events) {
         this->check(event);
         this->event_values.push_back(
@@ -326,7 +290,7 @@ double ScenarioPlayer::resolve(const std::string& variable, const std::string& v
     const auto names = this->hooks.state_names.find(variable);
 
     if (names == this->hooks.state_names.end()) {
-        throw std::runtime_error("the stop condition names " + value + ", but " + variable + " has no state names");
+        throw std::runtime_error("the scenario names state " + value + ", but " + variable + " has no state names");
     }
 
     const auto found = std::ranges::find(names->second, value);
@@ -363,9 +327,6 @@ void ScenarioPlayer::check(const ScenarioEvent& event) const {
                 throw std::runtime_error("the robot has no message named " + event.target);
             }
 
-            break;
-
-        case ScenarioEvent::Kind::PUSH:
             break;
     }
 }
@@ -411,10 +372,6 @@ RunControl ScenarioPlayer::on_before_tick(const Simulation& simulation) {
 
             case ScenarioEvent::Kind::SEND:
                 this->serial.queue_for_firmware(this->hooks.messages.find(event.target)->second);
-                break;
-
-            case ScenarioEvent::Kind::PUSH:
-                this->pusher.push(event.force, end);
                 break;
         }
     }

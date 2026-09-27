@@ -102,11 +102,6 @@ struct PwmDmaPort : Port {
      * @brief Host clock cycle the current transfer ends at, one timer period per value.
      */
     uint64_t transfer_end{0};
-
-    /**
-     * @brief Number of transfers the firmware started.
-     */
-    uint32_t transfers{0};
 };
 
 /**
@@ -126,19 +121,9 @@ struct AdcPort : Port {
     ///@}
 
     /**
-     * @brief Number of conversions in one sequence, from the ADC configuration.
-     */
-    uint32_t conversions{0};
-
-    /**
      * @brief Called at the end of a sequence, as the conversion complete interrupt would.
      */
     std::function<void()> complete;
-
-    /**
-     * @brief Number of sequences finished.
-     */
-    uint32_t sequences{0};
 
     /**
      * @brief Get how many conversions the buffer holds.
@@ -161,7 +146,7 @@ struct AdcPort : Port {
     /**
      * @brief End the sequence, as the DMA interrupt does.
      */
-    void finish_sequence();
+    void finish_sequence() const;
 };
 
 /**
@@ -182,16 +167,6 @@ struct UartPort : Port {
      * @brief Bytes the firmware handed to the transmit DMA and not yet sent.
      */
     std::deque<uint8_t> tx;
-
-    /**
-     * @brief Bytes received while the receiver was not started.
-     */
-    uint32_t lost_bytes{0};
-
-    /**
-     * @brief Baud rate from the UART configuration.
-     */
-    uint32_t baud_rate{0};
 
     /**
      * @brief Put one received byte where the DMA would.
@@ -216,14 +191,6 @@ struct FlashPort : Port {
      * @brief Contents, erased to 0xFF.
      */
     std::vector<uint8_t> bytes;
-
-    /**
-     * @brief Number of program and erase operations performed.
-     */
-    ///@{
-    uint32_t writes{0};
-    uint32_t erases{0};
-    ///@}
 };
 
 /**
@@ -239,11 +206,6 @@ struct McuPort : Port {
      * @brief Host time of the last refresh, in timer cycles.
      */
     uint64_t last_refresh{0};
-
-    /**
-     * @brief Number of refreshes.
-     */
-    uint64_t refreshes{0};
 
     /**
      * @brief Number of times the watchdog would have reset the chip.

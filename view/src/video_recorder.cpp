@@ -21,6 +21,8 @@
     #include <EGL/egl.h>
     #include <EGL/eglext.h>
 
+    #include "camera.hpp"
+
 namespace micras::sim {
 namespace {
 /**
@@ -101,7 +103,7 @@ bool make_context_current(EGLDisplay display) {
  *
  * @note The default display works on most drivers; when it does not (a common
  *       failure with several EGL vendors installed) every enumerated EGL device
- *       is tried in turn, which is what picks the NVIDIA one on this machine.
+ *       is tried in turn.
  *
  * @return True on success.
  */
@@ -158,23 +160,32 @@ void close_opengl() {
 
 }  // namespace
 
-std::unique_ptr<VideoRecorder> VideoRecorder::create(mjModel* model, const VideoConfig& config, std::string& error) {
+std::unique_ptr<VideoRecorder> VideoRecorder::create(
+    MujocoWorld& world, const VideoConfig& config, OverlaySpec overlay, const VariableSource* variables,
+    std::string& error
+) {
     if (not init_opengl()) {
         error = "could not create a headless EGL/OpenGL context";
         return nullptr;
     }
 
+    mjModel* model = world.model();
+    model->vis.global.offwidth = std::max(model->vis.global.offwidth, config.width);
+    model->vis.global.offheight = std::max(model->vis.global.offheight, config.height);
+
     std::unique_ptr<VideoRecorder> recorder(new VideoRecorder());
-    recorder->model = model;
+    recorder->world = &world;
     recorder->config = config;
+    recorder->config.ticks_per_frame = std::max<uint64_t>(1, config.ticks_per_frame);
+    recorder->overlay = std::move(overlay);
+    recorder->variables = variables;
+    recorder->trail_body = config.trail ? world.require_id(mjOBJ_BODY, config.body) : -1;
 
     mjv_defaultCamera(&recorder->camera);
     mjv_defaultOption(&recorder->option);
     mjv_defaultScene(&recorder->scene);
     mjr_defaultContext(&recorder->context);
-
-    recorder->option.flags[mjVIS_RANGEFINDER] = 1;
-    std::ranges::fill(recorder->option.geomgroup, 1);
+    show_everything(recorder->option);
 
     recorder->display = eglGetCurrentDisplay();
     recorder->gl_context = eglGetCurrentContext();
@@ -192,30 +203,14 @@ std::unique_ptr<VideoRecorder> VideoRecorder::create(mjModel* model, const Video
 
     if (config.camera == "free") {
         mjv_defaultFreeCamera(model, &recorder->camera);
-        recorder->camera.type = mjCAMERA_FREE;
         recorder->camera.lookat[0] = model->stat.center[0];
         recorder->camera.lookat[1] = model->stat.center[1];
         recorder->camera.lookat[2] = model->stat.center[2];
         recorder->camera.distance = 1.6 * model->stat.extent;
         recorder->camera.azimuth = 90.0;
         recorder->camera.elevation = -65.0;
-    } else {
-        const int id = mj_name2id(model, mjOBJ_CAMERA, config.camera.c_str());
-
-        if (id < 0) {
-            error = "model has no camera named '" + config.camera + "'; it has";
-
-            for (int i = 0; i < model->ncam; i++) {
-                const char* name = mj_id2name(model, mjOBJ_CAMERA, i);
-                error += std::string(" '") + (name == nullptr ? "?" : name) + "'";
-            }
-
-            error += " and 'free'";
-            return nullptr;
-        }
-
-        recorder->camera.type = mjCAMERA_FIXED;
-        recorder->camera.fixedcamid = id;
+    } else if (not select_model_camera(model, config.camera, recorder->camera, error)) {
+        return nullptr;
     }
 
     const std::string command = "ffmpeg -y -loglevel error -f rawvideo -pixel_format rgb24 -video_size " +
@@ -252,46 +247,12 @@ VideoRecorder::~VideoRecorder() {
     close_opengl();
 }
 
-void VideoRecorder::attach(
-    MujocoWorld& world, OverlaySpec overlay, const VariableSource* variables, uint64_t ticks_per_frame,
-    const std::string& trail_body
-) {
-    this->world = &world;
-    this->overlay = std::move(overlay);
-    this->variables = variables;
-    this->ticks_per_frame = std::max<uint64_t>(1, ticks_per_frame);
-    this->trail_body = trail_body.empty() ? -1 : mj_name2id(world.model(), mjOBJ_BODY, trail_body.c_str());
-    this->trail.clear();
-}
-
 void VideoRecorder::on_after_tick(const Simulation& simulation) {
-    if (this->world == nullptr) {
-        return;
-    }
-
     if (this->trail_body >= 0) {
-        const std::span<const mjtNum> positions{
-            this->world->data()->xpos, 3 * static_cast<std::size_t>(this->world->model()->nbody)
-        };
-        const std::span<const mjtNum> position = positions.subspan(3 * static_cast<std::size_t>(this->trail_body), 3);
-
-        if (this->trail.empty() or
-            std::hypot(position[0] - this->trail.back()[0], position[1] - this->trail.back()[1]) >= trail_spacing) {
-            if (this->trail.size() >= max_trail_points) {
-                std::size_t kept = 0;
-
-                for (std::size_t i = 0; i < this->trail.size(); i += 2) {
-                    this->trail[kept++] = this->trail[i];
-                }
-
-                this->trail.resize(kept);
-            }
-
-            this->trail.push_back({position[0], position[1], 0.002});
-        }
+        this->extend_trail();
     }
 
-    if (simulation.tick() % this->ticks_per_frame != 0) {
+    if (simulation.tick() % this->config.ticks_per_frame != 0) {
         return;
     }
 
@@ -313,49 +274,43 @@ void VideoRecorder::on_after_tick(const Simulation& simulation) {
         values += std::format("\n{:.3f} {}", value_of(line.variable), line.unit);
     }
 
-    this->capture(this->world->data(), labels, values);
+    this->capture(labels, values);
+}
+
+void VideoRecorder::extend_trail() {
+    const std::span<const mjtNum> positions{
+        this->world->data()->xpos, 3 * static_cast<std::size_t>(this->world->model()->nbody)
+    };
+    const std::span<const mjtNum> position = positions.subspan(3 * static_cast<std::size_t>(this->trail_body), 3);
+
+    if (not this->trail.empty() and
+        std::hypot(position[0] - this->trail.back()[0], position[1] - this->trail.back()[1]) < trail_spacing) {
+        return;
+    }
+
+    if (this->trail.size() >= max_trail_points) {
+        std::size_t kept = 0;
+
+        for (std::size_t i = 0; i < this->trail.size(); i += 2) {
+            this->trail[kept++] = this->trail[i];
+        }
+
+        this->trail.resize(kept);
+    }
+
+    this->trail.push_back({position[0], position[1], 0.002});
 }
 
 void VideoRecorder::draw_trail() {
-    const std::array<float, 4> color{
-        this->config.trail_color[0], this->config.trail_color[1], this->config.trail_color[2], 1.0F
-    };
-
     const std::span<mjvGeom> geoms{this->scene.geoms, static_cast<std::size_t>(this->scene.maxgeom)};
 
     for (std::size_t i = 1; i < this->trail.size() and this->scene.ngeom < this->scene.maxgeom; i++) {
         mjvGeom* geom = &geoms[static_cast<std::size_t>(this->scene.ngeom)];
 
-        mjv_initGeom(geom, mjGEOM_NONE, nullptr, nullptr, nullptr, color.data());
+        mjv_initGeom(geom, mjGEOM_NONE, nullptr, nullptr, nullptr, trail_color.data());
         mjv_connector(geom, mjGEOM_LINE, trail_width, this->trail[i - 1].data(), this->trail[i].data());
         geom->category = mjCAT_DECOR;
         this->scene.ngeom++;
-    }
-}
-
-void VideoRecorder::tint_robot() {
-    if (this->trail_body < 0) {
-        return;
-    }
-
-    const auto                 bodies = static_cast<std::size_t>(this->model->nbody);
-    const auto                 geoms_in_model = static_cast<std::size_t>(this->model->ngeom);
-    const std::span<const int> roots{this->model->body_rootid, bodies};
-    const std::span<const int> owners{this->model->geom_bodyid, geoms_in_model};
-    const std::span<mjvGeom>   geoms{this->scene.geoms, static_cast<std::size_t>(this->scene.ngeom)};
-    const int                  root = roots[static_cast<std::size_t>(this->trail_body)];
-
-    for (mjvGeom& geom : geoms) {
-        if (geom.objtype != mjOBJ_GEOM or geom.objid < 0 or
-            roots[static_cast<std::size_t>(owners[static_cast<std::size_t>(geom.objid)])] != root) {
-            continue;
-        }
-
-        const std::span<float, 4> rgba{geom.rgba};
-
-        for (std::size_t i = 0; i < 3; i++) {
-            rgba[i] = tint_share * this->config.trail_color.at(i) + (1.0F - tint_share) * rgba[i];
-        }
     }
 }
 
@@ -371,7 +326,7 @@ void VideoRecorder::release_context() const {
     }
 }
 
-void VideoRecorder::capture(mjData* data, const std::string& labels, const std::string& values) {
+void VideoRecorder::capture(const std::string& labels, const std::string& values) {
     if (this->encoder == nullptr) {
         return;
     }
@@ -380,12 +335,10 @@ void VideoRecorder::capture(mjData* data, const std::string& labels, const std::
 
     const mjrRect viewport{0, 0, this->config.width, this->config.height};
 
-    mjv_updateScene(this->model, data, &this->option, nullptr, &this->camera, mjCAT_ALL, &this->scene);
+    mjv_updateScene(
+        this->world->model(), this->world->data(), &this->option, nullptr, &this->camera, mjCAT_ALL, &this->scene
+    );
     this->draw_trail();
-
-    if (this->config.tint) {
-        this->tint_robot();
-    }
     mjr_setBuffer(mjFB_OFFSCREEN, &this->context);
     mjr_render(viewport, &this->scene, &this->context);
 
@@ -411,22 +364,17 @@ void VideoRecorder::capture(mjData* data, const std::string& labels, const std::
 #else  // MICRAS_VIDEO
 
 namespace micras::sim {
-std::unique_ptr<VideoRecorder>
-    VideoRecorder::create(mjModel* /*model*/, const VideoConfig& /*config*/, std::string& error) {
+std::unique_ptr<VideoRecorder> VideoRecorder::create(
+    MujocoWorld& /*world*/, const VideoConfig& /*config*/, OverlaySpec /*overlay*/, const VariableSource* /*variables*/,
+    std::string& error
+) {
     error = "this binary was built with -DMICRAS_VIDEO=OFF";
     return nullptr;
 }
 
 VideoRecorder::~VideoRecorder() = default;
 
-void VideoRecorder::attach(
-    MujocoWorld& /*world*/, OverlaySpec /*overlay*/, const VariableSource* /*variables*/, uint64_t /*ticks_per_frame*/,
-    const std::string& /*trail_body*/
-) { }
-
 void VideoRecorder::on_after_tick(const Simulation& /*simulation*/) { }
-
-void VideoRecorder::capture(mjData* /*data*/, const std::string& /*labels*/, const std::string& /*values*/) { }
 }  // namespace micras::sim
 
 #endif  // MICRAS_VIDEO

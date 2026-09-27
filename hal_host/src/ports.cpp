@@ -13,9 +13,7 @@ void AdcPort::write(std::size_t index, uint32_t counts) const {
     }
 }
 
-void AdcPort::finish_sequence() {
-    this->sequences++;
-
+void AdcPort::finish_sequence() const {
     if (this->complete) {
         this->complete();
     }
@@ -23,7 +21,6 @@ void AdcPort::finish_sequence() {
 
 void UartPort::receive(uint8_t byte) {
     if (this->rx_buffer.empty()) {
-        this->lost_bytes++;
         return;
     }
 

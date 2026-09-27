@@ -16,20 +16,16 @@ namespace {
 GroundTruthConfig tiny_config() {
     return {
         .body = "robot",
-        .forward_axis = ForwardAxis::X,
         .columns =
             {
                 {.name = "wheel_speed", .probe = Probe::JOINT_VELOCITY, .object = "wheel"},
                 {.name = "wheel_angle", .probe = Probe::JOINT_POSITION, .object = "wheel"},
-                {.name = "command", .probe = Probe::ACTUATOR_CONTROL, .object = "motor"},
                 {.name = "torque", .probe = Probe::ACTUATOR_FORCE, .object = "motor"},
                 {.name = "chassis_ncon", .probe = Probe::CONTACT_COUNT, .object = "chassis"},
                 {.name = "chassis_fn", .probe = Probe::CONTACT_NORMAL_FORCE, .object = "chassis"},
                 {.name = "chassis_slip", .probe = Probe::CONTACT_SLIP, .object = "chassis"},
                 {.name = "chassis_penetration", .probe = Probe::CONTACT_PENETRATION, .object = "chassis"},
-                {.name = "ncon", .probe = Probe::CONTACT_TOTAL, .object = ""},
                 {.name = "iterations", .probe = Probe::SOLVER_ITERATIONS, .object = ""},
-                {.name = "warnings", .probe = Probe::WARNINGS_TOTAL, .object = ""},
             },
     };
 }
@@ -84,7 +80,7 @@ TEST_F(Recording, StartsEveryRowWithTheBodyBlockThenTheRobotColumns) {
     EXPECT_EQ(columns.front(), "tick");
     EXPECT_EQ(columns.at(12), "v_forward");
     EXPECT_EQ(columns.at(13), "wheel_speed");
-    EXPECT_EQ(columns.back(), "warnings");
+    EXPECT_EQ(columns.back(), "iterations");
 }
 
 TEST_F(Recording, WritesTheTickAndOneCellPerColumn) {
@@ -112,7 +108,7 @@ TEST_F(Recording, AppendsTheSourcesAfterTheGroundTruth) {
         recorder.sample(0);
     }
 
-    EXPECT_TRUE(this->header().ends_with(",warnings,first,second"));
+    EXPECT_TRUE(this->header().ends_with(",iterations,first,second"));
 }
 
 TEST_F(Recording, RejectsASourceThatFillsTooFewCells) {
