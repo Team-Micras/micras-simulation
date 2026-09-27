@@ -4,15 +4,13 @@
 
 include(FetchContent)
 
-set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/third_party/_deps" CACHE PATH "FetchContent download directory")
-
 FetchContent_Declare(picosha2
     GIT_REPOSITORY https://github.com/okdshin/PicoSHA2.git
     GIT_TAG        27fcf6979298949e8a462e16d09a0351c18fcaf2
 )
 FetchContent_MakeAvailable(picosha2)
 
-# Robot descriptions and scenarios are TOML (SPEC_2_DECISIONS.md, D7 and D13).
+# Robot descriptions and scenarios are TOML.
 FetchContent_Declare(tomlplusplus
     GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
     GIT_TAG        v3.4.0
