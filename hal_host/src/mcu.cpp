@@ -74,4 +74,12 @@ void Mcu::refresh_watchdog() {
 
     mcu.last_refresh = clock.now();
 }
+
+bool Mcu::was_reset_by_watchdog() {
+    return false;
+}
+
+bool Mcu::is_cpu_frequency_supported() {
+    return true;
+}
 }  // namespace micras::hal
