@@ -11,7 +11,7 @@ mod micras 'targets/micras'
 preset := env("MICRAS_PRESET", "default")
 build_dir := "build" / preset
 
-# Identifiers that name a specific robot. None may appear outside targets/ (M2).
+# Identifiers that name a specific robot. None may appear outside targets/.
 robot_identifiers := "micras::Micras|MicrasTarget|SimulationContext|ProxyState|proxy_state|robot_v2|\"micras\"|FSM State|Desired Linear|Desired Angular|Odometry Linear|Odometry Angular|Grid Pose|grid_pose|fsm_state|odometry_state|front wheel|MicrasFirmware|MicrasBoard|micras_firmware|targets/micras|wall_adc|dip_switch|button_config|loop_time_us\\{1042|hadc[0-9]|htim[0-9]|hspi[0-9]|huart[0-9]|MX_[A-Z0-9]+_Init"
 
 default:

@@ -5,8 +5,6 @@ invariants that hold it together, the subtleties that look like bugs and are
 not, and the measurements behind the numbers in `targets/micras/robot.toml`.
 
 Linux only, by decision. `just` is the entry point; there is no Makefile.
-`SPEC_1_WORK.md` and `SPEC_2_DECISIONS.md` record the work that produced this
-layout and the fourteen decisions behind it.
 
 ## The rule everything else serves
 
@@ -14,13 +12,13 @@ layout and the fourteen decisions behind it.
 produce byte-identical `data.csv` and `meta.json`. Nothing in the engine may make
 the firmware's view of the world depend on wall time, on a window being open, on
 a client being connected, or on how fast the machine is. Noise is part of the
-world (D8) and is seeded: `--seed` picks the stream, `--ideal` turns it off.
+world and is seeded: `--seed` picks the stream, `--ideal` turns it off.
 
 This is enforced, not hoped for. `just micras check` runs the same scenario
 headless and with a window, with and without a video, and with a bridge nobody
 connects to, and compares each pair of CSVs as bytes (`tools/compare_run.py`).
 
-Baselines are summaries, not recordings (D10). `targets/micras/baselines/v5/`
+Baselines are summaries, not recordings. `targets/micras/baselines/v1/`
 holds one `summary.json` per checked run: the hash of `data.csv`, the state
 timeline, and a handful of numbers with their tolerances (`tools/baseline.py`).
 On the machine that recorded it the hash matches; on another it will not, because
@@ -30,8 +28,8 @@ what is compared. Two rules:
 - **A refactoring must not move a byte.** On one machine, a refactoring leaves
   the hash where it was. If it moves, the refactoring is wrong.
 - **Never re-record to make a difference go away.** `record-baseline` refuses to
-  overwrite a version; a change of behaviour is a new version, `v5`, with the
-  reason in the commit.
+  overwrite a version; a change of behaviour is a new version, with the reason in
+  the commit.
 
 ## Layers
 
@@ -44,7 +42,7 @@ targets/micras/                 the micromouse: firmware submodule, bindings, ro
 ```
 
 `just check-generic` greps everything outside `targets/` for names that belong to
-a robot and fails on any (M2). The root CMakeLists adds every folder of
+a robot and fails on any. The root CMakeLists adds every folder of
 `targets/` that has a CMakeLists; nothing above `targets/` names one.
 
 Four engine libraries. `micras_sim_app` sits on top; `micras_sim_view` links only
@@ -61,8 +59,7 @@ micras_sim_app      CLI, application wiring, crash reporter; the Target interfac
 A robot target implements `Target` (`app/include/micras/sim/app/target.hpp`): its
 name, firmware commit, loop period, options, robot file, ground truth columns and
 program, and `wire()`, which binds its devices to the host ports and returns what
-it adds to the run (`Wiring`: inputs, observers, columns, variables, panel,
-overlay, scenario hooks). Its `main` is one call to `micras::sim::run`.
+it adds to the run (`Wiring`: columns, variables, panel, overlay, scenario hooks). Its `main` is one call to `micras::sim::run`.
 
 `MICRAS_VIEWER`, `MICRAS_VIDEO`, `MICRAS_BRIDGE` and `MICRAS_TESTS` are all ON by
 default and all must still compile when OFF; `just check-options` configures
@@ -74,13 +71,13 @@ first tries to build without a GPU.
 `Simulation::run` drives `IRunListener`s. Order per tick:
 
 ```
-on_before_tick   -> RunControl{RUN, QUIT}   crash reporter, scenario, target inputs, monitor
+on_before_tick   -> RunControl{RUN, QUIT}   crash reporter, scenario, monitor
 firmware.run_until_yield()                  the firmware runs until its timer crosses a step
 device->actuate()                           motors, fan: from what the firmware wrote
 world.step(steps_per_tick)                  125 us, one MuJoCo step
 clock.advance()
 device->sample()                            encoders, IMU, wall sensors, ADCs, link
-on_after_tick                               target observers, event log, recorder, video, viewer
+on_after_tick                               event log, recorder, video, viewer
 ```
 
 Listeners run in registration order, which `Application` fixes. Devices sample
@@ -93,7 +90,7 @@ CSV row. A `FinishGuard` runs `finish()` however `run()` leaves, including
 through an exception from a listener; without it a thrown listener would leave
 the firmware thread parked on the handoff with nobody left to wake it.
 
-### Time: the host timer hands over (D2)
+### Time: the host timer hands over
 
 The firmware keeps its own notion of time through `micras_hal`'s timer, and
 `hal_host`'s `Clock` is the only place that time exists. **Every read of the
@@ -128,7 +125,7 @@ member called `main` too.
 
 There is no render thread. `MujocoViewer` draws inside `on_after_tick` and
 blocks inside `on_before_tick` while paused; `--viewer-fps` is the lever on wall
-time. The panel and the overlay are declarative (D12): a target returns a
+time. The panel and the overlay are declarative: a target returns a
 `PanelSpec` of buttons, switches, lamps and readouts and an `OverlaySpec` of
 lines, and the view draws them without knowing the robot. The first touch of a
 board control hands the run over: the scenario stops driving the inputs and the
@@ -142,7 +139,7 @@ therefore requires that `VideoRecorder` make its EGL context current in
 GLFW context current first. Without that pair the run dies with
 `BadAccess X_GLXMakeCurrent` and leaves an empty CSV.
 
-## The host HAL (D3, D4)
+## The host HAL
 
 `hal_host/` implements every `micras_hal` class the firmware uses on a PC, and
 includes nothing but `micras_hal` headers and its own. `Board` is a registry of
@@ -153,8 +150,9 @@ or GPIO port** that names them, so the firmware's own `target.hpp` is the key:
 port. Nothing in `hal_host` knows a physics engine; the target's bindings connect
 ports to devices.
 
-A port the firmware used that no binding claimed is counted, reported on stdout
-and written to `meta.json` as `unbound_ports`; the gate expects zero. So do
+A port the firmware used that no binding claimed is counted, named on stderr at
+the end of the run and written to `meta.json` as `unbound_ports`; the gate
+expects zero. So do
 `watchdog_expiries` and `emergency_stops`, which `Mcu` counts instead of
 resetting a process.
 
@@ -172,7 +170,7 @@ samples from a `SamplePort`, the rotary sensor reads `hal::Encoder`.
 `FmacFilter` is left out because nothing uses it and it needs the FMAC.
 `hal::Spi` and `hal::Encoder` exist in `hal_host`; the host SPI is chipless.
 
-## The robot description (D7)
+## The robot description
 
 `targets/micras/robot.toml` is the robot's physical truth, written by hand from
 the CAD, the board and the datasheets. Every value is either a number or
@@ -201,7 +199,7 @@ Things in `robot.toml` that look arbitrary and are not:
   own deflection. 8 ms is the estimate for the 1 mm silicone band. With the old
   2 ms the hopping wheels hardly scrubbed, and a pivot at 0.6 V spun at 3.2 rad/s
   instead of 1.1.
-- **The timestep is 125 us**, one firmware loop (R3). Halving it changed neither
+- **The timestep is 125 us**, one firmware loop. Halving it changed neither
   the contacts nor the trace.
 - **The chassis mass is 62 g**, not 70: the firmware's 70 g and 2.9e-5 kg m^2 are
   the whole robot, and the wheels are modelled separately.
@@ -230,7 +228,7 @@ Things in `robot.toml` that look arbitrary and are not:
   fan on. The same is expected of the real band, so calibrate the wheel radius
   with the fan running.
 
-## The CSV (D11)
+## The CSV
 
 One row per tick, or per `--record-every` ticks. The engine's block first: the
 tick, the simulated time, the body pose and velocity. Then the robot's ground
@@ -244,9 +242,9 @@ columns. Two sources naming the same column is an error at the first row.
 - `*_penetration` is `nan` on ticks where the geom had no contact at all. `0`
   means "in contact, exactly touching".
 - The variable columns come from the firmware's `VariablePool`, read through a
-  read-only accessor (D5), and are named from its own variable names. State ids
-  and names come from the firmware too (R6); nothing in the simulator hard-codes
-  them. The device columns are what the simulated hardware produced: the
+  read-only accessor, and are named from its own variable names. State ids come
+  from the firmware; it has no names for them, so the target lists the names and
+  the build checks that there is one for each state. The device columns are what the simulated hardware produced: the
   `lsm6dsv_*` IMU samples, the `wall_*` ADC readings, the `motor_*_voltage` the
   bridge applied, `pack_voltage`.
 
@@ -268,7 +266,7 @@ baud rate, and the bus keeps whatever is pending (up to 64 KiB, counting what it
 drops in `serial_dropped_bytes`). There is no framing in the simulator: the
 firmware's `comm::Link` does its own.
 
-The monitor bridge carries raw bytes both ways (R9). Incoming bytes land in a
+The monitor bridge carries raw bytes both ways. Incoming bytes land in a
 mutex-guarded buffer on an IXWebSocket thread and are handed to the bus on the
 simulation thread in `on_before_tick`; each tick's output goes out as one binary
 frame in `on_after_tick`, through a bounded queue and a sender thread, so a
@@ -279,13 +277,14 @@ Note what the gate proves: `check-monitor` compares a bridged run **with nobody
 connected** against a plain one. A run a client talks to is marked `interactive`
 and is not reproducible, by definition.
 
-## Scenarios (D13)
+## Scenarios
 
 A scenario is a TOML file: the arena, the duration, the seed, the start pose,
-timed events (`press` an input for a time, `set` it, `send` a link command,
-`push` the body) and a stop condition on a firmware variable. CLI flags override
-what they name. Starts go through the robot's real paths: a short press of the
-button starts an exploration, exactly as on the robot (R12).
+timed events (`press` an input for a time, `set` it, `send` a link command) and a
+stop condition on a firmware variable. CLI flags override what they name. Starts
+go through the robot's real paths: a short press of the button starts an
+exploration, exactly as on the robot. A scenario never touches the physics, so a
+scripted run is one a human could have driven.
 
 ## The firmware submodule
 
@@ -305,62 +304,55 @@ something needs explaining, it goes in an `@note` on the declaration, where a
 reader finds it before reading the code. Every `NOLINT` names its check and says
 why. `just lint` is clean and stays clean.
 
-## State of the port (2026-09-25)
+## State of the port
 
 The firmware runs on the host HAL end to end. Every proxy that
 `Micras::check_initialization` checks comes up, so INIT reaches IDLE on the first
-tick (R10). A button press starts an exploration through the firmware's own
-paths. The checked runs end with no unbound port, no watchdog expiry and no
-emergency stop. `--flash` carries a saved map into the next run.
+tick. A button press starts an exploration through the firmware's own paths. The
+checked runs end with no unbound port, no watchdog expiry and no emergency stop.
+`--flash` carries a saved map into the next run.
 
-**The whole contest runs clean on ten mazes.** `scenarios/explore_solve.toml`:
-- A short press explores. The firmware comes back to the start on its own and saves
-  the map.
-- A long press then plans and runs the fastest route with the fan.
-
-The mazes are maze1, maze2, apec2016 to apec2019, japan2013ef, japan2017ef, uk2016f
-and alljapan-033-2012-exp-fin, in `engine/arenas/maze/mazes/`. Every one reaches the
-goal with no collision, with the fan alone and with every switch on (fan, racing line,
-boost, risky: `scenarios/explore_solve_all.toml`). Diagonals are always on; the switch
-that used to allow them selects the racing line.
+**The whole contest runs clean on ten mazes**, which `just micras contest` shows: a
+short press explores, the firmware comes back to the start on its own and saves the
+map, and a long press then plans and runs the fastest route with the fan.
+`just micras contest explore_solve_all` does the same with every switch on (fan,
+racing line, boost, risky), and there nine mazes are clean: on apec2016 the board
+grazes the post at (0.90, 1.08) m at about 2 m/s on about half the seeds, and the run
+still finishes. The mazes are maze1, maze2, apec2016 to apec2019,
+japan2013ef, japan2017ef, uk2016f and alljapan-033-2012-exp-fin, in
+`engine/arenas/maze/mazes/`. Diagonals are always allowed; the second switch selects
+the racing line.
 
 The search takes 72 to 120 s before the fast run starts. The fast run takes, with the
-fan, 4.2 s on maze 1 and 3.9 to 9.2 s on the others. With every switch on it takes 3.7 s
-on maze 1 and 3.6 to 8.6 s on the others.
+fan, 4.2 s on maze 1 and 3.9 to 9.2 s on the others; with every switch on, 3.7 s on
+maze 1 and 3.6 to 8.6 s on the others.
 
-That took twenty-four changes to the firmware. `targets/micras/FIRMWARE_CHANGES.md` has
-each one, with its evidence and what it means on the robot. The ones that decided the
-fast modes:
+What the firmware does that the fast modes depend on, each with its evidence in the
+firmware commit that made it:
 - **The edge tracker times a wall edge by the reading and only names it from the map.**
-  It is the only reference along a corridor, and it used to lose the edges whenever
-  the estimate ran ahead of the robot.
+  An edge is the only reference along a corridor.
 - **The odometry rolls on a radius the load flattens.** With the fan the tyres carry
-  four times the load, and the estimate ran 0.67 % long.
-- **Boost asks for 0.65 of the traction.** At 0.75 the tyres slid 10 to 20 mm sideways
-  in every boosted turn.
-- **The wall observer keeps voting through the search turns.** Without it the search
-  stopped and spun in the middle of about 25 cells on maze 1.
+  four times the load.
+- **Boost asks for 0.65 of the traction.** More slides the tyres sideways in the turns.
+- **The wall observer keeps voting through the search turns**, so the search never
+  stops in a cell to look.
 - **A range is corrected for the angle it meets the wall at.** Along a diagonal the
-  diagonal sensors meet the walls square on and read them 16 % short, which pulled the
-  estimate 20 to 30 mm off on the long diagonals at 3 m/s.
-- **Eight turns of two bends inside one cell**, on a planner of labels that only drops
-  one when another is as fast for every route. The fast runs with every switch on are
-  3.5 % faster in total, 9 % on maze 2. The planner advances by edges, not nodes, and
-  `just micras turn-designs` designs the turns, which the compiler then checks.
-- **Turns are braked and accelerated through as their curvature allows.** 1.5 to 1.8 %
-  faster in every profile.
+  diagonal sensors meet the walls square on.
+- **Turns of two bends inside one cell**, on a planner of labels that only drops one
+  when another is as fast for every route. The planner advances by edges, and
+  `just micras turn-designs` designs the turns, which the firmware's build checks.
+- **Turns are braked and accelerated through as their curvature allows.**
 - **The tyres slide to the outside of a curve**, 4.8 mm/s per m/s^2 of lateral
   acceleration. The localizer predicts it and the controller points into it.
-- **The racing line.** Through the cells of the planned route, at 0.8 of the lateral grip
-  and 15 mm from the walls, it is 5.5 % faster than the route with fan and boost. At the
-  full grip or at 10 mm it hit walls. With risky on, the robot also optimizes the line through
-  the route of the risky turns and drives it only when it plans faster (2 of 10 mazes).
+- **The racing line**, through the cells of the planned route, at 0.8 of the lateral
+  grip and 15 mm from the walls. With risky on, the robot also optimizes the line
+  through the route of the risky turns and drives it only when it plans faster.
 
 Findings worth checking on the robot:
 
 1. **Front sensor parallax.** Each front emitter sits 6.5 mm above its receiver and
    the receiver's lobe is 10 degrees, so the reading falls slower than 1/d^2. The
-   firmware now models it (`receiver_offset`, `receiver_half_angle`). A bench sweep
+   firmware models it (`receiver_offset`, `receiver_half_angle`). A bench sweep
    toward a wall confirms both.
 2. **The rolling radius.** 56 um less per newton on a tyre in the simulation. Driving a
    known distance with the fan on and off measures the real one.
@@ -383,11 +375,11 @@ Findings worth checking on the robot:
 - **No "new run" from the panel.** It would need `RunControl::RESTART`,
   restartable listeners, and a fresh `FirmwareThread` and firmware, because the
   FSM, the maze map and the flash all carry state.
-- **The firmware's hardware tests are not built** (R11). The design supports
+- **The firmware's hardware tests are not built.** The design supports
   them, since each is a program with its own `main` over the same HAL, but
   `test_imu` spins forever when the IMU is not initialised and two tests were
   deleted upstream; they are out of scope for now.
-- **No minimum wall clearance in the baselines.** D10 names it; the event log has
-  collisions but nothing measures the distance to the nearest wall yet.
+- **No minimum wall clearance in the baselines.** The event log has collisions,
+  but nothing measures the distance to the nearest wall yet.
 - **No pinned container.** Byte identity is only checked between runs on one
-  machine (D10 C).
+  machine.

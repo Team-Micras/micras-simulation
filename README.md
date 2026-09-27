@@ -60,11 +60,9 @@ build uses `CMakePresets.json`; `MICRAS_PRESET` picks between `default`
 | `--monitor-port <int>` | port it listens on (default 8080) |
 | `--video <out.mp4>` | record an offscreen mp4 of the run |
 | `--video-fps <int>` | frame rate, default 30 |
-| `--video-camera <name>` | `side tracking` (default), `top tracking`, `onboard` (the robot's own view), `maze_top`, or `free` |
+| `--video-camera <name>` | `side tracking` (the robot's default), `top tracking`, `onboard` (the robot's own view), `maze_top`, or `free` |
 | `--video-size WxH` | frame size, default 1280x720 |
 | `--video-trail` | draw the path the robot has traveled behind it |
-| `--video-trail-color r,g,b` | the trail's color, each part in [0, 1]; implies `--video-trail` |
-| `--video-tint` | draw the robot in its trail's color, to tell two recordings apart; implies `--video-trail` |
 
 Micras adds one option of its own:
 
@@ -97,8 +95,8 @@ equals = ["IDLE", "ERROR"]
 after = 5.0
 ```
 
-An event can `press` an input for a time, `set` it, `send` a link command
-(`explore`, `solve`, `calibrate`, `save`, `reset`) or `push` the robot. An event
+An event can `press` an input for a time, `set` it, or `send` a link command
+(`explore`, `solve`, `calibrate`, `save`, `reset`). An event
 with `when` and `equals` waits, from its `at` on, for the named firmware variable
 to take one of those values, and fires on the first tick it does. The run stops
 at `seconds`, or earlier when the stop condition's variable takes one of the
@@ -119,6 +117,8 @@ The Micras scenarios:
 
 ```bash
 just micras run --scenario scenarios/explore_solve.toml --maze apec2017 --out runs/contest --flash runs/contest/flash.bin
+just micras contest                       # explore_solve in all ten mazes at once, and their health
+just micras contest explore_solve_all     # the same with every switch on
 ```
 
 ## Output
@@ -152,7 +152,7 @@ just micras analyze runs/explore
 Writes `report.json` and plots into the run directory: speeds, contacts,
 attitude, actuators, wheels, a top-down trajectory over the maze with the goal
 cells shaded and the firmware's pose estimate dashed, and, from the Micras
-plugin, the motor voltages, the controller's terms and the wall sensors. The
+plugin, the controller's terms and the wall sensors. The
 report covers warnings, non-finite samples, airborne fraction, slip,
 penetration, chassis contact, the state timeline, collisions, whether and when
 the goal was reached, the pose estimate's error against the ground truth, the
@@ -216,9 +216,9 @@ For the engine: builds, runs every unit test through CTest, configures every
 optional subsystem off to keep it buildable, and checks that nothing outside
 `targets/` names a robot. For Micras: proves that a window, a video and an idle
 bridge change nothing, that the flash survives from one run into the next, runs
-the checked scenarios, analyses them, asserts their metadata (no warnings, no
-unbound ports, no watchdog expiry, no emergency stop, no dropped bytes), and
-compares them with the recorded baseline summaries.
+the checked scenarios, checks their health (no warnings, no collision, no
+non-finite sample, no unbound port, no watchdog expiry, no emergency stop, no
+dropped byte), and compares them with the recorded baseline summaries.
 
 Baselines live in `targets/micras/baselines/`; `CLAUDE.md` explains what they
 hold and the rules around them. `just micras record-baseline` refuses to
@@ -237,7 +237,7 @@ bridge/          WebSocket server and monitor bridge
 app/             CLI and application wiring, the Target interface
 hal_host/        micras_hal implemented on a PC
 tests/           the engine's unit tests, on a tiny robot of their own
-tools/           analysis, baselines, run checks and comparison, maze generator
+tools/           analysis, baselines, run health and byte comparison
 targets/micras/  the micromouse:
   MicrasFirmware/    submodule
   cube/              the Cube layer the firmware includes, by hand
@@ -246,7 +246,7 @@ targets/micras/  the micromouse:
   robot.toml         the physical description
   scenarios/         idle, explore, explore_link, explore_solve(_all), solve(_all)
   baselines/         recorded summaries
-  tools/             analysis plugin, wall calibration, robot report
+  tools/             analysis plugin, wall calibration, robot report, turn designer
 ```
 
 `CLAUDE.md` has the architecture, the invariants that hold the determinism
