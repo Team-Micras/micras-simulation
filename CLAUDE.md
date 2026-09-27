@@ -316,14 +316,15 @@ checked runs end with no unbound port, no watchdog expiry and no emergency stop.
 short press explores, the firmware comes back to the start on its own and saves the
 map, and a long press then plans and runs the fastest route with the fan.
 `just micras contest explore_solve_all` does the same with every switch on (fan,
-racing line, boost, risky), and there nine mazes are clean: on apec2016 the board
-grazes the post at (0.90, 1.08) m at about 2 m/s on about half the seeds, and the run
-still finishes. The mazes are maze1, maze2, apec2016 to apec2019,
+racing line, boost, risky), and there nine mazes are clean: on japan2017ef the board
+grazes the walls around (0.22, 1.34) and (0.38, 1.58) m at about 1.5 m/s on every seed,
+and on apec2016 the post at (0.90, 1.08) m on about one seed in eight; both runs still
+finish. The mazes are maze1, maze2, apec2016 to apec2019,
 japan2013ef, japan2017ef, uk2016f and alljapan-033-2012-exp-fin, in
 `engine/arenas/maze/mazes/`. Diagonals are always allowed; the second switch selects
 the racing line.
 
-The search takes 77 to 113 s before the fast run starts. The fast run takes, with the
+The search takes 65 to 118 s before the fast run starts. The fast run takes, with the
 fan, 4.2 s on maze 1 and 3.9 to 9.2 s on the others; with every switch on, 3.7 s on
 maze 1 and 3.6 to 8.6 s on the others.
 
