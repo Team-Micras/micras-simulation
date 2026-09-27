@@ -12,6 +12,7 @@
 
 namespace micras::hal {
 std::array<AdcDma*, AdcDma::max_instances> AdcDma::instances{};
+uint32_t                                   AdcDma::restarts{};
 
 AdcDma::AdcDma(const Config& config) :
     max_reading{config.max_reading}, reference_voltage{config.reference_voltage}, handle{config.handle} {
@@ -19,6 +20,13 @@ AdcDma::AdcDma(const Config& config) :
         config.init_function();
     }
 
+    auto* const slot = std::ranges::find(instances, nullptr);
+
+    if (slot == instances.end()) {
+        return;
+    }
+
+    *slot = this;
     this->initialized = this->handle->State == HAL_ADC_STATE_READY;
 }
 
@@ -53,15 +61,6 @@ bool AdcDma::start_dma(std::span<uint16_t> buffer, std::span<uint16_t> snapshot)
     this->buffer = buffer;
     this->snapshot = snapshot;
 
-    auto* const slot = std::ranges::find(instances, nullptr);
-
-    if (slot == instances.end()) {
-        this->initialized = false;
-        return false;
-    }
-
-    *slot = this;
-
     return this->start_dma(buffer);
 }
 
@@ -82,13 +81,30 @@ uint32_t AdcDma::read_snapshot(std::span<uint16_t> destination) const {
 }
 
 void AdcDma::on_sequence_complete(const ADC_HandleTypeDef* handle) {
-    for (AdcDma* instance : instances) {
-        if (instance != nullptr and instance->handle == handle) {
-            std::ranges::copy(instance->buffer, instance->snapshot.begin());
-            instance->sequence = instance->sequence + 1;
-            return;
-        }
+    AdcDma* const instance = find(handle);
+
+    if (instance == nullptr) {
+        return;
     }
+
+    std::ranges::copy(instance->buffer, instance->snapshot.begin());
+    instance->sequence = instance->sequence + 1;
+}
+
+void AdcDma::on_error(const ADC_HandleTypeDef* handle) {
+    AdcDma* const instance = find(handle);
+
+    if (instance != nullptr) {
+        instance->stopped = true;
+    }
+}
+
+AdcDma* AdcDma::find(const ADC_HandleTypeDef* handle) {
+    const auto* const found = std::ranges::find_if(instances, [handle](const AdcDma* instance) {
+        return instance != nullptr and instance->handle == handle;
+    });
+
+    return found == instances.end() ? nullptr : *found;
 }
 
 void AdcDma::stop_dma() {
@@ -96,6 +112,19 @@ void AdcDma::stop_dma() {
     port.buffer16 = {};
     port.buffer32 = {};
     port.complete = nullptr;
+}
+
+void AdcDma::recover() {
+    if (not this->stopped) {
+        return;
+    }
+
+    this->stopped = false;
+    restarts++;
+}
+
+uint32_t AdcDma::get_restarts() {
+    return restarts;
 }
 
 uint16_t AdcDma::get_max_reading() const {
