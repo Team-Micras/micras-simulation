@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Assert the health invariants of one or more finished run directories.
 
-Reads ``meta.json`` and the ``report.json`` written by ``tools/analyze.py`` and
-fails the build when a run is not clean:
+Reads ``meta.json`` and ``data.csv`` and fails the build when a run is not clean:
 
 * ``warnings_total`` is 0 (no MuJoCo solver or constraint warnings),
+* no chassis geom collided with anything,
 * no non-finite samples (the ``*_penetration`` NaN sentinel is excluded by
   ``analyze.py`` itself, every other NaN is a defect),
 * every tick that was asked for actually ran, unless the scenario's stop
@@ -24,26 +24,33 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import analyze  # noqa: E402
+
 
 def check(run: Path, expected: dict[str, int], state: str | None = None) -> list[str]:
     """Return the list of failures for one run directory."""
     failures: list[str] = []
 
-    meta_path = run / "meta.json"
-    report_path = run / "report.json"
-
-    for path in (meta_path, report_path):
+    for path in (run / "meta.json", run / "data.csv"):
         if not path.exists():
             failures.append(f"{path} is missing")
 
     if failures:
         return failures
 
-    meta = json.loads(meta_path.read_text())
-    report = json.loads(report_path.read_text())
+    meta = json.loads((run / "meta.json").read_text())
 
     if meta.get("warnings_total") != 0:
         failures.append(f"warnings_total is {meta.get('warnings_total')}, expected 0")
+
+    collisions = [event for event in meta.get("events", []) if event.get("kind") == "collision"]
+
+    if collisions:
+        failures.append(
+            f"{len(collisions)} collision(s), the first of {collisions[0]['detail']} at {collisions[0]['time']} s"
+        )
 
     for key, value in expected.items():
         if meta.get(key) != value:
@@ -62,9 +69,9 @@ def check(run: Path, expected: dict[str, int], state: str | None = None) -> list
     if state is not None and (not states or states[-1] != state):
         failures.append(f"the last state is {states[-1] if states else None!r}, expected {state}")
 
-    nonfinite = report.get("nonfinite", {})
+    nonfinite = analyze.finite_stats(analyze.Run(run, None, None))
 
-    if nonfinite.get("nonfinite_samples", 0) != 0:
+    if nonfinite["nonfinite_samples"] != 0:
         failures.append(
             f"{nonfinite['nonfinite_samples']} non-finite sample(s), first at "
             f"{nonfinite.get('first_nonfinite_time')} s"

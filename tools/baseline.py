@@ -10,9 +10,10 @@ A baseline is one ``summary.json`` per scenario:
 * ``states``: the state timeline from ``meta.json``, compared by name and, within
   ``state_time`` seconds, by time.
 * ``values``: numbers that say how the run went, each with its tolerance in
-  ``tolerances``. The engine contributes the tick count, warnings, collisions
-  and when the goal was first reached; the robot's analysis plugin may add its
-  own through a ``baseline(report)`` hook returning ``{name: (value, tolerance)}``.
+  ``tolerances``. The engine contributes the tick count, warnings, collisions,
+  when the goal was first reached and when the scenario stopped the run; the
+  robot's analysis plugin may add its own through a ``baseline(report)`` hook
+  returning ``{name: (value, tolerance)}``.
 
 The tolerances are written into the summary when it is recorded, so a reviewer
 sees them next to the values. ``record`` refuses to overwrite a summary: a new
@@ -44,7 +45,6 @@ STATE_TIME_TOLERANCE = 0.25
 ENGINE_TOLERANCES = {
     "ticks": None,
     "warnings_total": None,
-    "unbound_ports": None,
     "collisions": 2,
     "goal_time": 1.0,
     "stopped_at": 1.0,
@@ -73,7 +73,6 @@ def summarize(run_directory: Path) -> dict:
     values = {
         "ticks": meta.get("ticks"),
         "warnings_total": meta.get("warnings_total"),
-        "unbound_ports": meta.get("unbound_ports"),
         "collisions": len(collisions),
         "goal_time": report["maze"]["goal_time"],
         "stopped_at": stopped_at if stopped_at is not None and stopped_at >= 0 else None,

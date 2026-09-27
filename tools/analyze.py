@@ -207,6 +207,7 @@ def finite_stats(run: Run) -> dict:
 
 
 def wheel_report(run: Run, label: str) -> dict:
+    """Airborne time, slip and penetration of one wheel; no penetration when it never touched anything."""
     ncon = run.get(f"{label}_ncon")
     slip = run.get(f"{label}_slip")
     penetration = run.get(f"{label}_penetration")
@@ -215,7 +216,6 @@ def wheel_report(run: Run, label: str) -> dict:
         "airborne_fraction": float(np.mean(ncon == 0)) if ncon.size else None,
         "airborne_intervals": zero_intervals(ncon, run.time),
         "max_abs_slip": float(np.nanmax(np.abs(slip))) if slip.size else None,
-        # All NaN means the wheel never touched anything in the window.
         "min_penetration": (
             float(np.nanmin(penetration)) if penetration.size and np.isfinite(penetration).any() else None
         ),
@@ -237,6 +237,7 @@ def contact_fractions(run: Run, wheels: list[str]) -> dict:
 
 
 def z_report(run: Run) -> dict:
+    """Height of the body, and the first time after which it stays within 100 um of its final value."""
     z = run.get("z")
 
     if z.size == 0:
@@ -245,8 +246,6 @@ def z_report(run: Run) -> dict:
     final = float(z[-1])
     within = np.abs(z - final) < FLAT_Z_TOLERANCE
     settle = None
-
-    # First time after which the height never leaves the 100 um band again.
     outside = np.nonzero(~within)[0]
     index = 0 if outside.size == 0 else int(outside[-1]) + 1
 
@@ -275,7 +274,7 @@ def resolve_maze(run: Run) -> Path:
     maze_path = next((candidate for candidate in candidates if candidate.exists()), None)
 
     if maze_path is None:
-        tried = ", ".join(str(candidate) for candidate in candidates) or "nothing: meta.json names no model or maze"
+        tried = ", ".join(str(candidate) for candidate in candidates) or "nothing: meta.json names no maze"
         raise SystemExit(f"cannot find the maze of {run.directory}; tried {tried}")
 
     return maze_path
@@ -300,9 +299,11 @@ def maze_goal_cells(maze_path: Path) -> list[tuple[int, int]]:
 def maze_segments(maze_path: Path) -> list[tuple[float, float, float, float]]:
     """Parse the ASCII maze into world-frame wall segments.
 
-    Matches ``tools/gen_maze.py``: lines are read bottom-up, a post sits at
-    ``(col, row) * 0.18``, a horizontal wall spans one cell in x at ``y = row * 0.18``
-    and a vertical wall spans one cell in y at ``x = col * 0.18``.
+    Lines are read bottom-up, as ``Maze::parse`` reads them, alternating rows of
+    posts, which hold the horizontal walls, and rows of cells, which hold the
+    vertical ones: a post sits at ``(col, row) * 0.18``, a horizontal wall spans
+    one cell in x at ``y = row * 0.18`` and a vertical wall spans one cell in y at
+    ``x = col * 0.18``.
     """
     inverted = maze_path.read_text().splitlines()[::-1]
     segments = []
@@ -310,12 +311,12 @@ def maze_segments(maze_path: Path) -> list[tuple[float, float, float, float]]:
     for index, line in enumerate(inverted):
         row = index // 2
 
-        if index % 2 == 0:  # post row: horizontal walls
+        if index % 2 == 0:
             for column, start in enumerate(range(0, len(line), 4)):
                 if line[start + 1 : start + 4] == "---":
                     y = row * CELL_SIZE
                     segments.append((column * CELL_SIZE, y, (column + 1) * CELL_SIZE, y))
-        else:  # cell row: vertical walls
+        else:
             for column, start in enumerate(range(0, len(line), 4)):
                 if start < len(line) and line[start] == "|":
                     x = column * CELL_SIZE
@@ -364,6 +365,7 @@ def build_report(run: Run, maze_path: Path, plugin: ModuleType | None) -> dict:
         "run_start_time": start(run) if start else None,
         "warnings_total": float(run.meta.get("warnings_total", 0)),
         "events": run.meta.get("events", []),
+        "collisions": [event["time"] for event in run.meta.get("events", []) if event.get("kind") == "collision"],
         "nonfinite": finite_stats(run),
         "wheels": {label: wheel_report(run, label) for label in wheels},
         "contact_fractions": contact_fractions(run, wheels),
@@ -565,6 +567,8 @@ def summarize(report: dict, plugin: ModuleType | None) -> None:
     print(f"warnings     {report['warnings_total']:.0f}  non-finite samples {report['nonfinite']['nonfinite_samples']}")
     start = report["run_start_time"]
     print(f"task start   {'never' if start is None else f'{start:.3f} s'}")
+    collisions = report["collisions"]
+    print(f"collisions   {len(collisions)}  " + " ".join(f"{time:.3f}s" for time in collisions[:10]))
 
     for label, wheel in report["wheels"].items():
         print(
