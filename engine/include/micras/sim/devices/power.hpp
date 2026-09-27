@@ -146,9 +146,13 @@ class CurrentSense : public Device {
 public:
     /**
      * @brief The channels and their scaling.
+     *
+     * @note The amplifiers are bidirectional: a channel reads the zero voltage with no current, and
+     * moves from it by the volts per amp in the direction of the current.
      */
     struct Config {
         std::vector<std::function<double()>>       currents;
+        double                                     zero_voltage;
         double                                     volts_per_amp;
         double                                     adc_reference;
         double                                     adc_max_counts;

@@ -18,7 +18,7 @@ This is enforced, not hoped for. `just micras check` runs the same scenario
 headless and with a window, with and without a video, and with a bridge nobody
 connects to, and compares each pair of CSVs as bytes (`tools/compare_run.py`).
 
-Baselines are summaries, not recordings. `targets/micras/baselines/v1/`
+Baselines are summaries, not recordings. `targets/micras/baselines/v2/`
 holds one `summary.json` per checked run: the hash of `data.csv`, the state
 timeline, and a handful of numbers with their tolerances (`tools/baseline.py`).
 On the machine that recorded it the hash matches; on another it will not, because
@@ -323,7 +323,7 @@ japan2013ef, japan2017ef, uk2016f and alljapan-033-2012-exp-fin, in
 `engine/arenas/maze/mazes/`. Diagonals are always allowed; the second switch selects
 the racing line.
 
-The search takes 72 to 120 s before the fast run starts. The fast run takes, with the
+The search takes 77 to 123 s before the fast run starts. The fast run takes, with the
 fan, 4.2 s on maze 1 and 3.9 to 9.2 s on the others; with every switch on, 3.7 s on
 maze 1 and 3.6 to 8.6 s on the others.
 

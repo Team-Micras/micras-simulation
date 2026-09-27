@@ -76,11 +76,11 @@ CurrentSense::CurrentSense(Config config, const NoiseConfig& noise) :
 
 void CurrentSense::sample(MujocoWorld& /*world*/, const Clock& /*clock*/) {
     for (std::size_t channel = 0; channel < this->config.currents.size(); channel++) {
-        const double current = std::abs(this->config.currents.at(channel)());
+        const double current = this->config.currents.at(channel)();
         this->config.write(
             channel, to_counts(
-                         current * this->config.volts_per_amp, this->config.adc_reference, this->config.adc_max_counts,
-                         this->noise.gaussian(this->config.adc_noise_counts)
+                         this->config.zero_voltage + current * this->config.volts_per_amp, this->config.adc_reference,
+                         this->config.adc_max_counts, this->noise.gaussian(this->config.adc_noise_counts)
                      )
         );
     }
