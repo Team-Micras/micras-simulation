@@ -288,12 +288,12 @@ scripted run is one a human could have driven.
 
 ## The firmware submodule
 
-`targets/micras/MicrasFirmware/` follows the firmware's `high-level-review`
-branch. **Edit it only with intent**, in the firmware's own style, and only with
-changes that make sense on the real robot too. The simulator needs three
-accessors that are not there upstream: `Micras::get_instance()`,
-`get_variables()` and `get_state()`, for the variable columns, the state events
-and the stop conditions. Nothing else in the simulator reaches into the firmware.
+`targets/micras/MicrasFirmware/` follows the firmware's `main` branch. **Edit it
+only with intent**, in the firmware's own style, and only with changes that make
+sense on the real robot too. The simulator needs three accessors the firmware
+keeps for it: `Micras::get_instance()`, `get_variables()` and `get_state()`, for
+the variable columns, the state events and the stop conditions. Nothing else in
+the simulator reaches into the firmware.
 
 ## Style
 
