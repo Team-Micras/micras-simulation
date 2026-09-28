@@ -224,6 +224,9 @@ dropped byte), and compares them with the recorded baseline summaries.
 Baselines live in `targets/micras/baselines/`; `CLAUDE.md` explains what they
 hold and the rules around them. `just micras record-baseline` refuses to
 overwrite a version: bump it instead, and nothing is ever lost.
+`MICRAS_EXACT=1 just check` also fails when a checked run's `data.csv` is not
+byte identical to the recorded one: the check for a change that must not move a
+byte, such as a refactoring.
 
 `just format`, `just format-check` and `just lint` are the style targets; they
 use the firmware's own `.clang-format` and `.clang-tidy`.
