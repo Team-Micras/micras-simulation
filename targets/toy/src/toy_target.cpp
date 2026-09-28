@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -14,6 +15,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -138,10 +140,11 @@ std::vector<CliOption> ToyTarget::options() {
         .name = "--turn-angle",
         .argument = "<degrees>",
         .apply = [this](const std::string& value) {
-            std::size_t  parsed = 0;
-            const double degrees = std::stod(value, &parsed);
+            double            degrees = 0.0;
+            const char* const end = std::to_address(value.end());
+            const auto        result = std::from_chars(value.data(), end, degrees);
 
-            if (parsed != value.size() or degrees <= 0.0) {
+            if (result.ec != std::errc{} or result.ptr != end or degrees <= 0.0) {
                 throw std::runtime_error("--turn-angle expects a positive number of degrees, got '" + value + "'");
             }
 
