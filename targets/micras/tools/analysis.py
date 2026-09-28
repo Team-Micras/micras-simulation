@@ -20,6 +20,9 @@ import numpy as np
 #: Fraction of the supply beyond which a motor voltage counts as saturated.
 SATURATION = 0.98
 MAX_EVENTS = 50
+#: Speeds of the body under which it counts as at rest after a stop, in m/s and rad/s.
+REST_SPEED = 0.005
+REST_ANGULAR_SPEED = 0.05
 
 
 def events(run, kind: str) -> list[dict]:
@@ -107,6 +110,43 @@ def saturation_report(run, mask: np.ndarray) -> dict:
     return report
 
 
+def stop_report(run) -> dict:
+    """How the robot came to rest after the first stop it braked for, from the ground truth.
+
+    The stop is the entry into BRAKE. The body is at rest from the last tick it moved faster
+    than the rest speeds on; the path, the turn and the time are counted from the stop to there.
+    A run that never brakes has none of them.
+    """
+    start = next((float(event["time"]) for event in events(run, "state") if event.get("detail") == "BRAKE"), None)
+    names = ("time", "speed", "angular_speed", "distance", "angle", "rest_time")
+
+    if start is None:
+        return dict.fromkeys(names)
+
+    after = run.time >= start
+    time = run.time[after]
+    speed = np.hypot(run.get("vx_world"), run.get("vy_world"))[after]
+    angular_speed = np.abs(run.get("wz_body"))[after]
+    moving = np.flatnonzero((speed >= REST_SPEED) | (angular_speed >= REST_ANGULAR_SPEED))
+    rest = int(moving[-1]) + 1 if moving.size else 0
+
+    if rest >= time.size:
+        return dict(zip(names, (start, float(speed[0]), float(angular_speed[0]), None, None, None)))
+
+    x = run.get("x")[after][: rest + 1]
+    y = run.get("y")[after][: rest + 1]
+    yaw = np.unwrap(run.get("yaw")[after][: rest + 1])
+
+    return {
+        "time": start,
+        "speed": float(speed[0]),
+        "angular_speed": float(angular_speed[0]),
+        "distance": float(np.sum(np.hypot(np.diff(x), np.diff(y)))),
+        "angle": float(np.sum(np.abs(np.diff(yaw)))),
+        "rest_time": float(time[rest] - start),
+    }
+
+
 def loop_report(run) -> dict:
     """The firmware's own account of its control loop."""
 
@@ -135,6 +175,7 @@ def report(run, generic: dict) -> dict:
         "tracking": tracking_report(run, mask),
         "voltage_saturation_fraction": saturation_report(run, mask),
         "loop": loop_report(run),
+        "stop": stop_report(run),
     }
 
 
@@ -231,15 +272,30 @@ def summarize(full: dict) -> None:
         f"saturated {fmt(loop['saturated_iterations'], 0)}"
     )
 
+    stop = full["stop"]
+
+    if stop["time"] is not None:
+        print(
+            f"stop         at {fmt(stop['time'])} s  from {fmt(stop['speed'])} m/s "
+            f"{fmt(stop['angular_speed'], 2)} rad/s  rest after {fmt(stop['distance'], 4)} m "
+            f"{fmt(stop['angle'], 3)} rad {fmt(stop['rest_time'])} s"
+        )
+
 
 def baseline(full: dict) -> dict:
     """What a Micras baseline records beyond the engine's values, with tolerances."""
     pose = full["pose"]["position_error"]
     across = full["tracking"]["across"]
 
+    stop = full["stop"]
+
     return {
         "unbound_ports": (full["unbound_ports"], None),
         "running_time": (full["running_time"], 1.0),
         "max_pose_error": (pose["max"], 0.02),
         "rms_across_error": (across["rms"], 0.003),
+        "stop_speed": (stop["speed"], 0.05),
+        "stopping_distance": (stop["distance"], 0.01),
+        "stopping_angle": (stop["angle"], 0.1),
+        "stopping_time": (stop["rest_time"], 0.1),
     }
