@@ -223,7 +223,7 @@ cmake --build --preset host-release --target sim_turn_designs       # the firmwa
 ```
 
 The firmware checks every turn of two bends when it is compiled, and stops the
-build if one no longer clears the walls; `turn-designs` searches for them again,
+build if one no longer clears the walls; `sim_turn_designs` searches for them again,
 after a change to the robot's outline, the maze or the margins.
 
 ## The gate
