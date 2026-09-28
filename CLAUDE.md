@@ -18,9 +18,10 @@ This is enforced, not hoped for. `just micras check` runs the same scenario
 headless and with a window, with and without a video, and with a bridge nobody
 connects to, and compares each pair of CSVs as bytes (`tools/compare_run.py`).
 
-Baselines are summaries, not recordings. `targets/micras/baselines/v1/`
-holds one `summary.json` per checked run: the hash of `data.csv`, the state
-timeline, and a handful of numbers with their tolerances (`tools/baseline.py`).
+Baselines are summaries, not recordings. Each version under
+`targets/micras/baselines/` holds one `summary.json` per checked run: the hash of
+`data.csv`, the state timeline, and a handful of numbers with their tolerances
+(`tools/baseline.py`).
 On the machine that recorded it the hash matches; on another it will not, because
 the compiler, libm and the MuJoCo build all move the last bits, and the summary is
 what is compared. Two rules:
@@ -37,7 +38,7 @@ Everything is in this repository, in three layers:
 
 ```
 engine/, view/, bridge/, app/   the simulator: knows no robot and no HAL
-hal_host/                       micras_hal implemented on a PC: knows no physics
+hal_host/                       micras_hal implemented on a PC, and chip models: knows no physics
 targets/micras/                 the micromouse: firmware submodule, bindings, robot.toml
 ```
 
@@ -144,7 +145,7 @@ GLFW context current first. Without that pair the run dies with
 `hal_host/` implements every `micras_hal` class the firmware uses on a PC, and
 includes nothing but `micras_hal` headers and its own. `Board` is a registry of
 ports (`GpioPort`, `PwmPort`, `PwmDmaPort`, `AdcPort`, `UartPort`, `FlashPort`,
-`McuPort`, `EncoderPort`, `SamplePort`) **keyed by the address of the Cube handle
+`McuPort`, `EncoderPort`, `SpiPort`) **keyed by the address of the Cube handle
 or GPIO port** that names them, so the firmware's own `target.hpp` is the key:
 `.handle = &htim4` there and `Board::pwm(&htim4, ...)` in a binding reach the same
 port. Nothing in `hal_host` knows a physics engine; the target's bindings connect
@@ -164,11 +165,69 @@ PSC 274 / ARR 250, and so on), because the host `Pwm` and `Timer` compute
 frequencies and duties from those registers.
 
 Of the firmware, everything compiles unchanged except `micras_hal` (replaced by
-`hal_host`) and the proxies of the two SPI chips, `Imu` and `RotarySensor`
-(replaced by `targets/micras/proxy/`): the IMU proxy reads the IMU device's
-samples from a `SamplePort`, the rotary sensor reads `hal::Encoder`.
-`FmacFilter` is left out because nothing uses it and it needs the FMAC.
-`hal::Spi` and `hal::Encoder` exist in `hal_host`; the host SPI is chipless.
+`hal_host`), and `FmacFilter` is left out because nothing uses it and it needs
+the FMAC. The proxies of the SPI chips, `Imu` and `RotarySensor`, are the
+firmware's own, and so is ST's register driver of the LSM6DSV, compiled as C.
+
+### The SPI device slot
+
+A chip on an SPI bus is a `SpiDevice`
+(`hal_host/include/micras/hal/host/spi_device.hpp`): `select()`,
+`exchange(tx, rx)`, `deselect()` and the SPI mode it answers in. A
+binding attaches it with `Board::spi_device(handle, cs_port, cs_pin, device)`,
+**keyed by the bus and the chip select**, because `hspi3` carries the IMU and both
+encoders. The host `Spi` selects the device in `select_device`, routes every
+`transmit`, `receive` and `transmit_receive` to it, and deselects it in
+`unselect_device`, so a register read that the driver makes of two HAL calls is
+one transaction for the chip, as on the bus.
+
+- **The mode is checked on every transfer.** A device whose mode differs from the
+  one `select_device` wrote into the handle is not reached and the firmware reads
+  all ones, as from a chip clocked on the wrong edge. So is a chip select with no
+  device, which is also reported as an unbound port.
+- **`start_transfer` completes on the host clock.** The bytes are exchanged at the
+  start, and the transfer ends when the host clock passes the time its bytes take
+  at the bus's bit rate: the kernel clock the fake Cube layer writes into the
+  handle's `Instance` (125 MHz for SPI3), divided by the baud rate prescaler (32),
+  so the IMU's 17-byte burst takes 34.8 us. `get_transfer` and a `select_device`
+  that finds the bus busy end it through `on_transfer_end`, which raises the chip
+  select and sets `COMPLETE`, as the DMA interrupt does. A `select_device` on a
+  busy bus waits for it on the timer, as the firmware's own does.
+- **Blocking transfers take no time.** Only the timer costs time on the host; the
+  driver's own waits (`sleep_ms`, the encoder's 1 us deselect time) cost what they
+  cost on the robot.
+- **The firmware's objects outlive the run.** `Micras` is a static of the
+  firmware's `main`, destroyed when the process exits, after the target and its
+  chips; the IMU's `Spi` ends its last transfer then. `MicrasTarget::unwire`
+  therefore forgets every port, which detaches the chips.
+
+### The chip models
+
+`hal_host/models/` builds `micras_hal_host_models` (`micras::hal_host_models`,
+namespace `micras::models`): SPI devices that know the slot and nothing else, with
+their own unit tests. The Micras target owns one of each per chip
+(`MicrasChips`) and attaches them to `hspi3` by the chip selects `target.hpp`
+names.
+
+- **`Lsm6dsvModel`**: the 128 registers of the main page with the datasheet
+  defaults (WHO_AM_I 0x70), `SW_POR` and `SW_RESET`, auto-increment under
+  `IF_INC`, SPI mode 3. The binding turns each sample of the engine's `Imu` device
+  back into rad/s and m/s^2 and calls `push_sample`, which encodes it with the
+  **full scale in CTRL6/CTRL8, the one the firmware wrote**, and sets `GDA`/`XLDA`;
+  reading a sensor's output high byte clears its bit, so the burst that reads a
+  sample clears it. A sensor whose ODR is off ignores samples.
+- **`As5047uModel`**: 24-bit frames with the CRC-8 (polynomial 0x1D, initial 0xC4,
+  final XOR 0xFF) checked on every frame, answers pipelined by one frame, the
+  volatile registers the firmware writes and reads back (DISABLE, ZPOSM, ZPOSL,
+  SETTINGS1 to 3, ECC), ERRFL with the CRC and framing error bits, SPI mode 1. The
+  position is not modeled: it reaches the firmware through the timer encoder, as
+  on the robot.
+
+Two timings follow from the real drivers. The `Imu` reads the burst it started
+one `update()` earlier, so a sample reaches the firmware one loop after the
+update that asked for it. Its constructor waits 10 ms, then 30 ms after the
+software power-on reset, so the robot exists, and INIT starts, 40 ms into the
+run.
 
 ## The robot description
 
@@ -235,6 +294,11 @@ tick, the simulated time, the body pose and velocity. Then the robot's ground
 truth columns, then the firmware's own monitoring variables, then each device's
 columns. Two sources naming the same column is an error at the first row.
 
+The first row is the first one due once every column source is ready
+(`ColumnSource::ready`). The firmware's variables exist only once its robot is
+constructed, and the constructor takes the IMU's 40 ms of start-up waits, so
+Micras's CSV starts at tick 320, not at tick 1.
+
 - A MuJoCo free joint splits its six velocity dofs across two frames, so the
   linear columns are `vx_world`, `vy_world`, `vz_world` and the angular one is
   `wz_body`. `v_forward` is the world linear velocity projected on the body
@@ -293,7 +357,7 @@ only with intent**, in the firmware's own style, and only with changes that make
 sense on the real robot too. The simulator needs three accessors the firmware
 keeps for it: `Micras::get_instance()`, `get_variables()` and `get_state()`, for
 the variable columns, the state events and the stop conditions. Nothing else in
-the simulator reaches into the firmware.
+the simulator reaches into the firmware: every proxy is the firmware's own.
 
 ## Style
 
@@ -306,10 +370,11 @@ why. `just lint` is clean and stays clean.
 
 ## State of the port
 
-The firmware runs on the host HAL end to end. Every proxy that
-`Micras::check_initialization` checks comes up, so INIT reaches IDLE on the first
-tick. A button press starts an exploration through the firmware's own paths. The
-checked runs end with no unbound port, no watchdog expiry and no emergency stop.
+The firmware runs on the host HAL end to end, its SPI chip drivers included.
+Every proxy that `Micras::check_initialization` checks comes up: the IMU's
+start-up waits take 40 ms, and INIT reaches IDLE on the tick after it starts. A
+button press starts an exploration through the firmware's own paths. The checked
+runs end with no unbound port, no watchdog expiry and no emergency stop.
 `--flash` carries a saved map into the next run.
 
 **The whole contest runs clean on ten mazes**, which `just micras contest` shows: a

@@ -240,12 +240,12 @@ view/            window, panel, overlay, video
 bridge/          WebSocket server and monitor bridge
 app/             CLI and application wiring, the Target interface
 hal_host/        micras_hal implemented on a PC
+  models/          SPI chip models: the LSM6DSV IMU and the AS5047U encoders
 tests/           the engine's unit tests, on a tiny robot of their own
 tools/           analysis, baselines, run health and byte comparison
 targets/micras/  the micromouse:
   MicrasFirmware/    submodule
   cube/              the Cube layer the firmware includes, by hand
-  proxy/             the two proxies replaced: the IMU and the rotary sensors
   src/               target, bindings, variables
   robot.toml         the physical description
   scenarios/         idle, explore, explore_link, explore_solve(_all), solve(_all)
