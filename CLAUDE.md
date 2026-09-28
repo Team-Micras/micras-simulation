@@ -4,7 +4,9 @@
 invariants that hold it together, the subtleties that look like bugs and are
 not, and the measurements behind the numbers in `targets/micras/robot.toml`.
 
-Linux only, by decision. `just` is the entry point; there is no Makefile.
+Linux only, by decision. CMake is the entry point: presets configure, and every
+recipe is a CMake target over a bash script that takes its paths as arguments, so
+no script guesses a build layout. There is no task runner.
 
 ## The rule everything else serves
 
@@ -14,12 +16,13 @@ the firmware's view of the world depend on wall time, on a window being open, on
 a client being connected, or on how fast the machine is. Noise is part of the
 world and is seeded: `--seed` picks the stream, `--ideal` turns it off.
 
-This is enforced, not hoped for. `just micras check` runs the same scenario
-headless and with a window, with and without a video, and with a bridge nobody
-connects to, and compares each pair of CSVs as bytes (`tools/compare_run.py`).
+This is enforced, not hoped for. `micras_sim_check` runs the toy target's
+scenario twice, headless and with a window, with a video, and with a bridge nobody
+connects to, and compares each run with the plain one as bytes
+(`scripts/check_invariance.sh`, `tools/compare_run.py`).
 
 Baselines are summaries, not recordings. Each version under
-`targets/micras/baselines/` holds one `summary.json` per checked run: the hash of
+`targets/<robot>/baselines/` holds one `summary.json` per checked run: the hash of
 `data.csv`, the state timeline, and a handful of numbers with their tolerances
 (`tools/baseline.py`).
 On the machine that recorded it the hash matches; on another it will not, because
@@ -28,7 +31,8 @@ what is compared. Two rules:
 
 - **A refactoring must not move a byte.** On one machine, a refactoring leaves
   the hash where it was. If it moves, the refactoring is wrong.
-- **Never re-record to make a difference go away.** `record-baseline` refuses to
+- **Never re-record to make a difference go away.** `sim_record_baseline` (and
+  the toy's `micras_sim_toy_record_baseline`) refuses to
   overwrite a version; a change of behaviour is a new version, with the reason in
   the commit.
 
@@ -39,11 +43,13 @@ Everything is in this repository, in three layers:
 ```
 engine/, view/, bridge/, app/   the simulator: knows no robot and no HAL
 hal_host/                       micras_hal implemented on a PC, and chip models: knows no physics
+targets/toy/                    the reference target: no HAL, every feature of the engine
 targets/micras/                 the micromouse: firmware submodule, bindings, robot.toml
 ```
 
-`just check-generic` greps everything outside `targets/` for names that belong to
-a robot and fails on any. The root CMakeLists adds every folder of
+`micras_sim_check_generic` greps everything outside `targets/` for names that
+belong to a robot and fails on any (`hal_host/`, the documentation and the files
+shared with micras-lib are not scanned). The root CMakeLists adds every folder of
 `targets/` that has a CMakeLists; nothing above `targets/` names one.
 
 Four engine libraries. `micras_sim_app` sits on top; `micras_sim_view` links only
@@ -67,7 +73,7 @@ target with no HAL yields on it directly and needs no pointer kept from `wire()`
 The README lists the headers a target may include; they are the public API.
 
 `MICRAS_SIM_VIEWER`, `MICRAS_SIM_VIDEO`, `MICRAS_SIM_BRIDGE`, `MICRAS_SIM_TESTS`
-and `MICRAS_SIM_TARGETS` must all still compile when OFF; `just check-options`
+and `MICRAS_SIM_TARGETS` must all still compile when OFF; `micras_sim_check_options`
 configures every one of them off, because stale stubs are otherwise only found by
 whoever first tries to build without a GPU. The first three are ON by default; the
 tests and the robot targets are ON only when the simulator is the top-level project.
@@ -246,6 +252,34 @@ update that asked for it. Its constructor waits 10 ms, then 30 ms after the
 software power-on reset, so the robot exists, and INIT starts, 40 ms into the
 run.
 
+## The toy target
+
+`targets/toy/` exists so that the simulator is checked without any real robot:
+it uses every device, the firmware thread's handover (its program yields a tick
+on the thread it is given, once per 1 ms loop), a command line option, the
+panel, the overlay and the scenario hooks, and it is what the invariance checks
+and the simulator's baseline run on. It has no HAL: its devices write into a
+plain struct its program reads, which is safe because the two threads never run
+at once. Its `robot.toml` is `tests/models/tiny_robot.toml` with the name, a
+125 us timestep and a second wall sensor, since the wall sensors fire in two
+groups. Its baseline runs start from their output directory with a copy of the
+scenario, so a summary records no machine's paths.
+
+## Presets, recipes and sanitizers
+
+`host` is Debug with the address and undefined behavior sanitizers, and is where
+the tests and `micras_sim_check` run; `host-release` (RelWithDebInfo) is for runs,
+the contest and the Micras baselines, whose recorded runs it reproduces byte for
+byte; `host-ci` is `host` with warnings as errors. A run's bytes do not
+depend on the build type (a Debug sanitized toy run equals the RelWithDebInfo
+baseline). The invariance check turns leak detection off for the window and the
+video runs only: the system's GL and font libraries keep their caches until exit.
+
+The simulator's checks (`cmake/checks.cmake`, `scripts/`) and a robot's recipes
+(`targets/<robot>/CMakeLists.txt`, `targets/<robot>/scripts/`) exist only when the
+simulator is the top-level project, and every script takes its paths as
+arguments.
+
 ## The robot description
 
 `targets/micras/robot.toml` is the robot's physical truth, written by hand from
@@ -257,7 +291,7 @@ engine generates the MJCF from it (`robot_mjcf`) and composes it with the arena
 `<out>/model.xml` and hashed into `meta.json`.
 
 `robot.hpp` in the firmware is the firmware's *belief*, and the two are never
-forced equal. `just micras robot-report` prints them side by side. Today they
+forced equal. `sim_robot_report` prints them side by side. Today they
 differ in the emitter half angle (3 deg datasheet against 5.2 deg with mounting
 tolerance), the gyro noise (datasheet against a third more), the maze wall
 thickness (12 mm arena against 12.6 mm) and the front length (53.5 mm board
@@ -354,7 +388,7 @@ frame in `on_after_tick`, through a bounded queue and a sender thread, so a
 client that stops reading loses frames (`bridge_dropped_frames`) instead of
 stalling the run. A port already taken is a warning, not a failure.
 
-Note what the gate proves: `check-monitor` compares a bridged run **with nobody
+Note what the gate proves: the bridge check compares a bridged run **with nobody
 connected** against a plain one. A run a client talks to is marked `interactive`
 and is not reproducible, by definition.
 
@@ -396,7 +430,7 @@ table's `operator[]` is a lookup, not an unchecked access.
 Doxygen on every declaration. **No comments inside function bodies** — if
 something needs explaining, it goes in an `@note` on the declaration, where a
 reader finds it before reading the code. Every `NOLINT` names its check and says
-why. `just lint` is clean and stays clean.
+why. `micras_sim_lint` is clean and stays clean.
 
 ## State of the port
 
@@ -407,10 +441,10 @@ button press starts an exploration through the firmware's own paths. The checked
 runs end with no unbound port, no watchdog expiry and no emergency stop.
 `--flash` carries a saved map into the next run.
 
-**The whole contest runs clean on ten mazes**, which `just micras contest` shows: a
+**The whole contest runs clean on ten mazes**, which `sim_contest` shows: a
 short press explores, the firmware comes back to the start on its own and saves the
 map, and a long press then plans and runs the fastest route with the fan.
-`just micras contest explore_solve_all` does the same with every switch on (fan,
+`sim_contest_all` does the same with every switch on (fan,
 racing line, boost, risky), and there too every maze is clean; japan2017ef and apec2016,
 whose boards grazed walls while the line through the risky turns kept only 8 mm, are clean
 on eight seeds of the fast run. The mazes are maze1, maze2, apec2016 to apec2019,
@@ -435,7 +469,7 @@ firmware commit that made it:
   diagonal sensors meet the walls square on.
 - **Turns of two bends inside one cell**, on a planner of labels that only drops one
   when another is as fast for every route. The planner advances by edges, and
-  `just micras turn-designs` designs the turns, which the firmware's build checks.
+  `sim_turn_designs` designs the turns, which the firmware's build checks.
 - **Turns are braked and accelerated through as their curvature allows.**
 - **The tyres slide to the outside of a curve**, 4.8 mm/s per m/s^2 of lateral
   acceleration. The localizer predicts it and the controller points into it.

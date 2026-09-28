@@ -22,6 +22,7 @@ option(MICRAS_SIM_BRIDGE "Build the WebSocket bridge to micras-monitor" ON)
 option(MICRAS_SIM_TESTS "Build the unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(MICRAS_SIM_TARGETS "Build the robot targets of targets/" ${PROJECT_IS_TOP_LEVEL})
 option(MICRAS_SIM_WERROR "Treat the simulator's compiler warnings as errors" OFF)
+option(MICRAS_SIM_EXACT "Make the baseline checks also require byte identical runs" OFF)
 
 # A project that adds the simulator runs its tools and names its mazes.
 set(MICRAS_SIM_TOOLS_DIR "${PROJECT_SOURCE_DIR}/tools" CACHE INTERNAL "The simulator's analysis and baseline tools")
@@ -177,7 +178,7 @@ if(MICRAS_SIM_TARGETS)
 endif()
 
 ###############################################################################
-## Format and lint: the simulator's own, so a project that adds it keeps its own
+## Format, lint and checks: the simulator's own, so a project that adds it keeps its own
 ###############################################################################
 
 if(PROJECT_IS_TOP_LEVEL)
@@ -212,4 +213,5 @@ if(PROJECT_IS_TOP_LEVEL)
 
     include(cmake/lint.cmake)
     micras_sim_add_lint_targets(FORMAT ${HARNESS_SOURCES} ${HARNESS_HEADERS} LINT ${HARNESS_LINTED})
+    include(cmake/checks.cmake)
 endif()

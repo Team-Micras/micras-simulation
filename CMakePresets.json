@@ -2,7 +2,7 @@
     "version": 6,
     "cmakeMinimumRequired": {
         "major": 3,
-        "minor": 25,
+        "minor": 28,
         "patch": 0
     },
     "configurePresets": [
@@ -18,48 +18,66 @@
             }
         },
         {
-            "name": "default",
-            "displayName": "RelWithDebInfo",
+            "name": "host",
+            "displayName": "Debug, with the address and undefined behavior sanitizers",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+                "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+                "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
+            }
+        },
+        {
+            "name": "host-release",
+            "displayName": "RelWithDebInfo, for runs and baselines",
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo"
             }
         },
         {
-            "name": "debug",
-            "displayName": "Debug",
-            "inherits": "base",
+            "name": "host-ci",
+            "displayName": "The CI's: host, with warnings as errors",
+            "inherits": "host",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
-            "name": "release",
-            "displayName": "Release",
-            "inherits": "base",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
+                "MICRAS_SIM_WERROR": "ON"
             }
         }
     ],
     "buildPresets": [
         {
-            "name": "default",
-            "configurePreset": "default"
+            "name": "host",
+            "configurePreset": "host"
         },
         {
-            "name": "debug",
-            "configurePreset": "debug"
+            "name": "host-release",
+            "configurePreset": "host-release"
         },
         {
-            "name": "release",
-            "configurePreset": "release"
+            "name": "host-ci",
+            "configurePreset": "host-ci"
         }
     ],
     "testPresets": [
         {
-            "name": "default",
-            "configurePreset": "default",
+            "name": "host",
+            "configurePreset": "host",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "host-release",
+            "configurePreset": "host-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "host-ci",
+            "configurePreset": "host-ci",
             "output": {
                 "outputOnFailure": true
             }
