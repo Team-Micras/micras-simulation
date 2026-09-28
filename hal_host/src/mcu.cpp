@@ -82,4 +82,8 @@ bool Mcu::was_reset_by_watchdog() {
 bool Mcu::is_cpu_frequency_supported() {
     return true;
 }
+
+uint32_t Mcu::get_boot_seed() {
+    return static_cast<uint32_t>(host::Clock::instance().now());
+}
 }  // namespace micras::hal
