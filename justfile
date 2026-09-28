@@ -35,21 +35,21 @@ test: build
 
 # Reformat every source in place.
 format: configured
-    cmake --build {{build_dir}} --target format
+    cmake --build {{build_dir}} --target micras_sim_format
 
 # Fail if any source is not clang-format clean.
 format-check: configured
-    cmake --build {{build_dir}} --target format-check
+    cmake --build {{build_dir}} --target micras_sim_format_check
 
 # clang-tidy over every source.
 lint: build
-    cmake --build {{build_dir}} --target lint
+    cmake --build {{build_dir}} --target micras_sim_lint
 
 # Configure every optional subsystem off, so the options stay buildable.
 check-options:
     cmake -S . -B {{build_dir}}-minimal -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DCMAKE_C_COMPILER=gcc-15 -DCMAKE_CXX_COMPILER=g++-15 \
-        -DMICRAS_VIEWER=OFF -DMICRAS_VIDEO=OFF -DMICRAS_BRIDGE=OFF -DMICRAS_TESTS=OFF > /dev/null
+        -DMICRAS_SIM_VIEWER=OFF -DMICRAS_SIM_VIDEO=OFF -DMICRAS_SIM_BRIDGE=OFF -DMICRAS_SIM_TESTS=OFF > /dev/null
     cmake --build {{build_dir}}-minimal > /dev/null
 
 # Fail if anything outside targets/ names a specific robot.

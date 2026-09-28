@@ -4,7 +4,7 @@
 
 #include "micras/sim/view/control_panel.hpp"
 
-#ifdef MICRAS_VIEWER
+#ifdef MICRAS_SIM_VIEWER
 
     #include <algorithm>
     #include <format>
@@ -216,10 +216,10 @@ void ControlPanel::draw_plots() {
 }
 }  // namespace micras::sim
 
-#else  // MICRAS_VIEWER
+#else  // MICRAS_SIM_VIEWER
 
 namespace micras::sim {
 ControlPanel::~ControlPanel() = default;
 }  // namespace micras::sim
 
-#endif  // MICRAS_VIEWER
+#endif  // MICRAS_SIM_VIEWER

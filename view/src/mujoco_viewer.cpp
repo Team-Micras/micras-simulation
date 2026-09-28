@@ -4,7 +4,7 @@
 
 #include "micras/sim/view/mujoco_viewer.hpp"
 
-#ifdef MICRAS_VIEWER
+#ifdef MICRAS_SIM_VIEWER
 
     #include <algorithm>
     #include <format>
@@ -405,14 +405,14 @@ void MujocoViewer::on_scroll(double offset) {
 }
 }  // namespace micras::sim
 
-#else  // MICRAS_VIEWER
+#else  // MICRAS_SIM_VIEWER
 
 namespace micras::sim {
 std::unique_ptr<MujocoViewer> MujocoViewer::create(
     MujocoWorld& /*world*/, PanelSpec /*panel*/, const VariableSource* /*variables*/, const ViewerConfig& /*config*/,
     std::string& error
 ) {
-    error = "this binary was built with -DMICRAS_VIEWER=OFF";
+    error = "this binary was built with -DMICRAS_SIM_VIEWER=OFF";
     return nullptr;
 }
 
@@ -433,4 +433,4 @@ void MujocoViewer::on_after_tick(const Simulation& /*simulation*/) { }
 void MujocoViewer::on_finish(const Simulation& /*simulation*/) { }
 }  // namespace micras::sim
 
-#endif  // MICRAS_VIEWER
+#endif  // MICRAS_SIM_VIEWER

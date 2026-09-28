@@ -33,7 +33,7 @@ find_library(MUJOCO_LIBRARY mujoco PATHS "${MUJOCO_ROOT}/lib" NO_DEFAULT_PATH NO
 
 # The release's include directory also carries the ImGui and ImPlot of its own tools,
 # newer than the ones the viewer builds with, so only its mujoco/ headers are exposed.
-set(MUJOCO_INCLUDE "${CMAKE_BINARY_DIR}/mujoco_include")
+set(MUJOCO_INCLUDE "${PROJECT_BINARY_DIR}/mujoco_include")
 file(MAKE_DIRECTORY "${MUJOCO_INCLUDE}")
 file(CREATE_LINK "${MUJOCO_ROOT}/include/mujoco" "${MUJOCO_INCLUDE}/mujoco" SYMBOLIC)
 

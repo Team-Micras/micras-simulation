@@ -21,8 +21,8 @@ add_executable(micras_sim_tests
     unit/simulation_test.cpp
 )
 
-# The bridge tests need the real server, which -DMICRAS_BRIDGE=OFF replaces by a stub.
-if(MICRAS_BRIDGE)
+# The bridge tests need the real server, which -DMICRAS_SIM_BRIDGE=OFF replaces by a stub.
+if(MICRAS_SIM_BRIDGE)
     target_sources(micras_sim_tests PRIVATE unit/web_socket_server_test.cpp)
 endif()
 

@@ -6,7 +6,7 @@
 
 #include "micras/sim/view/video_recorder.hpp"
 
-#ifdef MICRAS_VIDEO
+#ifdef MICRAS_SIM_VIDEO
 
     #include <algorithm>
     #include <array>
@@ -361,14 +361,14 @@ void VideoRecorder::capture(const std::string& labels, const std::string& values
 }
 }  // namespace micras::sim
 
-#else  // MICRAS_VIDEO
+#else  // MICRAS_SIM_VIDEO
 
 namespace micras::sim {
 std::unique_ptr<VideoRecorder> VideoRecorder::create(
     MujocoWorld& /*world*/, const VideoConfig& /*config*/, OverlaySpec /*overlay*/, const VariableSource* /*variables*/,
     std::string& error
 ) {
-    error = "this binary was built with -DMICRAS_VIDEO=OFF";
+    error = "this binary was built with -DMICRAS_SIM_VIDEO=OFF";
     return nullptr;
 }
 
@@ -377,4 +377,4 @@ VideoRecorder::~VideoRecorder() = default;
 void VideoRecorder::on_after_tick(const Simulation& /*simulation*/) { }
 }  // namespace micras::sim
 
-#endif  // MICRAS_VIDEO
+#endif  // MICRAS_SIM_VIDEO

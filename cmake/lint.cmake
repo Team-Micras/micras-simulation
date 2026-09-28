@@ -15,16 +15,16 @@ function(micras_add_lint_targets)
         return()
     endif()
 
-    add_custom_target(format
+    add_custom_target(micras_sim_format
         COMMAND "${CLANG_FORMAT}" -style=file -i ${SOURCES}
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Formatting harness sources"
         VERBATIM USES_TERMINAL
     )
 
-    add_custom_target(format-check
+    add_custom_target(micras_sim_format_check
         COMMAND "${CLANG_FORMAT}" -style=file --dry-run --Werror ${SOURCES}
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Checking harness formatting"
         VERBATIM USES_TERMINAL
     )
@@ -34,12 +34,12 @@ function(micras_add_lint_targets)
     # Anchored so the pinned firmware submodule headers are never linted.
     # The firmware computes the shape of every turn in a constant expression, which takes more
     # evaluation steps than clang allows by default; the step limit is the firmware's own lint's.
-    add_custom_target(lint
+    add_custom_target(micras_sim_lint
         COMMAND "${CLANG_TIDY}" --quiet --warnings-as-errors=*
-                "--header-filter=^${CMAKE_SOURCE_DIR}/(engine|view|bridge|app|tests|targets/[a-z_]+/(include|config|tests))/"
+                "--header-filter=^${PROJECT_SOURCE_DIR}/(engine|view|bridge|app|tests|targets/[a-z_]+/(include|config|tests))/"
                 --extra-arg=-fconstexpr-steps=1000000000
-                -p "${CMAKE_BINARY_DIR}" ${SOURCES}
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                -p "${PROJECT_BINARY_DIR}" ${SOURCES}
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Linting harness sources"
         VERBATIM USES_TERMINAL
     )

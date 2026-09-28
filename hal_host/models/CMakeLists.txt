@@ -16,7 +16,7 @@ target_include_directories(micras_hal_host_models PUBLIC
 target_compile_features(micras_hal_host_models PUBLIC cxx_std_23)
 target_compile_options(micras_hal_host_models PRIVATE -Wall -Wextra)
 
-if(MICRAS_TESTS)
+if(MICRAS_SIM_TESTS)
     include(GoogleTest)
 
     # ST's register driver header names the registers the tests address, so a model

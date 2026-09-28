@@ -1,19 +1,30 @@
-cmake_minimum_required(VERSION 3.25)
-project(micras_simulation LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.28...4.4)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+# Only a build of the simulator itself gets a default build type; a project that adds it keeps its own.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT DEFINED CMAKE_BUILD_TYPE
+   AND NOT DEFINED ENV{CMAKE_BUILD_TYPE})
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type")
 endif()
 
-option(MICRAS_VIDEO "Build the offscreen EGL video recorder" ON)
-option(MICRAS_VIEWER "Build the live GLFW viewer" ON)
-option(MICRAS_BRIDGE "Build the WebSocket bridge to micras-monitor" ON)
-option(MICRAS_TESTS "Build the unit tests" ON)
+project(micras_simulation LANGUAGES CXX)
+
+if(PROJECT_IS_TOP_LEVEL)
+    set(CMAKE_CXX_STANDARD 23)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
+
+option(MICRAS_SIM_VIDEO "Build the offscreen EGL video recorder" ON)
+option(MICRAS_SIM_VIEWER "Build the live GLFW viewer" ON)
+option(MICRAS_SIM_BRIDGE "Build the WebSocket bridge to micras-monitor" ON)
+option(MICRAS_SIM_TESTS "Build the unit tests" ${PROJECT_IS_TOP_LEVEL})
+option(MICRAS_SIM_TARGETS "Build the robot targets of targets/" ${PROJECT_IS_TOP_LEVEL})
+
+# A project that adds the simulator runs its tools and names its mazes.
+set(MICRAS_SIM_TOOLS_DIR "${PROJECT_SOURCE_DIR}/tools" CACHE INTERNAL "The simulator's analysis and baseline tools")
+set(MICRAS_SIM_MAZES_DIR "${PROJECT_SOURCE_DIR}/engine/arenas/maze/mazes" CACHE INTERNAL "The simulator's mazes")
 
 include(cmake/mujoco.cmake)
 include(cmake/third_party.cmake)
@@ -67,7 +78,7 @@ add_library(micras::sim_view ALIAS micras_sim_view)
 target_include_directories(micras_sim_view PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/view/include")
 target_link_libraries(micras_sim_view PUBLIC micras_sim_engine)
 
-if(MICRAS_VIDEO)
+if(MICRAS_SIM_VIDEO)
     set(OpenGL_GL_PREFERENCE GLVND)
     find_package(OpenGL COMPONENTS OpenGL EGL)
 
@@ -77,10 +88,10 @@ if(MICRAS_VIDEO)
         target_link_libraries(micras_sim_view PRIVATE EGL GL)
     endif()
 
-    target_compile_definitions(micras_sim_view PRIVATE MICRAS_VIDEO)
+    target_compile_definitions(micras_sim_view PRIVATE MICRAS_SIM_VIDEO)
 endif()
 
-if(MICRAS_VIEWER)
+if(MICRAS_SIM_VIEWER)
     find_package(glfw3 QUIET)
 
     if(glfw3_FOUND)
@@ -90,8 +101,8 @@ if(MICRAS_VIEWER)
         target_link_libraries(micras_sim_view PRIVATE "${GLFW_LIBRARY}")
     endif()
 
-    target_link_libraries(micras_sim_view PRIVATE imgui)
-    target_compile_definitions(micras_sim_view PRIVATE MICRAS_VIEWER)
+    target_link_libraries(micras_sim_view PRIVATE micras_sim_imgui)
+    target_compile_definitions(micras_sim_view PRIVATE MICRAS_SIM_VIEWER)
 endif()
 
 add_library(micras_sim_bridge STATIC
@@ -102,9 +113,9 @@ add_library(micras::sim_bridge ALIAS micras_sim_bridge)
 target_include_directories(micras_sim_bridge PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/bridge/include")
 target_link_libraries(micras_sim_bridge PUBLIC micras_sim_engine)
 
-if(MICRAS_BRIDGE)
+if(MICRAS_SIM_BRIDGE)
     target_link_libraries(micras_sim_bridge PRIVATE ixwebsocket)
-    target_compile_definitions(micras_sim_bridge PRIVATE MICRAS_BRIDGE)
+    target_compile_definitions(micras_sim_bridge PRIVATE MICRAS_SIM_BRIDGE)
 endif()
 
 # The application is the only layer that knows a run can have a window, so it is
@@ -119,13 +130,16 @@ add_library(micras::sim_app ALIAS micras_sim_app)
 target_include_directories(micras_sim_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/app/include")
 target_link_libraries(micras_sim_app PUBLIC micras_sim_engine micras_sim_view micras_sim_bridge)
 target_compile_definitions(micras_sim_app PRIVATE
-    MICRAS_SIM_MAZES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/engine/arenas/maze/mazes"
+    MICRAS_SIM_MAZES_DIR="${MICRAS_SIM_MAZES_DIR}"
     MICRAS_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
     MICRAS_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
     MICRAS_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 )
 
+# The public headers need C++23, so a project that adds the simulator gets it with them.
 foreach(TARGET micras_sim_engine micras_sim_view micras_sim_bridge micras_sim_app)
+    target_compile_features(${TARGET} PUBLIC cxx_std_23)
+    set_target_properties(${TARGET} PROPERTIES CXX_EXTENSIONS OFF)
     target_compile_options(${TARGET} PRIVATE -Wall -Wextra)
 endforeach()
 
@@ -143,51 +157,52 @@ file(GLOB MICRAS_SIM_HAL_HOST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_
 ## Tests, chip models and robot targets
 ###############################################################################
 
-if(MICRAS_TESTS)
+if(MICRAS_SIM_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
 
-# The SPI chips a robot's bindings attach to the host HAL's buses: micras::hal_host_models.
-add_subdirectory(hal_host/models)
-
 # Every robot target is a folder of targets/ with its own CMakeLists.txt.
-file(GLOB MICRAS_SIM_TARGET_DIRS LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/targets/*")
+if(MICRAS_SIM_TARGETS)
+    file(GLOB MICRAS_SIM_TARGET_DIRS LIST_DIRECTORIES true CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/targets/*")
 
-foreach(target_dir IN LISTS MICRAS_SIM_TARGET_DIRS)
-    if(EXISTS "${target_dir}/CMakeLists.txt")
-        add_subdirectory("${target_dir}")
-    endif()
-endforeach()
+    foreach(target_dir IN LISTS MICRAS_SIM_TARGET_DIRS)
+        if(EXISTS "${target_dir}/CMakeLists.txt")
+            add_subdirectory("${target_dir}")
+        endif()
+    endforeach()
+endif()
 
 ###############################################################################
-## Format and lint
+## Format and lint: the simulator's own, so a project that adds it keeps its own
 ###############################################################################
 
-file(GLOB_RECURSE HARNESS_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/engine/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_host/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/bridge/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/app/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/cube/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/tests/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/tools/*.cpp"
-)
-file(GLOB_RECURSE HARNESS_HEADERS CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/engine/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_host/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/bridge/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/app/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/include/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/tests/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_host/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/cube/*.h"
-)
+if(PROJECT_IS_TOP_LEVEL)
+    file(GLOB_RECURSE HARNESS_SOURCES CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/engine/*.cpp"
+        "${PROJECT_SOURCE_DIR}/hal_host/*.cpp"
+        "${PROJECT_SOURCE_DIR}/view/*.cpp"
+        "${PROJECT_SOURCE_DIR}/bridge/*.cpp"
+        "${PROJECT_SOURCE_DIR}/app/*.cpp"
+        "${PROJECT_SOURCE_DIR}/tests/*.cpp"
+        "${PROJECT_SOURCE_DIR}/targets/*/src/*.cpp"
+        "${PROJECT_SOURCE_DIR}/targets/*/cube/*.cpp"
+        "${PROJECT_SOURCE_DIR}/targets/*/tests/*.cpp"
+        "${PROJECT_SOURCE_DIR}/targets/*/tools/*.cpp"
+    )
+    file(GLOB_RECURSE HARNESS_HEADERS CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/engine/*.hpp"
+        "${PROJECT_SOURCE_DIR}/hal_host/*.hpp"
+        "${PROJECT_SOURCE_DIR}/view/*.hpp"
+        "${PROJECT_SOURCE_DIR}/bridge/*.hpp"
+        "${PROJECT_SOURCE_DIR}/app/*.hpp"
+        "${PROJECT_SOURCE_DIR}/tests/*.hpp"
+        "${PROJECT_SOURCE_DIR}/targets/*/include/*.hpp"
+        "${PROJECT_SOURCE_DIR}/targets/*/tests/*.hpp"
+        "${PROJECT_SOURCE_DIR}/hal_host/*.h"
+        "${PROJECT_SOURCE_DIR}/targets/*/cube/*.h"
+    )
 
-include(cmake/lint.cmake)
-micras_add_lint_targets(${HARNESS_SOURCES} ${HARNESS_HEADERS})
+    include(cmake/lint.cmake)
+    micras_add_lint_targets(${HARNESS_SOURCES} ${HARNESS_HEADERS})
+endif()

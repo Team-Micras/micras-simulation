@@ -6,7 +6,7 @@
 
 #include "micras/sim/bridge/web_socket_server.hpp"
 
-#ifdef MICRAS_BRIDGE
+#ifdef MICRAS_SIM_BRIDGE
 
     #include <condition_variable>
     #include <deque>
@@ -171,7 +171,7 @@ uint64_t WebSocketServer::dropped_frames() const {
 }
 }  // namespace micras::sim
 
-#else  // MICRAS_BRIDGE
+#else  // MICRAS_SIM_BRIDGE
 
 namespace micras::sim {
 /**
@@ -186,7 +186,7 @@ WebSocketServer::~WebSocketServer() = default;
 void WebSocketServer::set_on_binary(BinaryHandler /*handler*/) { }
 
 bool WebSocketServer::start(int /*port*/, std::string& error) {
-    error = "this binary was built with -DMICRAS_BRIDGE=OFF";
+    error = "this binary was built with -DMICRAS_SIM_BRIDGE=OFF";
     return false;
 }
 
@@ -199,4 +199,4 @@ uint64_t WebSocketServer::dropped_frames() const {
 }
 }  // namespace micras::sim
 
-#endif  // MICRAS_BRIDGE
+#endif  // MICRAS_SIM_BRIDGE

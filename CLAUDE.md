@@ -62,10 +62,23 @@ name, firmware commit, loop period, options, robot file, ground truth columns an
 program, and `wire()`, which binds its devices to the host ports and returns what
 it adds to the run (`Wiring`: columns, variables, panel, overlay, scenario hooks). Its `main` is one call to `micras::sim::run`.
 
-`MICRAS_VIEWER`, `MICRAS_VIDEO`, `MICRAS_BRIDGE` and `MICRAS_TESTS` are all ON by
-default and all must still compile when OFF; `just check-options` configures
-every one of them off, because stale stubs are otherwise only found by whoever
-first tries to build without a GPU.
+`MICRAS_SIM_VIEWER`, `MICRAS_SIM_VIDEO`, `MICRAS_SIM_BRIDGE`, `MICRAS_SIM_TESTS`
+and `MICRAS_SIM_TARGETS` must all still compile when OFF; `just check-options`
+configures every one of them off, because stale stubs are otherwise only found by
+whoever first tries to build without a GPU. The first three are ON by default; the
+tests and the robot targets are ON only when the simulator is the top-level project.
+
+### Added to another project
+
+A project can add the simulator with `add_subdirectory(... EXCLUDE_FROM_ALL)` and
+build its own target against `micras::sim_app`. Nothing leaks into it: the style
+targets are the simulator's own (`micras_sim_format`, `micras_sim_format_check`,
+`micras_sim_lint`) and exist only at top level; the build type is defaulted only at
+top level, and never forced; the dependencies' switches are normal variables, not
+cache entries; paths are anchored to `PROJECT_SOURCE_DIR`/`PROJECT_BINARY_DIR`; the
+engine libraries require C++23 of whoever links them; the tests and `targets/` are
+off. `MICRAS_SIM_TOOLS_DIR` and `MICRAS_SIM_MAZES_DIR` (internal cache variables)
+name the tools and the mazes for the project's own recipes.
 
 ### The run loop
 

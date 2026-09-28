@@ -18,7 +18,7 @@ namespace micras::sim {
  * @brief Serves binary frames to whoever connects, and hands back what they send.
  *
  * @note A facade on purpose: it keeps IXWebSocket out of every header, and lets
- *       -DMICRAS_BRIDGE=OFF build a stub in its place. Callbacks arrive on the
+ *       -DMICRAS_SIM_BRIDGE=OFF build a stub in its place. Callbacks arrive on the
  *       server's own threads.
  */
 class WebSocketServer {
