@@ -151,11 +151,39 @@ inline constexpr uint32_t SPI_PHASE_2EDGE{0x1U << 24U};
 ///@}
 
 /**
+ * @brief Dividers of the SPI kernel clock, from 2 to 256, in the bits the vendor puts them.
+ */
+///@{
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_2{0x00000000U};
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_4{0x10000000U};
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_8{0x20000000U};
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_16{0x30000000U};
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_32{0x40000000U};
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_64{0x50000000U};
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_128{0x60000000U};
+inline constexpr uint32_t SPI_BAUDRATEPRESCALER_256{0x70000000U};
+
+///@}
+
+/**
+ * @brief The registers of an SPI bus the host backend models.
+ *
+ * @note kernel_clock is not a register: it is the frequency the bus's kernel
+ *       clock runs at, which on the chip comes from the clock tree the init
+ *       functions configure. The fake init function writes it, and the bit
+ *       rate is that divided by the prescaler.
+ */
+struct SPI_TypeDef {
+    uint32_t kernel_clock;
+};
+
+/**
  * @brief Configuration of an SPI bus, as the init function fills it.
  */
 struct SPI_InitTypeDef {
     uint32_t CLKPolarity;
     uint32_t CLKPhase;
+    uint32_t BaudRatePrescaler;
 };
 
 /**
@@ -170,6 +198,7 @@ enum HAL_SPI_StateTypeDef : uint8_t {
  * @brief An SPI handle.
  */
 struct SPI_HandleTypeDef {
+    SPI_TypeDef*         Instance;
     SPI_InitTypeDef      Init;
     HAL_SPI_StateTypeDef State;
 };

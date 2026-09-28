@@ -6,6 +6,7 @@
 #include <bit>
 #include <format>
 #include <map>
+#include <tuple>
 #include <utility>
 
 #include "micras/hal/host/board.hpp"
@@ -18,6 +19,11 @@ namespace {
 using Key = std::pair<const void*, uint32_t>;
 
 /**
+ * @brief Key of an SPI port: the handle, and the GPIO port and pin of the chip select.
+ */
+using SpiKey = std::tuple<const void*, const void*, uint16_t>;
+
+/**
  * @brief Every port and name, created on first use.
  */
 struct Registry {
@@ -28,6 +34,7 @@ struct Registry {
     std::map<const void*, UartPort>                uarts;
     std::map<const void*, EncoderPort>             encoders;
     std::map<std::string, SamplePort, std::less<>> samples;
+    std::map<SpiKey, SpiPort>                      spis;
     std::map<Key, std::string>                     gpio_names;
     std::map<const void*, std::string>             handle_names;
     FlashPort                                      flash{{.name = "flash"}};
@@ -57,6 +64,18 @@ std::string handle_name(const void* handle) {
 }
 
 /**
+ * @brief Name a GPIO pin, falling back to its port and mask.
+ *
+ * @param key GPIO port and pin mask.
+ * @return Its name.
+ */
+std::string gpio_name(const Key& key) {
+    const auto found = registry().gpio_names.find(key);
+    return found != registry().gpio_names.end() ? found->second :
+                                                  std::format("{} pin {:#06x}", handle_name(key.first), key.second);
+}
+
+/**
  * @brief Find a port, creating it with a name on first use.
  *
  * @param ports Ports of one kind.
@@ -80,11 +99,7 @@ typename Map::mapped_type& find_or_create(Map& ports, const typename Map::key_ty
 GpioPort& Board::gpio(const void* port, uint16_t pin) {
     const Key key{port, pin};
 
-    return find_or_create(registry().gpios, key, [&key] {
-        const auto found = registry().gpio_names.find(key);
-        return found != registry().gpio_names.end() ? found->second :
-                                                      std::format("{} pin {:#06x}", handle_name(key.first), key.second);
-    });
+    return find_or_create(registry().gpios, key, [&key] { return gpio_name(key); });
 }
 
 PwmPort& Board::pwm(const void* timer, uint32_t channel) {
@@ -120,6 +135,19 @@ SamplePort& Board::samples(std::string_view name) {
     }
 
     return found->second;
+}
+
+SpiPort& Board::spi(const void* spi, const void* cs_port, uint16_t cs_pin) {
+    return find_or_create(registry().spis, SpiKey{spi, cs_port, cs_pin}, [spi, cs_port, cs_pin] {
+        return std::format("{} {}", handle_name(spi), gpio_name(Key{cs_port, cs_pin}));
+    });
+}
+
+void Board::spi_device(const SPI_HandleTypeDef* spi, const GPIO_TypeDef* cs_port, uint16_t cs_pin, SpiDevice& device) {
+    SpiPort& port = Board::spi(spi, cs_port, cs_pin);
+    port.device = &device;
+    port.bound = true;
+    Board::gpio(cs_port, cs_pin).bound = true;
 }
 
 FlashPort& Board::flash() {
@@ -163,6 +191,7 @@ std::vector<std::string> Board::unbound() {
     collect(registry().uarts);
     collect(registry().encoders);
     collect(registry().samples);
+    collect(registry().spis);
 
     return names;
 }

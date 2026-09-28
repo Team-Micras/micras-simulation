@@ -13,6 +13,10 @@
 #include <vector>
 
 #include "micras/hal/host/ports.hpp"
+#include "micras/hal/host/spi_device.hpp"
+
+struct GPIO_TypeDef;
+struct SPI_HandleTypeDef;
 
 namespace micras::hal::host {
 /**
@@ -90,6 +94,31 @@ public:
      * @return The port.
      */
     static SamplePort& samples(std::string_view name);
+
+    /**
+     * @brief Get the port of one chip select of an SPI bus.
+     *
+     * @param spi SPI handle.
+     * @param cs_port GPIO port of the chip select.
+     * @param cs_pin Pin mask of the chip select.
+     * @return The port.
+     */
+    static SpiPort& spi(const void* spi, const void* cs_port, uint16_t cs_pin);
+
+    /**
+     * @brief Attach a device to one chip select of an SPI bus.
+     *
+     * @note Keyed by the bus and the chip select, since several devices share
+     *       a bus. Binds the SPI port and the chip select's GPIO port. The device
+     *       is held by reference and must outlive the run.
+     *
+     * @param spi SPI handle.
+     * @param cs_port GPIO port of the chip select.
+     * @param cs_pin Pin mask of the chip select.
+     * @param device The device.
+     */
+    static void
+        spi_device(const SPI_HandleTypeDef* spi, const GPIO_TypeDef* cs_port, uint16_t cs_pin, SpiDevice& device);
 
     /**
      * @brief Get the flash.

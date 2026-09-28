@@ -17,6 +17,8 @@
 #include <string>
 #include <vector>
 
+#include "micras/hal/host/spi_device.hpp"
+
 namespace micras::hal::host {
 /**
  * @brief What every port has: a name and who has used it.
@@ -246,6 +248,24 @@ struct SamplePort : Port {
      * @brief Incremented with every new sample.
      */
     uint32_t sequence{0};
+};
+
+/**
+ * @brief One chip select of an SPI bus, and the device behind it.
+ *
+ * @note The firmware touches the port when it selects the device; a binding
+ *       binds it by attaching a device with Board::spi_device().
+ */
+struct SpiPort : Port {
+    /**
+     * @brief Device attached to the chip select, none before a binding attaches one.
+     */
+    SpiDevice* device{nullptr};
+
+    /**
+     * @brief Whether the chip select is low, between the firmware's select and unselect.
+     */
+    bool selected{false};
 };
 }  // namespace micras::hal::host
 
