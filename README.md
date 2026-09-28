@@ -122,6 +122,7 @@ The Micras scenarios:
 | `idle` | the robot switched on and left alone |
 | `explore` | an exploration started by the button |
 | `explore_link` | an exploration started over the radio |
+| `explore_stop` | the same, stopped over the radio a tenth of a second into the run |
 | `explore_solve` | the whole contest: explore, come back, then a long press for the fastest run, with the fan switch on |
 | `explore_solve_all` | the same with every switch of the fast run on: fan, racing line, boost and risky turns |
 | `solve` | the fastest run alone, from a map a previous run saved: pass its `--flash` |
