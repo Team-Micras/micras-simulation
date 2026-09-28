@@ -1,0 +1,61 @@
+name: Build test lint and check the simulator
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host:
+    name: 🧪 Build, tests, format, lint and checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: 🔀 Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: 🐋 Build the simulator image
+        run: docker build --file .docker/Dockerfile --target simulator --tag micras-simulation:ci .docker
+
+      - name: 🗃️ Restore the fetched dependencies
+        uses: actions/cache@v6
+        with:
+          path: build/host-ci/_deps
+          key: deps-host-ci-${{ hashFiles('cmake/third_party.cmake', 'cmake/mujoco.cmake', 'targets/*/CMakeLists.txt') }}
+
+      # One long lived container runs every step below, as the user that owns the checkout
+      - name: 📦 Start the simulator container
+        run: >
+          docker run --detach --name simulator --user "$(id -u):$(id -g)" --env HOME=/tmp
+          --volume "$PWD:/project" --workdir /project micras-simulation:ci sleep infinity
+
+      - name: ⚙️ Configure
+        run: docker exec simulator cmake --preset host-ci
+
+      - name: 🔨 Build
+        run: docker exec simulator cmake --build --preset host-ci
+
+      - name: 🧪 Run the tests
+        run: docker exec simulator ctest --preset host-ci
+
+      - name: 🎨 Check the formatting
+        run: docker exec simulator cmake --build --preset host-ci --target micras_sim_format_check
+
+      - name: 🚨 Lint
+        run: docker exec simulator cmake --build --preset host-ci --target micras_sim_lint
+
+      - name: ✅ Check the simulator
+        run: docker exec simulator cmake --build --preset host-ci --target micras_sim_check
+
+      - name: 🧹 Stop the simulator container
+        if: always()
+        run: docker rm --force simulator
