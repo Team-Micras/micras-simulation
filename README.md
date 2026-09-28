@@ -263,6 +263,39 @@ must not move a byte, such as a refactoring.
 `micras_sim_lint_fix` are the style targets; they use the configuration shared
 with micras-lib and the firmware (`.clang-format`, `.clang-tidy`).
 
+## A robot target
+
+A robot is a folder of `targets/` (or a directory of another project that adds
+this one) with a class implementing `micras::sim::Target` and a `main` that is one
+call to `micras::sim::run`. The target gives its name, loop period, robot file,
+ground truth columns, options and firmware program, and `wire()` builds its
+devices and returns what it adds to the run. The program is called with the
+`FirmwareThread` it runs on, so a program that drives the handover itself calls
+`yield_tick()` on it.
+
+The public headers, which a target may include and which change only with notice:
+
+| Header | What |
+|---|---|
+| `micras/sim/app/target.hpp` | `Target`, the interface |
+| `micras/sim/app/wiring.hpp` | `Wiring`, `WorldInfo`, `CliOption` |
+| `micras/sim/app/application.hpp` | `micras::sim::run` |
+| `micras/sim/view/panel_spec.hpp` | the panel and the overlay |
+| `micras/sim/core/run_context.hpp` | the world, the clock, the serial bus, the noise and the devices of a run |
+| `micras/sim/core/firmware_thread.hpp` | the firmware thread and its handover |
+| `micras/sim/core/variable_source.hpp` | the firmware variables the panel, the overlay and the scenarios read |
+| `micras/sim/core/span_at.hpp` | checked indexing of a `std::span` |
+| `micras/sim/recording/column_source.hpp`, `csv_writer.hpp` | CSV columns and the writer they fill |
+| `micras/sim/recording/ground_truth.hpp`, `run_metadata.hpp` | ground truth, `meta.json` counters |
+| `micras/sim/robot/robot_description.hpp` | the robot's `robot.toml` |
+| `micras/sim/robot/robot_model.hpp` | `RobotModelNames`, the names the generated model gives the robot's parts |
+| `micras/sim/scenario/scenario.hpp` | `ScenarioHooks`: the inputs, messages and state names a scenario uses |
+| `micras/sim/devices/*.hpp` | the devices a target builds |
+
+The robot is micromouse-shaped and runs in a maze: its `robot.toml` has every
+section of the schema (chassis, wheels, drive, encoders, IMU, fan, battery, link,
+wall sensors), and the arena is one of the mazes.
+
 ## The toy target
 
 `targets/toy/` is the simulator's reference: the smallest robot that uses every
