@@ -357,9 +357,9 @@ Micras's CSV starts at tick 320, not at tick 1.
 - `*_penetration` is `nan` on ticks where the geom had no contact at all. `0`
   means "in contact, exactly touching".
 - The variable columns come from the firmware's `VariablePool`, read through a
-  read-only accessor, and are named from its own variable names. State ids come
-  from the firmware; it has no names for them, so the target lists the names and
-  the build checks that there is one for each state. The device columns are what the simulated hardware produced: the
+  read-only accessor, and are named from its own variable names. The state is
+  one of them, `state`, and the names of its values come from the firmware too.
+  The device columns are what the simulated hardware produced: the
   `lsm6dsv_*` IMU samples, the `wall_*` ADC readings, the `motor_*_voltage` the
   bridge applied, `pack_voltage`.
 

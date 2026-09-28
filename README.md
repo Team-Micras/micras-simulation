@@ -108,7 +108,7 @@ after = 5.0
 ```
 
 An event can `press` an input for a time, `set` it, or `send` a link command
-(`explore`, `solve`, `calibrate`, `save`, `reset`). An event
+(`explore`, `solve`, `calibrate`, `save`, `reset`, `stop`, `leave_error`). An event
 with `when` and `equals` waits, from its `at` on, for the named firmware variable
 to take one of those values, and fires on the first tick it does. The run stops
 at `seconds`, or earlier when the stop condition's variable takes one of the

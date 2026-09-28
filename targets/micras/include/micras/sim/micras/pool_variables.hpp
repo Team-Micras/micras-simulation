@@ -16,13 +16,13 @@
 
 namespace micras::sim {
 /**
- * @brief Records and looks up every variable the firmware registers, and its state.
+ * @brief Records and looks up every variable the firmware registers.
  *
  * @note Read through Micras::get_variables() while the firmware is parked, so
  *       every value of a row belongs to the same instant. Blobs, such as the
- *       maze, are skipped. The state machine's state is
- *       added as "state", which the pool does not hold. Column names are the
- *       variables' full names with slashes as underscores: "pose/x" is pose_x.
+ *       maze, are skipped. The state machine's state is the pool's own
+ *       "state". Column names are the variables' full names with slashes as
+ *       underscores: "pose/x" is pose_x.
  */
 class PoolVariables : public ColumnSource, public VariableSource {
 public:
@@ -38,7 +38,7 @@ public:
      *
      * @note Throws when the firmware has not constructed its robot yet.
      *
-     * @return "state" and one column per registered variable.
+     * @return One column per registered variable that is not a blob.
      */
     std::vector<std::string> names() override;
 
@@ -52,7 +52,7 @@ public:
     /**
      * @brief Get a variable's current value.
      *
-     * @param name Full name, such as "pose/x", or "state".
+     * @param name Full name, such as "pose/x" or "state".
      * @return The value, or NaN before the robot exists or for unknown names.
      */
     double value_of(const std::string& name) const override;

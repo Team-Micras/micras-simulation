@@ -148,7 +148,7 @@ micras_apply_warnings(micras_firmware micras_sim_micras micras_sim micras_wall_c
 # Each calls a script of scripts/ with every path as an argument; runs land in runs/ of this build
 # directory.
 if(PROJECT_IS_TOP_LEVEL)
-    set(MICRAS_SIM_BASELINE "v2" CACHE STRING "Baseline version sim_compare_baseline and sim_record_baseline use")
+    set(MICRAS_SIM_BASELINE "v3" CACHE STRING "Baseline version sim_compare_baseline and sim_record_baseline use")
     set(MICRAS_SIM_CONTEST_MAZES
         "maze1;maze2;apec2016;apec2017;apec2018;apec2019;japan2013ef;japan2017ef;uk2016f;alljapan-033-2012-exp-fin"
         CACHE STRING "The mazes sim_contest and sim_contest_all run in"

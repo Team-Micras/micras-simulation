@@ -93,7 +93,7 @@ bool PoolVariables::ready() const {
 }
 
 std::vector<std::string> PoolVariables::names() {
-    std::vector<std::string> columns{"state"};
+    std::vector<std::string> columns;
     this->recorded.clear();
 
     const std::span<const core::Variable> variables = robot().get_variables().all();
@@ -116,7 +116,6 @@ std::vector<std::string> PoolVariables::names() {
 
 void PoolVariables::append(std::vector<CsvCell>& row) {
     const Micras& micras = robot();
-    row.emplace_back(static_cast<int64_t>(micras.get_state()));
 
     for (const core::VariableId id : this->recorded) {
         row.emplace_back(read(micras.get_variables().at(id)));
@@ -128,10 +127,6 @@ double PoolVariables::value_of(const std::string& name) const {
 
     if (micras == nullptr) {
         return std::numeric_limits<double>::quiet_NaN();
-    }
-
-    if (name == "state") {
-        return micras->get_state();
     }
 
     const std::optional<core::VariableId> id = micras->get_variables().find(name);

@@ -13,7 +13,6 @@
 #include <iterator>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -48,45 +47,26 @@ extern int micras_firmware_main();
 namespace micras::sim {
 namespace {
 /**
- * @brief Names of the states of the firmware's state machine, indexed as micras::State.
- *
- * @note The firmware has no names for its states, so they are written here, and the build checks
- *       that there is one for each.
- */
-constexpr auto state_name_table = std::to_array<std::string_view>({
-    "INIT",
-    "IDLE",
-    "WAIT_FOR_RUN",
-    "RUN",
-    "PLAN",
-    "SAVE",
-    "WAIT_FOR_CALIBRATE",
-    "CALIBRATE",
-    "WAIT_FOR_IDENTIFY",
-    "IDENTIFY",
-    "WAIT_FOR_GYROSCOPE",
-    "CALIBRATE_GYROSCOPE",
-    "ERROR",
-});
-
-static_assert(
-    state_name_table.size() == std::to_underlying(State::NUMBER_OF_STATES), "every firmware state needs a name"
-);
-
-/**
  * @brief Link commands a scenario sends by name, with their codes in Micras::Command.
  */
-constexpr std::array<std::pair<const char*, Micras::Command>, 5> commands{{
+constexpr std::array<std::pair<const char*, Micras::Command>, 7> commands{{
     {"explore", Micras::Command::EXPLORE},
     {"solve", Micras::Command::SOLVE},
     {"calibrate", Micras::Command::CALIBRATE},
     {"save", Micras::Command::SAVE},
     {"reset", Micras::Command::RESET},
+    {"stop", Micras::Command::STOP},
+    {"leave_error", Micras::Command::LEAVE_ERROR},
 }};
 }  // namespace
 
+/**
+ * @brief Get the names of the states of the firmware's state machine, indexed as micras::State.
+ *
+ * @return The firmware's own names of its states.
+ */
 static const std::vector<std::string>& state_names() {
-    static const std::vector<std::string> names{state_name_table.begin(), state_name_table.end()};
+    static const std::vector<std::string> names{micras::state_names.begin(), micras::state_names.end()};
     return names;
 }
 
