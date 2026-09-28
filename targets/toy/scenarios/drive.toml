@@ -1,0 +1,25 @@
+# A press of the button starts the toy: it drives up the first corridor, turns right
+# at the wall ahead, drives on, and stops when the link tells it to.
+robot = "toy"
+arena = "maze1"
+seconds = 10
+seed = 1
+
+[start]
+x = 0.09
+y = 0.05
+yaw_deg = 90.0
+
+[[events]]
+at = 0.2
+press = "button"
+for = 0.1
+
+[[events]]
+at = 3.2
+send = "stop"
+
+[stop]
+when = "state"
+equals = ["STOP"]
+after = 0.5
