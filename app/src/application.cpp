@@ -308,11 +308,10 @@ Wiring wire(Target& target, FirmwareThread& firmware, const RobotDescription& ro
     RunContext&     context = target.context();
     const WorldInfo world{
         .robot = &robot,
-        .reflectance =
-            [&context, config](int geom) {
-                const char* name = mj_id2name(context.world.model(), mjOBJ_GEOM, geom);
-                return Maze::reflectance(name == nullptr ? "" : name, config);
-            },
+        .reflectance = [&context, config](int geom) {
+            const char* name = mj_id2name(context.world.model(), mjOBJ_GEOM, geom);
+            return Maze::reflectance(name == nullptr ? "" : name, config);
+        },
     };
 
     return target.wire(firmware, world);

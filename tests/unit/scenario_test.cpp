@@ -282,7 +282,7 @@ protected:
     bool          button_level{true};
     DigitalInput  button{{.name = "button", .active_low = true, .drive = [this](bool level) {
                              this->button_level = level;
-                         }}};
+                          }}};
     ScenarioHooks hooks;
     Probe         probe{this->button};
     uint64_t      completed{0};
@@ -401,8 +401,10 @@ TEST_F(Playing, HoldsAnEventUntilItsConditionHolds) {
 }
 
 TEST(Scenario, ReadsAnEventConditionAndAStopCount) {
-    const Scenario scenario = Scenario::parse("[[events]]\nat = 1\nsend = \"a\"\nwhen = \"state\"\nequals = \"IDLE\"\n"
-                                              "[stop]\nwhen = \"state\"\nequals = \"IDLE\"\ncount = 2\n");
+    const Scenario scenario = Scenario::parse(
+        "[[events]]\nat = 1\nsend = \"a\"\nwhen = \"state\"\nequals = \"IDLE\"\n"
+        "[stop]\nwhen = \"state\"\nequals = \"IDLE\"\ncount = 2\n"
+    );
 
     ASSERT_EQ(scenario.events.size(), 1U);
     EXPECT_EQ(scenario.events.front().when, "state");

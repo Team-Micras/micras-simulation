@@ -18,7 +18,8 @@ Linux only, x86-64. CMake downloads the pinned MuJoCo release (3.14.0) and check
 its SHA-256; point `MUJOCO_DIR` (a CMake cache variable or an environment
 variable) at an installation to use that instead. Clone with the firmware:
 `git clone --recurse-submodules`, or `git submodule update --init` afterwards.
-The style targets want clang-format 18 and clang-tidy 18.
+The style targets want clang 22's `clang-format-22`, `clang-tidy-22`,
+`run-clang-tidy-22` and `clang-apply-replacements-22`.
 
 ## Quick start
 

@@ -69,7 +69,7 @@ void Imu::sample(MujocoWorld& world, const Clock& clock) {
         for (std::size_t channel = 0; channel < channels; channel++) {
             const std::size_t kind = channel / 3;
             const double      value = this->scale.at(channel) * this->filtered.at(channel) + this->bias.at(channel) +
-                                 this->noise.gaussian(sigma.at(kind));
+                                      this->noise.gaussian(sigma.at(kind));
             this->pending.at(channel) =
                 static_cast<float>(std::clamp(std::round(value / resolution.at(kind)), word_min, word_max));
         }

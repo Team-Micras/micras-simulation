@@ -134,7 +134,7 @@ TEST(FirmwareThread, UnwindingIsNotBlockedByAYieldingDestructor) {
 }
 
 TEST(FirmwareThread, ReportsAProgramThatReturns) {
-    FirmwareThread firmware([](FirmwareThread&) {});
+    FirmwareThread firmware([](FirmwareThread&) { });
 
     firmware.run_until_yield();
     EXPECT_TRUE(firmware.has_finished());
@@ -150,7 +150,7 @@ TEST(FirmwareThread, CarriesAProgramErrorBackToTheSimulation) {
 }
 
 TEST(FirmwareThread, RunningAFinishedProgramIsHarmless) {
-    FirmwareThread firmware([](FirmwareThread&) {});
+    FirmwareThread firmware([](FirmwareThread&) { });
 
     firmware.run_until_yield();
     EXPECT_NO_THROW(firmware.run_until_yield());

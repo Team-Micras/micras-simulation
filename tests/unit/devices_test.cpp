@@ -203,10 +203,10 @@ TEST_F(Devices, RefusesAMotorOnAnActuatorTheModelDoesNotHave) {
 TEST_F(Devices, CountsTheWheelAngleAtTheEncodersResolution) {
     std::optional<int32_t> written;
     QuadratureEncoder      encoder(
-        this->world, {.name = "wheel",
-                           .joint = "wheel",
-                           .counts_per_revolution = 4096,
-                           .write = [&written](int32_t count) { written = count; }}
+        this->world,
+        {.name = "wheel", .joint = "wheel", .counts_per_revolution = 4096, .write = [&written](int32_t count) {
+             written = count;
+         }}
     );
     const double radians_per_count = 2.0 * std::numbers::pi / 4096.0;
 
@@ -222,10 +222,10 @@ TEST_F(Devices, CountsTheWheelAngleAtTheEncodersResolution) {
 TEST_F(Devices, CountsDownWhenTheWheelTurnsBackwards) {
     std::optional<int32_t> written;
     QuadratureEncoder      encoder(
-        this->world, {.name = "wheel",
-                           .joint = "wheel",
-                           .counts_per_revolution = 4096,
-                           .write = [&written](int32_t count) { written = count; }}
+        this->world,
+        {.name = "wheel", .joint = "wheel", .counts_per_revolution = 4096, .write = [&written](int32_t count) {
+             written = count;
+         }}
     );
 
     this->wheel_angle() = -1023.5 * 2.0 * std::numbers::pi / 4096.0;

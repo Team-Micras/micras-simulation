@@ -44,7 +44,7 @@ protected:
 
     // NOLINTBEGIN(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
     RunContext     context;
-    FirmwareThread firmware{[](FirmwareThread&) {}};
+    FirmwareThread firmware{[](FirmwareThread&) { }};
     Simulation     simulation{this->context, this->firmware};
     MapVariables   variables;
     int            chassis{-1};

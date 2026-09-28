@@ -118,7 +118,7 @@ std::string sites(const RobotDescription& robot, const RobotModelNames& names) {
     const ImuDescription& imu = robot.imu;
     std::string           sites = std::format(
         "      <site name=\"{}\" pos=\"{}\" xyaxes=\"{} {}\"/>\n"
-                  "      <site name=\"{}\" pos=\"{}\"/>\n",
+        "      <site name=\"{}\" pos=\"{}\"/>\n",
         names.imu, text(imu.position), text(imu.axes[0]), text(imu.axes[1]), names.fan, text(robot.fan.position)
     );
 

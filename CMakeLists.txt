@@ -203,6 +203,10 @@ if(PROJECT_IS_TOP_LEVEL)
         "${PROJECT_SOURCE_DIR}/targets/*/cube/*.h"
     )
 
+    # hal_host/ is formatted here but linted in micras-lib, which holds its canonical copy.
+    set(HARNESS_LINTED ${HARNESS_SOURCES})
+    list(FILTER HARNESS_LINTED EXCLUDE REGEX "^${PROJECT_SOURCE_DIR}/hal_host/")
+
     include(cmake/lint.cmake)
-    micras_add_lint_targets(${HARNESS_SOURCES} ${HARNESS_HEADERS})
+    micras_sim_add_lint_targets(FORMAT ${HARNESS_SOURCES} ${HARNESS_HEADERS} LINT ${HARNESS_LINTED})
 endif()

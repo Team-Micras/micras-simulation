@@ -122,7 +122,7 @@ uint8_t As5047uModel::crc(uint8_t high, uint8_t low) {
 void As5047uModel::process(const std::array<uint8_t, frame_size>& frame) {
     const uint32_t raw = static_cast<uint32_t>(std::get<0>(frame)) << 16U |
                          static_cast<uint32_t>(std::get<1>(frame)) << 8U | std::get<2>(frame);
-    const auto field = static_cast<uint16_t>((raw >> field_shift) & field_mask);
+    const auto     field = static_cast<uint16_t>((raw >> field_shift) & field_mask);
 
     if (crc(std::get<0>(frame), std::get<1>(frame)) != std::get<2>(frame)) {
         this->errfl |= crc_error;

@@ -16,17 +16,16 @@ namespace {
 GroundTruthConfig tiny_config() {
     return {
         .body = "robot",
-        .columns =
-            {
-                {.name = "wheel_speed", .probe = Probe::JOINT_VELOCITY, .object = "wheel"},
-                {.name = "wheel_angle", .probe = Probe::JOINT_POSITION, .object = "wheel"},
-                {.name = "torque", .probe = Probe::ACTUATOR_FORCE, .object = "motor"},
-                {.name = "chassis_ncon", .probe = Probe::CONTACT_COUNT, .object = "chassis"},
-                {.name = "chassis_fn", .probe = Probe::CONTACT_NORMAL_FORCE, .object = "chassis"},
-                {.name = "chassis_slip", .probe = Probe::CONTACT_SLIP, .object = "chassis"},
-                {.name = "chassis_penetration", .probe = Probe::CONTACT_PENETRATION, .object = "chassis"},
-                {.name = "iterations", .probe = Probe::SOLVER_ITERATIONS, .object = ""},
-            },
+        .columns = {
+            {.name = "wheel_speed", .probe = Probe::JOINT_VELOCITY, .object = "wheel"},
+            {.name = "wheel_angle", .probe = Probe::JOINT_POSITION, .object = "wheel"},
+            {.name = "torque", .probe = Probe::ACTUATOR_FORCE, .object = "motor"},
+            {.name = "chassis_ncon", .probe = Probe::CONTACT_COUNT, .object = "chassis"},
+            {.name = "chassis_fn", .probe = Probe::CONTACT_NORMAL_FORCE, .object = "chassis"},
+            {.name = "chassis_slip", .probe = Probe::CONTACT_SLIP, .object = "chassis"},
+            {.name = "chassis_penetration", .probe = Probe::CONTACT_PENETRATION, .object = "chassis"},
+            {.name = "iterations", .probe = Probe::SOLVER_ITERATIONS, .object = ""},
+        },
     };
 }
 

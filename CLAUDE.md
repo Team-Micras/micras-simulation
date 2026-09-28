@@ -378,9 +378,14 @@ the simulator reaches into the firmware: every proxy is the firmware's own.
 
 ## Style
 
-The firmware's `.clang-format` and `.clang-tidy`, pinned to version 18 (a newer
-clang-format reflows the code), with the tidy header filter anchored to this
-repo. Doxygen on every declaration. **No comments inside function bodies** — if
+The `.clang-format`, `.clang-tidy`, `tests/.clang-tidy`, `cmake/micras_warnings.cmake`
+and `cmake/templates/run_clang_tidy.sh.in` of micras-lib, copied byte for byte
+(micras-lib holds the canonical copy and the firmware's CI compares the three
+repositories), with clang 22's tools found by their versioned names; configuring
+without them fails. The tidy header filter lints this repository's `include/`
+headers and never a dependency's; `targets/micras/.clang-tidy` also leaves out the
+firmware's headers and the host HAL's, which their own repositories lint, and
+`hal_host/` is formatted here but linted in micras-lib. Doxygen on every declaration. **No comments inside function bodies** — if
 something needs explaining, it goes in an `@note` on the declaration, where a
 reader finds it before reading the code. Every `NOLINT` names its check and says
 why. `just lint` is clean and stays clean.
