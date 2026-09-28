@@ -27,8 +27,10 @@ jobs:
       - name: 🗃️ Restore the fetched dependencies
         uses: actions/cache@v6
         with:
-          path: build/host-ci/_deps
-          key: deps-host-ci-${{ hashFiles('cmake/third_party.cmake', 'cmake/mujoco.cmake', 'targets/*/CMakeLists.txt') }}
+          path: |
+            build/host-ci/_deps
+            build/host-ci/CMakeFiles/fc-stamp
+          key: deps-host-ci-${{ hashFiles('cmake/third_party.cmake', 'cmake/mujoco.cmake') }}
 
       # One long lived container runs every step below, as the user that owns the checkout
       - name: 📦 Start the simulator container
