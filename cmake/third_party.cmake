@@ -80,10 +80,16 @@ if(MICRAS_SIM_BRIDGE)
 endif()
 
 if(MICRAS_SIM_TESTS)
-    FetchContent_Declare(googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG        b514bdc898e2951020cbdca1304b75f5950d1f59
+    # doctest v2.5.3, the commit micras-lib's tests use. Its headers are system headers when it is added
+    # to another project, so its macros' own code raises no warning here.
+    set(DOCTEST_NO_INSTALL ON)
+
+    FetchContent_Declare(doctest
+        URL      "https://github.com/doctest/doctest/archive/2d0a9359a60c51affe2a9bebb1be1dca47868151.tar.gz"
+        URL_HASH "SHA256=e64542c4ea68e9f381ccf6eae924cfdd652567c87c142d76fe92644fb4608149"
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
-    set(INSTALL_GTEST OFF)
-    FetchContent_MakeAvailable(googletest)
+    FetchContent_MakeAvailable(doctest)
+
+    include("${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake")
 endif()

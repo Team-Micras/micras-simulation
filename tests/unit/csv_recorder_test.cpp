@@ -1,9 +1,10 @@
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/recording/csv_recorder.hpp"
 #include "micras/sim/recording/ground_truth.hpp"
@@ -65,9 +66,9 @@ private:
     bool started{false};
 };
 
-class Recording : public testing::Test {
+class Recording {
 protected:
-    void SetUp() override {
+    Recording() {
         this->world.load(MICRAS_TEST_MODEL);
         this->world.reset();
     }
@@ -102,34 +103,34 @@ protected:
     // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
-TEST_F(Recording, StartsEveryRowWithTheBodyBlockThenTheRobotColumns) {
+TEST_CASE_FIXTURE(Recording, "Recording.StartsEveryRowWithTheBodyBlockThenTheRobotColumns") {
     const GroundTruth              ground_truth(this->world, tiny_config());
     const std::vector<std::string> columns = ground_truth.columns();
 
-    ASSERT_EQ(columns.size(), 13U + tiny_config().columns.size());
-    EXPECT_EQ(columns.front(), "tick");
-    EXPECT_EQ(columns.at(12), "v_forward");
-    EXPECT_EQ(columns.at(13), "wheel_speed");
-    EXPECT_EQ(columns.back(), "iterations");
+    REQUIRE_EQ(columns.size(), 13U + tiny_config().columns.size());
+    CHECK_EQ(columns.front(), "tick");
+    CHECK_EQ(columns.at(12), "v_forward");
+    CHECK_EQ(columns.at(13), "wheel_speed");
+    CHECK_EQ(columns.back(), "iterations");
 }
 
-TEST_F(Recording, WritesTheTickAndOneCellPerColumn) {
+TEST_CASE_FIXTURE(Recording, "Recording.WritesTheTickAndOneCellPerColumn") {
     GroundTruth                ground_truth(this->world, tiny_config());
     const std::vector<CsvCell> row = ground_truth.sample(7);
 
-    ASSERT_EQ(row.size(), ground_truth.columns().size());
-    EXPECT_EQ(std::get<uint64_t>(row.at(0)), 7U);
-    EXPECT_DOUBLE_EQ(std::get<double>(row.at(1)), this->world.data()->time);
+    REQUIRE_EQ(row.size(), ground_truth.columns().size());
+    CHECK_EQ(std::get<uint64_t>(row.at(0)), 7U);
+    CHECK_EQ(std::get<double>(row.at(1)), doctest::Approx(this->world.data()->time).epsilon(1e-12));
 }
 
-TEST_F(Recording, RejectsAnObjectTheModelDoesNotHave) {
+TEST_CASE_FIXTURE(Recording, "Recording.RejectsAnObjectTheModelDoesNotHave") {
     GroundTruthConfig config = tiny_config();
     config.columns.push_back({.name = "ghost", .probe = Probe::JOINT_VELOCITY, .object = "ghost"});
 
-    EXPECT_THROW(GroundTruth(this->world, config), std::runtime_error);
+    CHECK_THROWS_AS(GroundTruth(this->world, config), std::runtime_error);
 }
 
-TEST_F(Recording, AppendsTheSourcesAfterTheGroundTruth) {
+TEST_CASE_FIXTURE(Recording, "Recording.AppendsTheSourcesAfterTheGroundTruth") {
     FixedColumns source(2);
 
     {
@@ -138,10 +139,10 @@ TEST_F(Recording, AppendsTheSourcesAfterTheGroundTruth) {
         recorder.sample(0);
     }
 
-    EXPECT_TRUE(this->header().ends_with(",iterations,first,second"));
+    CHECK(this->header().ends_with(",iterations,first,second"));
 }
 
-TEST_F(Recording, WritesNoRowBeforeEverySourceIsReady) {
+TEST_CASE_FIXTURE(Recording, "Recording.WritesNoRowBeforeEverySourceIsReady") {
     FixedColumns early(2);
     LateColumns  late;
 
@@ -157,27 +158,27 @@ TEST_F(Recording, WritesNoRowBeforeEverySourceIsReady) {
 
     const std::vector<std::string> written = this->lines();
 
-    ASSERT_EQ(written.size(), 2U);
-    EXPECT_TRUE(written.at(0).starts_with("tick,"));
-    EXPECT_TRUE(written.at(1).starts_with("3,"));
+    REQUIRE_EQ(written.size(), 2U);
+    CHECK(written.at(0).starts_with("tick,"));
+    CHECK(written.at(1).starts_with("3,"));
 }
 
-TEST_F(Recording, RejectsASourceThatFillsTooFewCells) {
+TEST_CASE_FIXTURE(Recording, "Recording.RejectsASourceThatFillsTooFewCells") {
     FixedColumns source(1);
     CsvRecorder  recorder(this->world, tiny_config(), this->path);
     recorder.add_source(source);
 
-    EXPECT_THROW(recorder.sample(0), std::logic_error);
+    CHECK_THROWS_AS(recorder.sample(0), std::logic_error);
 }
 
-TEST_F(Recording, RejectsTwoSourcesWritingTheSameColumn) {
+TEST_CASE_FIXTURE(Recording, "Recording.RejectsTwoSourcesWritingTheSameColumn") {
     FixedColumns first(2);
     FixedColumns second(2);
     CsvRecorder  recorder(this->world, tiny_config(), this->path);
     recorder.add_source(first);
     recorder.add_source(second);
 
-    EXPECT_THROW(recorder.sample(0), std::runtime_error);
+    CHECK_THROWS_AS(recorder.sample(0), std::runtime_error);
 }
 }  // namespace
 }  // namespace micras::sim

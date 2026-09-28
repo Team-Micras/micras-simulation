@@ -1,8 +1,6 @@
 ###############################################################################
-## Engine unit tests (GoogleTest + CTest), on a tiny robot of their own
+## Engine unit tests (doctest + CTest), on a tiny robot of their own
 ###############################################################################
-
-include(GoogleTest)
 
 add_executable(micras_sim_tests
     unit/cli_test.cpp
@@ -26,7 +24,7 @@ if(MICRAS_SIM_BRIDGE)
     target_sources(micras_sim_tests PRIVATE unit/web_socket_server_test.cpp)
 endif()
 
-target_link_libraries(micras_sim_tests PRIVATE micras::sim_app GTest::gtest_main)
+target_link_libraries(micras_sim_tests PRIVATE micras::sim_app doctest::doctest_with_main)
 target_compile_options(micras_sim_tests PRIVATE -Wall -Wextra)
 target_compile_definitions(micras_sim_tests PRIVATE
     MICRAS_TEST_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/tiny_robot.xml"
@@ -34,4 +32,4 @@ target_compile_definitions(micras_sim_tests PRIVATE
     MICRAS_TEST_MAZES_DIR="${PROJECT_SOURCE_DIR}/engine/arenas/maze/mazes"
 )
 
-gtest_discover_tests(micras_sim_tests)
+doctest_discover_tests(micras_sim_tests)

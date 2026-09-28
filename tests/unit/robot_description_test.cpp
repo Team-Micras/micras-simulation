@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/arenas/maze.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
@@ -38,7 +38,7 @@ std::string tiny_text() {
  */
 std::string replaced(std::string text, std::string_view from, std::string_view to) {
     const std::size_t position = text.find(from);
-    EXPECT_NE(position, std::string::npos) << "the tiny robot has no " << from;
+    CHECK_MESSAGE(position != std::string::npos, "the tiny robot has no " << from);
 
     if (position != std::string::npos) {
         text.replace(position, from.size(), to);
@@ -63,43 +63,43 @@ std::string refusal_of(std::string_view text) {
     return {};
 }
 
-TEST(RobotDescription, ReadsEverySection) {
+TEST_CASE("RobotDescription.ReadsEverySection") {
     const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
 
-    EXPECT_EQ(robot.name, "tiny");
-    EXPECT_DOUBLE_EQ(robot.integration.timestep, 0.000521);
-    EXPECT_DOUBLE_EQ(robot.chassis.mass, 0.05);
-    EXPECT_EQ(robot.chassis.outline.size(), 4U);
-    EXPECT_DOUBLE_EQ(robot.wheels.track, 0.05);
-    EXPECT_DOUBLE_EQ(robot.drive.resistance(), 10.5);
-    EXPECT_EQ(robot.encoders.counts_per_revolution, 4096U);
-    EXPECT_DOUBLE_EQ(robot.imu.axes[1][1], 1.0);
-    EXPECT_DOUBLE_EQ(robot.fan.nominal_voltage, 7.4);
-    EXPECT_EQ(robot.battery.cells, 2);
-    EXPECT_EQ(robot.link.baud_rate, 9600U);
-    EXPECT_EQ(robot.wall_sensors.rays, 4);
+    CHECK_EQ(robot.name, "tiny");
+    CHECK_EQ(robot.integration.timestep, doctest::Approx(0.000521).epsilon(1e-12));
+    CHECK_EQ(robot.chassis.mass, doctest::Approx(0.05).epsilon(1e-12));
+    CHECK_EQ(robot.chassis.outline.size(), 4U);
+    CHECK_EQ(robot.wheels.track, doctest::Approx(0.05).epsilon(1e-12));
+    CHECK_EQ(robot.drive.resistance(), doctest::Approx(10.5).epsilon(1e-12));
+    CHECK_EQ(robot.encoders.counts_per_revolution, 4096U);
+    CHECK_EQ(robot.imu.axes[1][1], doctest::Approx(1.0).epsilon(1e-12));
+    CHECK_EQ(robot.fan.nominal_voltage, doctest::Approx(7.4).epsilon(1e-12));
+    CHECK_EQ(robot.battery.cells, 2);
+    CHECK_EQ(robot.link.baud_rate, 9600U);
+    CHECK_EQ(robot.wall_sensors.rays, 4);
 }
 
-TEST(RobotDescription, ReadsArraysOfParts) {
+TEST_CASE("RobotDescription.ReadsArraysOfParts") {
     const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
 
-    ASSERT_EQ(robot.chassis.boxes.size(), 1U);
-    EXPECT_EQ(robot.chassis.boxes.front().name, "cargo");
-    EXPECT_DOUBLE_EQ(robot.chassis.boxes.front().max[2], 0.02);
-    ASSERT_EQ(robot.chassis.cylinders.size(), 1U);
-    EXPECT_DOUBLE_EQ(robot.chassis.cylinders.front().radius, 0.005);
-    ASSERT_EQ(robot.wall_sensors.sensors.size(), 1U);
-    EXPECT_EQ(robot.wall_sensors.sensors.front().name, "eye");
+    REQUIRE_EQ(robot.chassis.boxes.size(), 1U);
+    CHECK_EQ(robot.chassis.boxes.front().name, "cargo");
+    CHECK_EQ(robot.chassis.boxes.front().max[2], doctest::Approx(0.02).epsilon(1e-12));
+    REQUIRE_EQ(robot.chassis.cylinders.size(), 1U);
+    CHECK_EQ(robot.chassis.cylinders.front().radius, doctest::Approx(0.005).epsilon(1e-12));
+    REQUIRE_EQ(robot.wall_sensors.sensors.size(), 1U);
+    CHECK_EQ(robot.wall_sensors.sensors.front().name, "eye");
 }
 
-TEST(RobotDescription, ConvertsDegreesToRadians) {
+TEST_CASE("RobotDescription.ConvertsDegreesToRadians") {
     const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
 
-    EXPECT_DOUBLE_EQ(robot.wall_sensors.sensors.front().yaw, std::numbers::pi / 2);
-    EXPECT_DOUBLE_EQ(robot.wall_sensors.emitter_half_angle, 5.0 * std::numbers::pi / 180.0);
+    CHECK_EQ(robot.wall_sensors.sensors.front().yaw, doctest::Approx(std::numbers::pi / 2).epsilon(1e-12));
+    CHECK_EQ(robot.wall_sensors.emitter_half_angle, doctest::Approx(5.0 * std::numbers::pi / 180.0).epsilon(1e-12));
 }
 
-TEST(RobotDescription, AcceptsPlainValuesAndSourcedTablesAlike) {
+TEST_CASE("RobotDescription.AcceptsPlainValuesAndSourcedTablesAlike") {
     const std::string      text = tiny_text();
     const RobotDescription plain = RobotDescription::parse(
         replaced(text, R"(winding_resistance = { value = 10.0, source = "made up" })", "winding_resistance = 10.0")
@@ -108,37 +108,37 @@ TEST(RobotDescription, AcceptsPlainValuesAndSourcedTablesAlike) {
         replaced(text, "bridge_resistance = 0.5", R"(bridge_resistance = { value = 0.5, source = "datasheet" })")
     );
 
-    EXPECT_DOUBLE_EQ(plain.drive.winding_resistance, 10.0);
-    EXPECT_DOUBLE_EQ(sourced.drive.bridge_resistance, 0.5);
-    EXPECT_DOUBLE_EQ(plain.drive.resistance(), sourced.drive.resistance());
+    CHECK_EQ(plain.drive.winding_resistance, doctest::Approx(10.0).epsilon(1e-12));
+    CHECK_EQ(sourced.drive.bridge_resistance, doctest::Approx(0.5).epsilon(1e-12));
+    CHECK_EQ(plain.drive.resistance(), doctest::Approx(sourced.drive.resistance()).epsilon(1e-12));
 }
 
-TEST(RobotDescription, RefusesAMissingKeyNamingIt) {
+TEST_CASE("RobotDescription.RefusesAMissingKeyNamingIt") {
     const std::string message = refusal_of(replaced(tiny_text(), "bridge_resistance = 0.5\n", ""));
 
-    EXPECT_TRUE(message.contains("drive.bridge_resistance")) << message;
-    EXPECT_TRUE(message.contains("missing")) << message;
+    CHECK_MESSAGE(message.contains("drive.bridge_resistance"), message);
+    CHECK_MESSAGE(message.contains("missing"), message);
 }
 
-TEST(RobotDescription, RefusesAMissingSectionNamingIt) {
+TEST_CASE("RobotDescription.RefusesAMissingSectionNamingIt") {
     const std::string message = refusal_of(replaced(tiny_text(), "[link]\nbaud_rate = 9600\n", ""));
 
-    EXPECT_TRUE(message.contains("[link]")) << message;
+    CHECK_MESSAGE(message.contains("[link]"), message);
 }
 
-TEST(RobotDescription, RefusesAnUnknownKeyNamingIt) {
+TEST_CASE("RobotDescription.RefusesAnUnknownKeyNamingIt") {
     const std::string message = refusal_of(replaced(tiny_text(), "[battery]\n", "[battery]\ncolour = \"red\"\n"));
 
-    EXPECT_TRUE(message.contains("unknown key battery.colour")) << message;
+    CHECK_MESSAGE(message.contains("unknown key battery.colour"), message);
 }
 
-TEST(RobotDescription, RefusesAnUnknownKeyInAnArrayOfTables) {
+TEST_CASE("RobotDescription.RefusesAnUnknownKeyInAnArrayOfTables") {
     const std::string message = refusal_of(replaced(tiny_text(), "name = \"eye\"\n", "name = \"eye\"\nshiny = true\n"));
 
-    EXPECT_TRUE(message.contains("wall_sensors.sensors[0].shiny")) << message;
+    CHECK_MESSAGE(message.contains("wall_sensors.sensors[0].shiny"), message);
 }
 
-TEST(RobotDescription, RefusesAValueOfTheWrongTypeNamingIt) {
+TEST_CASE("RobotDescription.RefusesAValueOfTheWrongTypeNamingIt") {
     const std::string text_instead = refusal_of(replaced(tiny_text(), "cells = 2", "cells = \"two\""));
     const std::string fraction = refusal_of(replaced(tiny_text(), "cells = 2", "cells = 2.5"));
     const std::string short_vector =
@@ -147,52 +147,52 @@ TEST(RobotDescription, RefusesAValueOfTheWrongTypeNamingIt) {
         tiny_text(), R"(mass = { value = 0.05, source = "made up" })", R"(mass = { value = "heavy", source = "x" })"
     ));
 
-    EXPECT_TRUE(text_instead.contains("battery.cells must be a whole number")) << text_instead;
-    EXPECT_TRUE(fraction.contains("battery.cells must be a whole number")) << fraction;
-    EXPECT_TRUE(short_vector.contains("imu.chip_y must be 3 numbers")) << short_vector;
-    EXPECT_TRUE(sourced.contains("chassis.mass must be a number")) << sourced;
+    CHECK_MESSAGE(text_instead.contains("battery.cells must be a whole number"), text_instead);
+    CHECK_MESSAGE(fraction.contains("battery.cells must be a whole number"), fraction);
+    CHECK_MESSAGE(short_vector.contains("imu.chip_y must be 3 numbers"), short_vector);
+    CHECK_MESSAGE(sourced.contains("chassis.mass must be a number"), sourced);
 }
 
-TEST(RobotDescription, RefusesASourcedTableThatIsNotExactlyAValueAndASource) {
+TEST_CASE("RobotDescription.RefusesASourcedTableThatIsNotExactlyAValueAndASource") {
     const std::string unsourced = refusal_of(replaced(tiny_text(), R"(, source = "made up" })", " }"));
     const std::string extra =
         refusal_of(replaced(tiny_text(), R"(source = "made up" })", R"(source = "made up", unit = "kg" })"));
 
-    EXPECT_TRUE(unsourced.contains("chassis.mass")) << unsourced;
-    EXPECT_TRUE(extra.contains("chassis.mass")) << extra;
+    CHECK_MESSAGE(unsourced.contains("chassis.mass"), unsourced);
+    CHECK_MESSAGE(extra.contains("chassis.mass"), extra);
 }
 
-TEST(RobotDescription, RefusesASchemaVersionItDoesNotKnow) {
+TEST_CASE("RobotDescription.RefusesASchemaVersionItDoesNotKnow") {
     const std::string message = refusal_of(replaced(tiny_text(), "schema = 1", "schema = 2"));
 
-    EXPECT_TRUE(message.contains("schema 2")) << message;
+    CHECK_MESSAGE(message.contains("schema 2"), message);
 }
 
-TEST(RobotDescription, RefusesAnOutlineOfFewerThanThreePoints) {
+TEST_CASE("RobotDescription.RefusesAnOutlineOfFewerThanThreePoints") {
     const std::string message = refusal_of(replaced(
         tiny_text(), "outline = [[0.04, 0.02], [-0.03, 0.02], [-0.03, -0.02], [0.04, -0.02]]",
         "outline = [[0.04, 0.02], [-0.03, 0.02]]"
     ));
 
-    EXPECT_TRUE(message.contains("chassis.outline")) << message;
+    CHECK_MESSAGE(message.contains("chassis.outline"), message);
 }
 
-TEST(RobotDescription, NamesTheFileInEveryRefusal) {
+TEST_CASE("RobotDescription.NamesTheFileInEveryRefusal") {
     const std::string syntax = refusal_of("schema = = 1");
     const std::string missing = refusal_of(replaced(tiny_text(), "bridge_resistance = 0.5\n", ""));
 
-    EXPECT_TRUE(syntax.starts_with("tiny.toml")) << syntax;
-    EXPECT_TRUE(missing.starts_with("tiny.toml")) << missing;
+    CHECK_MESSAGE(syntax.starts_with("tiny.toml"), syntax);
+    CHECK_MESSAGE(missing.starts_with("tiny.toml"), missing);
 }
 
-TEST(RobotDescription, RefusesAFileThatDoesNotExist) {
-    EXPECT_THROW(
+TEST_CASE("RobotDescription.RefusesAFileThatDoesNotExist") {
+    CHECK_THROWS_AS(
         RobotDescription::load(std::filesystem::path{MICRAS_TEST_ROBOT}.parent_path() / "no_such_robot.toml"),
         std::runtime_error
     );
 }
 
-TEST(RobotDescription, GeneratesAModelThatComposesWithAnArena) {
+TEST_CASE("RobotDescription.GeneratesAModelThatComposesWithAnArena") {
     const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
     const RobotModelNames  names = RobotModelNames::of(robot);
     const Maze             maze = Maze::parse("o---o\n| S |\no---o\n");
@@ -201,15 +201,15 @@ TEST(RobotDescription, GeneratesAModelThatComposesWithAnArena) {
     world.build(robot_mjcf(robot), names.body, maze.mjcf({}), Maze::body_name, {.x = 0.09, .y = 0.09});
     world.reset();
 
-    EXPECT_EQ(names.body, "tiny");
-    EXPECT_DOUBLE_EQ(world.timestep(), robot.integration.timestep);
-    EXPECT_NO_THROW(world.require_id(mjOBJ_BODY, names.body));
-    EXPECT_EQ(world.model()->njnt, 3) << "the free joint and one per wheel";
-    EXPECT_EQ(world.model()->nu, 3) << "one motor per wheel and the fan";
-    EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "cargo"));
-    EXPECT_NO_THROW(world.require_id(mjOBJ_GEOM, "mast"));
-    EXPECT_NO_THROW(world.require_id(mjOBJ_SITE, "eye_emitter"));
-    EXPECT_NO_THROW(world.sensor_address(names.gyro));
+    CHECK_EQ(names.body, "tiny");
+    CHECK_EQ(world.timestep(), doctest::Approx(robot.integration.timestep).epsilon(1e-12));
+    CHECK_NOTHROW(world.require_id(mjOBJ_BODY, names.body));
+    CHECK_MESSAGE(world.model()->njnt == 3, "the free joint and one per wheel");
+    CHECK_MESSAGE(world.model()->nu == 3, "one motor per wheel and the fan");
+    CHECK_NOTHROW(world.require_id(mjOBJ_GEOM, "cargo"));
+    CHECK_NOTHROW(world.require_id(mjOBJ_GEOM, "mast"));
+    CHECK_NOTHROW(world.require_id(mjOBJ_SITE, "eye_emitter"));
+    CHECK_NOTHROW(world.sensor_address(names.gyro));
 }
 }  // namespace
 }  // namespace micras::sim

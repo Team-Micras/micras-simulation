@@ -16,7 +16,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/bridge/monitor_bridge.hpp"
 #include "micras/sim/bridge/web_socket_server.hpp"
@@ -75,9 +75,9 @@ uint16_t hold_free_port(const Socket& socket) {
     socklen_t   length = sizeof(address);
 
     // NOLINTBEGIN(*-reinterpret-cast): the sockets API takes its addresses as sockaddr.
-    EXPECT_EQ(bind(socket.get(), reinterpret_cast<sockaddr*>(&address), sizeof(address)), 0);
-    EXPECT_EQ(listen(socket.get(), 1), 0);
-    EXPECT_EQ(getsockname(socket.get(), reinterpret_cast<sockaddr*>(&address), &length), 0);
+    CHECK_EQ(bind(socket.get(), reinterpret_cast<sockaddr*>(&address), sizeof(address)), 0);
+    CHECK_EQ(listen(socket.get(), 1), 0);
+    CHECK_EQ(getsockname(socket.get(), reinterpret_cast<sockaddr*>(&address), &length), 0);
     // NOLINTEND(*-reinterpret-cast)
 
     return ntohs(address.sin_port);
@@ -176,7 +176,7 @@ std::vector<uint8_t> receive_binary(const Socket& socket) {
     return payload;
 }
 
-TEST(MonitorBridge, CarriesRawBytesBothWays) {
+TEST_CASE("MonitorBridge.CarriesRawBytesBothWays") {
     RunContext context;
     load_tiny_world(context.world, context.clock);
     FirmwareThread   firmware{[](FirmwareThread& thread) {
@@ -188,13 +188,13 @@ TEST(MonitorBridge, CarriesRawBytesBothWays) {
     std::string          error;
     const uint16_t       port = free_port();
     MonitorBridge        bridge(context.serial, port, error);
-    ASSERT_TRUE(bridge.is_open()) << error;
+    REQUIRE_MESSAGE(bridge.is_open(), error);
 
     const Socket client;
-    ASSERT_TRUE(connect_and_stall(client, port));
+    REQUIRE(connect_and_stall(client, port));
 
     const std::vector<uint8_t> command{0x00, 0x01, 0x7E, 0xFF, 0x00};
-    ASSERT_TRUE(send_binary(client, command));
+    REQUIRE(send_binary(client, command));
 
     const auto deadline = steady_clock::now() + seconds(10);
 
@@ -204,24 +204,24 @@ TEST(MonitorBridge, CarriesRawBytesBothWays) {
         std::this_thread::sleep_for(milliseconds(1));
     }
 
-    EXPECT_EQ(inbound, command);
-    EXPECT_TRUE(bridge.was_interactive());
+    CHECK_EQ(inbound, command);
+    CHECK(bridge.was_interactive());
 
     const std::vector<uint8_t> telemetry{0x02, 0x00, 0xAA, 0x00};
     context.serial.send_from_firmware(telemetry);
     bridge.on_after_tick(simulation);
 
-    EXPECT_EQ(receive_binary(client), telemetry);
+    CHECK_EQ(receive_binary(client), telemetry);
 }
 
-TEST(WebSocketServer, AClientThatStopsReadingNeverStallsTheCaller) {
+TEST_CASE("WebSocketServer.AClientThatStopsReadingNeverStallsTheCaller") {
     WebSocketServer server;
     std::string     error;
     const uint16_t  port = free_port();
-    ASSERT_TRUE(server.start(port, error)) << error;
+    REQUIRE_MESSAGE(server.start(port, error), error);
 
     const Socket client;
-    ASSERT_TRUE(connect_and_stall(client, port));
+    REQUIRE(connect_and_stall(client, port));
 
     const std::vector<uint8_t> frame(std::size_t{64} * 1024, 0xAB);
     const auto                 deadline = steady_clock::now() + seconds(10);
@@ -233,22 +233,22 @@ TEST(WebSocketServer, AClientThatStopsReadingNeverStallsTheCaller) {
         slowest = std::max(slowest, steady_clock::now() - start);
     }
 
-    EXPECT_GT(server.dropped_frames(), 0U);
-    EXPECT_LT(slowest, milliseconds(100));
+    CHECK_GT(server.dropped_frames(), 0U);
+    CHECK_LT(slowest, milliseconds(100));
 
     auto stopping = std::async(std::launch::async, [&server] { server.stop(); });
-    EXPECT_EQ(stopping.wait_for(seconds(10)), std::future_status::ready);
+    CHECK_EQ(stopping.wait_for(seconds(10)), std::future_status::ready);
 }
 
-TEST(WebSocketServer, RefusesAPortSomebodyElseHolds) {
+TEST_CASE("WebSocketServer.RefusesAPortSomebodyElseHolds") {
     const Socket   holder;
     const uint16_t port = hold_free_port(holder);
 
     WebSocketServer server;
     std::string     error;
 
-    EXPECT_FALSE(server.start(port, error));
-    EXPECT_FALSE(error.empty());
+    CHECK_FALSE(server.start(port, error));
+    CHECK_FALSE(error.empty());
 }
 }  // namespace
 }  // namespace micras::sim

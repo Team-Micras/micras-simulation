@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
@@ -122,120 +122,120 @@ std::string refusal_of(std::string_view text) {
     return {};
 }
 
-TEST(Scenario, ReadsTheRunSettings) {
+TEST_CASE("Scenario.ReadsTheRunSettings") {
     const Scenario scenario = Scenario::parse(full_scenario);
 
-    EXPECT_EQ(scenario.robot, "tiny");
-    EXPECT_EQ(scenario.arena, "maze1");
-    EXPECT_DOUBLE_EQ(scenario.seconds, 12.0);
-    EXPECT_EQ(scenario.seed, 7U);
-    ASSERT_TRUE(scenario.start.has_value());
+    CHECK_EQ(scenario.robot, "tiny");
+    CHECK_EQ(scenario.arena, "maze1");
+    CHECK_EQ(scenario.seconds, doctest::Approx(12.0).epsilon(1e-12));
+    CHECK_EQ(scenario.seed, 7U);
+    REQUIRE(scenario.start.has_value());
 
     const MujocoWorld::Placement start = scenario.start.value_or(MujocoWorld::Placement{});
-    EXPECT_DOUBLE_EQ(start.x, 0.09);
-    EXPECT_DOUBLE_EQ(start.y, 0.18);
-    EXPECT_DOUBLE_EQ(start.yaw, std::numbers::pi / 2);
+    CHECK_EQ(start.x, doctest::Approx(0.09).epsilon(1e-12));
+    CHECK_EQ(start.y, doctest::Approx(0.18).epsilon(1e-12));
+    CHECK_EQ(start.yaw, doctest::Approx(std::numbers::pi / 2).epsilon(1e-12));
 }
 
-TEST(Scenario, LeavesOutWhatTheFileDoesNotSay) {
+TEST_CASE("Scenario.LeavesOutWhatTheFileDoesNotSay") {
     const Scenario scenario = Scenario::parse("seconds = 4.5\n");
 
-    EXPECT_TRUE(scenario.robot.empty());
-    EXPECT_TRUE(scenario.arena.empty());
-    EXPECT_DOUBLE_EQ(scenario.seconds, 4.5);
-    EXPECT_FALSE(scenario.seed.has_value());
-    EXPECT_FALSE(scenario.start.has_value());
-    EXPECT_TRUE(scenario.events.empty());
-    EXPECT_FALSE(scenario.stop.has_value());
+    CHECK(scenario.robot.empty());
+    CHECK(scenario.arena.empty());
+    CHECK_EQ(scenario.seconds, doctest::Approx(4.5).epsilon(1e-12));
+    CHECK_FALSE(scenario.seed.has_value());
+    CHECK_FALSE(scenario.start.has_value());
+    CHECK(scenario.events.empty());
+    CHECK_FALSE(scenario.stop.has_value());
 }
 
-TEST(Scenario, ReadsEveryKindOfEventInTimeOrder) {
+TEST_CASE("Scenario.ReadsEveryKindOfEventInTimeOrder") {
     const Scenario scenario = Scenario::parse(full_scenario);
 
-    ASSERT_EQ(scenario.events.size(), 3U);
+    REQUIRE_EQ(scenario.events.size(), 3U);
 
     const ScenarioEvent& press = scenario.events.at(0);
-    EXPECT_EQ(press.kind, ScenarioEvent::Kind::PRESS);
-    EXPECT_DOUBLE_EQ(press.at, 0.5);
-    EXPECT_DOUBLE_EQ(press.duration, 0.25);
-    EXPECT_EQ(press.target, "button");
+    CHECK_EQ(press.kind, ScenarioEvent::Kind::PRESS);
+    CHECK_EQ(press.at, doctest::Approx(0.5).epsilon(1e-12));
+    CHECK_EQ(press.duration, doctest::Approx(0.25).epsilon(1e-12));
+    CHECK_EQ(press.target, "button");
 
     const ScenarioEvent& set = scenario.events.at(1);
-    EXPECT_EQ(set.kind, ScenarioEvent::Kind::SET);
-    EXPECT_EQ(set.target, "switch");
-    EXPECT_TRUE(set.value);
+    CHECK_EQ(set.kind, ScenarioEvent::Kind::SET);
+    CHECK_EQ(set.target, "switch");
+    CHECK(set.value);
 
     const ScenarioEvent& send = scenario.events.at(2);
-    EXPECT_EQ(send.kind, ScenarioEvent::Kind::SEND);
-    EXPECT_EQ(send.target, "hello");
+    CHECK_EQ(send.kind, ScenarioEvent::Kind::SEND);
+    CHECK_EQ(send.target, "hello");
 }
 
-TEST(Scenario, ReadsTheStopConditionAsANameOrANumber) {
+TEST_CASE("Scenario.ReadsTheStopConditionAsANameOrANumber") {
     const Scenario named = Scenario::parse(full_scenario);
     const Scenario numbered = Scenario::parse("[stop]\nwhen = \"lap\"\nequals = 3\n");
 
-    ASSERT_TRUE(named.stop.has_value());
-    ASSERT_TRUE(numbered.stop.has_value());
+    REQUIRE(named.stop.has_value());
+    REQUIRE(numbered.stop.has_value());
 
     const StopCondition by_name = named.stop.value_or(StopCondition{});
     const StopCondition by_number = numbered.stop.value_or(StopCondition{});
-    EXPECT_EQ(by_name.variable, "state");
-    EXPECT_EQ(by_name.equals, std::vector<std::string>{"IDLE"});
-    EXPECT_DOUBLE_EQ(by_name.after, 5.0);
-    EXPECT_EQ(by_number.equals, std::vector<std::string>{"3"});
-    EXPECT_DOUBLE_EQ(by_number.after, 0.0);
+    CHECK_EQ(by_name.variable, "state");
+    CHECK_EQ(by_name.equals, std::vector<std::string>{"IDLE"});
+    CHECK_EQ(by_name.after, doctest::Approx(5.0).epsilon(1e-12));
+    CHECK_EQ(by_number.equals, std::vector<std::string>{"3"});
+    CHECK_EQ(by_number.after, doctest::Approx(0.0).epsilon(1e-12));
 }
 
-TEST(Scenario, ReadsAStopConditionWithSeveralValues) {
+TEST_CASE("Scenario.ReadsAStopConditionWithSeveralValues") {
     const Scenario scenario = Scenario::parse("[stop]\nwhen = \"state\"\nequals = [\"IDLE\", 2]\n");
 
-    ASSERT_TRUE(scenario.stop.has_value());
-    EXPECT_EQ(scenario.stop.value_or(StopCondition{}).equals, (std::vector<std::string>{"IDLE", "2"}));
-    EXPECT_TRUE(refusal_of("[stop]\nwhen = \"a\"\nequals = []\n").contains("equals names no value"));
+    REQUIRE(scenario.stop.has_value());
+    CHECK_EQ(scenario.stop.value_or(StopCondition{}).equals, (std::vector<std::string>{"IDLE", "2"}));
+    CHECK(refusal_of("[stop]\nwhen = \"a\"\nequals = []\n").contains("equals names no value"));
 }
 
-TEST(Scenario, RefusesAnUnknownKeyNamingIt) {
-    EXPECT_TRUE(refusal_of("second = 4\n").contains("unknown key second"));
-    EXPECT_TRUE(refusal_of("[start]\nx = 0\ny = 0\nyaw = 0\n").contains("unknown key yaw"));
-    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\nsend = \"a\"\nuntil = 2\n").contains("events[0]: unknown key until"));
-    EXPECT_TRUE(refusal_of("[stop]\nwhen = \"a\"\nequals = 1\nbefore = 2\n").contains("unknown key before"));
+TEST_CASE("Scenario.RefusesAnUnknownKeyNamingIt") {
+    CHECK(refusal_of("second = 4\n").contains("unknown key second"));
+    CHECK(refusal_of("[start]\nx = 0\ny = 0\nyaw = 0\n").contains("unknown key yaw"));
+    CHECK(refusal_of("[[events]]\nat = 1\nsend = \"a\"\nuntil = 2\n").contains("events[0]: unknown key until"));
+    CHECK(refusal_of("[stop]\nwhen = \"a\"\nequals = 1\nbefore = 2\n").contains("unknown key before"));
 }
 
-TEST(Scenario, RefusesAnEventThatIsNotExactlyOneThing) {
-    EXPECT_FALSE(refusal_of("[[events]]\nat = 1\n").empty());
-    EXPECT_FALSE(refusal_of("[[events]]\nat = 1\nsend = \"a\"\npress = \"b\"\nfor = 1\n").empty());
-    EXPECT_FALSE(refusal_of("events = [1, 2]\n").empty());
+TEST_CASE("Scenario.RefusesAnEventThatIsNotExactlyOneThing") {
+    CHECK_FALSE(refusal_of("[[events]]\nat = 1\n").empty());
+    CHECK_FALSE(refusal_of("[[events]]\nat = 1\nsend = \"a\"\npress = \"b\"\nfor = 1\n").empty());
+    CHECK_FALSE(refusal_of("events = [1, 2]\n").empty());
 }
 
-TEST(Scenario, RefusesAnEventMissingWhatItNeeds) {
-    EXPECT_TRUE(refusal_of("[[events]]\nsend = \"a\"\n").contains("at must be a number"));
-    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\npress = \"a\"\n").contains("for must be a number"));
-    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\nset = \"a\"\n").contains("true or false"));
-    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\n").contains("exactly one of press, set or send"));
+TEST_CASE("Scenario.RefusesAnEventMissingWhatItNeeds") {
+    CHECK(refusal_of("[[events]]\nsend = \"a\"\n").contains("at must be a number"));
+    CHECK(refusal_of("[[events]]\nat = 1\npress = \"a\"\n").contains("for must be a number"));
+    CHECK(refusal_of("[[events]]\nat = 1\nset = \"a\"\n").contains("true or false"));
+    CHECK(refusal_of("[[events]]\nat = 1\n").contains("exactly one of press, set or send"));
 }
 
-TEST(Scenario, RefusesNegativeTimes) {
-    EXPECT_TRUE(refusal_of("[[events]]\nat = -1\nsend = \"a\"\n").contains("negative"));
-    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\npress = \"a\"\nfor = -0.5\n").contains("negative"));
+TEST_CASE("Scenario.RefusesNegativeTimes") {
+    CHECK(refusal_of("[[events]]\nat = -1\nsend = \"a\"\n").contains("negative"));
+    CHECK(refusal_of("[[events]]\nat = 1\npress = \"a\"\nfor = -0.5\n").contains("negative"));
 }
 
-TEST(Scenario, RefusesAnIncompleteStartOrStop) {
-    EXPECT_TRUE(refusal_of("[start]\nx = 0\nyaw_deg = 0\n").contains("y must be a number"));
-    EXPECT_TRUE(refusal_of("[stop]\nequals = 1\n").contains("when must name"));
-    EXPECT_TRUE(refusal_of("[stop]\nwhen = \"a\"\nequals = true\n").contains("equals must be"));
+TEST_CASE("Scenario.RefusesAnIncompleteStartOrStop") {
+    CHECK(refusal_of("[start]\nx = 0\nyaw_deg = 0\n").contains("y must be a number"));
+    CHECK(refusal_of("[stop]\nequals = 1\n").contains("when must name"));
+    CHECK(refusal_of("[stop]\nwhen = \"a\"\nequals = true\n").contains("equals must be"));
 }
 
-TEST(Scenario, RefusesAFileThatIsNotToml) {
-    EXPECT_TRUE(refusal_of("seconds = = 4\n").starts_with("test.toml"));
-    EXPECT_THROW(Scenario::load("no_such_scenario.toml"), std::runtime_error);
+TEST_CASE("Scenario.RefusesAFileThatIsNotToml") {
+    CHECK(refusal_of("seconds = = 4\n").starts_with("test.toml"));
+    CHECK_THROWS_AS(Scenario::load("no_such_scenario.toml"), std::runtime_error);
 }
 
 /**
  * @brief A world, one input and one message: what a robot target hands a scenario.
  */
-class Playing : public testing::Test {
+class Playing {
 protected:
-    void SetUp() override {
+    Playing() {
         load_tiny_world(this->context.world, this->context.clock);
 
         this->hooks.inputs.emplace("button", &this->button);
@@ -298,135 +298,138 @@ protected:
     // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
-TEST_F(Playing, PressesAnInputForTheTimeTheEventSays) {
+TEST_CASE_FIXTURE(Playing, "Playing.PressesAnInputForTheTimeTheEventSays") {
     this->play("[[events]]\nat = 0.01\npress = \"button\"\nfor = 0.02\n", 50);
 
     const uint64_t first = this->context.clock.tick_at(0.01);
     const uint64_t last = first + this->context.clock.tick_at(0.02) - 1;
 
-    ASSERT_FALSE(this->probe.pressed_ticks.empty());
-    EXPECT_EQ(this->probe.pressed_ticks.front(), first);
-    EXPECT_EQ(this->probe.pressed_ticks.back(), last);
-    EXPECT_EQ(this->probe.pressed_ticks.size(), last - first + 1);
-    EXPECT_FALSE(this->button.is_active());
-    EXPECT_TRUE(this->button_level);
+    REQUIRE_FALSE(this->probe.pressed_ticks.empty());
+    CHECK_EQ(this->probe.pressed_ticks.front(), first);
+    CHECK_EQ(this->probe.pressed_ticks.back(), last);
+    CHECK_EQ(this->probe.pressed_ticks.size(), last - first + 1);
+    CHECK_FALSE(this->button.is_active());
+    CHECK(this->button_level);
 }
 
-TEST_F(Playing, DrivesTheInputsPinWithItsPolarity) {
+TEST_CASE_FIXTURE(Playing, "Playing.DrivesTheInputsPinWithItsPolarity") {
     this->play("[[events]]\nat = 0\nset = \"button\"\nvalue = true\n", 1);
 
-    EXPECT_TRUE(this->button.is_active());
-    EXPECT_FALSE(this->button_level);
+    CHECK(this->button.is_active());
+    CHECK_FALSE(this->button_level);
 }
 
-TEST_F(Playing, LeavesTheInputsAloneOnceAHumanHasTheBoard) {
+TEST_CASE_FIXTURE(Playing, "Playing.LeavesTheInputsAloneOnceAHumanHasTheBoard") {
     this->play("[[events]]\nat = 0.01\npress = \"button\"\nfor = 0.02\n", 50, nullptr, true);
 
-    EXPECT_TRUE(this->probe.pressed_ticks.empty());
+    CHECK(this->probe.pressed_ticks.empty());
 }
 
-TEST_F(Playing, QueuesAMessageForTheFirmware) {
+TEST_CASE_FIXTURE(Playing, "Playing.QueuesAMessageForTheFirmware") {
     this->play("[[events]]\nat = 0.005\nsend = \"hello\"\n", 10);
 
-    EXPECT_EQ(this->context.serial.take_for_firmware(10), (std::vector<uint8_t>{1, 2, 3}));
+    CHECK_EQ(this->context.serial.take_for_firmware(10), (std::vector<uint8_t>{1, 2, 3}));
 }
 
-TEST_F(Playing, RefusesAnEventOnSomethingTheRobotDoesNotHave) {
-    EXPECT_THROW(this->play("[[events]]\nat = 0\npress = \"lever\"\nfor = 1\n", 1), std::runtime_error);
-    EXPECT_THROW(this->play("[[events]]\nat = 0\nsend = \"goodbye\"\n", 1), std::runtime_error);
+TEST_CASE_FIXTURE(Playing, "Playing.RefusesAnEventOnSomethingTheRobotDoesNotHave") {
+    CHECK_THROWS_AS(this->play("[[events]]\nat = 0\npress = \"lever\"\nfor = 1\n", 1), std::runtime_error);
+    CHECK_THROWS_AS(this->play("[[events]]\nat = 0\nsend = \"goodbye\"\n", 1), std::runtime_error);
 }
 
-TEST_F(Playing, RefusesAStopOnAStateTheVariableDoesNotHave) {
-    EXPECT_THROW(this->play("[stop]\nwhen = \"state\"\nequals = \"LOST\"\n", 1), std::runtime_error);
-    EXPECT_THROW(this->play("[stop]\nwhen = \"lap\"\nequals = \"LAST\"\n", 1), std::runtime_error);
+TEST_CASE_FIXTURE(Playing, "Playing.RefusesAStopOnAStateTheVariableDoesNotHave") {
+    CHECK_THROWS_AS(this->play("[stop]\nwhen = \"state\"\nequals = \"LOST\"\n", 1), std::runtime_error);
+    CHECK_THROWS_AS(this->play("[stop]\nwhen = \"lap\"\nequals = \"LAST\"\n", 1), std::runtime_error);
 }
 
-TEST_F(Playing, StopsTheRunOnceTheConditionHoldsAfterItsDelay) {
+TEST_CASE_FIXTURE(Playing, "Playing.StopsTheRunOnceTheConditionHoldsAfterItsDelay") {
     const MapVariables variables({{"state", 1.0}});
     const auto player = this->play("[stop]\nwhen = \"state\"\nequals = \"IDLE\"\nafter = 0.1\n", 1000, &variables);
 
     const auto stop_tick = static_cast<uint64_t>(std::ceil(0.1 / 1042e-6));
 
-    ASSERT_TRUE(player->stopped_at().has_value());
-    EXPECT_EQ(this->completed, stop_tick);
-    EXPECT_DOUBLE_EQ(player->stopped_at().value_or(-1.0), static_cast<double>(stop_tick) * 1042 * 1e-6);
-    EXPECT_GE(player->stopped_at().value_or(-1.0), 0.1);
+    REQUIRE(player->stopped_at().has_value());
+    CHECK_EQ(this->completed, stop_tick);
+    CHECK_EQ(
+        player->stopped_at().value_or(-1.0),
+        doctest::Approx(static_cast<double>(stop_tick) * 1042 * 1e-6).epsilon(1e-12)
+    );
+    CHECK_GE(player->stopped_at().value_or(-1.0), 0.1);
 }
 
-TEST_F(Playing, StopsOnANumericValue) {
+TEST_CASE_FIXTURE(Playing, "Playing.StopsOnANumericValue") {
     const MapVariables variables({{"lap", 3.0}});
     const auto         player = this->play("[stop]\nwhen = \"lap\"\nequals = 3\n", 100, &variables);
 
-    EXPECT_EQ(player->stopped_at(), 0.0);
-    EXPECT_EQ(this->completed, 0U);
+    CHECK_EQ(player->stopped_at(), 0.0);
+    CHECK_EQ(this->completed, 0U);
 }
 
-TEST_F(Playing, StopsOnAnyOfSeveralValues) {
+TEST_CASE_FIXTURE(Playing, "Playing.StopsOnAnyOfSeveralValues") {
     const MapVariables variables({{"state", 2.0}});
     const auto         player = this->play("[stop]\nwhen = \"state\"\nequals = [\"IDLE\", \"RUN\"]\n", 100, &variables);
 
-    EXPECT_EQ(player->stopped_at(), 0.0);
-    EXPECT_EQ(this->completed, 0U);
+    CHECK_EQ(player->stopped_at(), 0.0);
+    CHECK_EQ(this->completed, 0U);
 }
 
-TEST_F(Playing, StopsOnlyOnceTheValueIsReachedTheCountedTimes) {
+TEST_CASE_FIXTURE(Playing, "Playing.StopsOnlyOnceTheValueIsReachedTheCountedTimes") {
     SteppedVariables variables("state", {{0, 1.0}, {10, 2.0}, {20, 1.0}, {30, 2.0}, {40, 1.0}});
     const auto       player =
         this->play("[stop]\nwhen = \"state\"\nequals = \"IDLE\"\ncount = 3\n", 100, &variables, false, &variables);
 
-    EXPECT_EQ(this->completed, 40U);
-    EXPECT_TRUE(player->stopped_at().has_value());
+    CHECK_EQ(this->completed, 40U);
+    CHECK(player->stopped_at().has_value());
 }
 
-TEST_F(Playing, AbortsOnTheFirstAbortValueWhateverTheCount) {
+TEST_CASE_FIXTURE(Playing, "Playing.AbortsOnTheFirstAbortValueWhateverTheCount") {
     SteppedVariables variables("state", {{0, 1.0}, {10, 0.0}});
     const auto       player = this->play(
         "[stop]\nwhen = \"state\"\nequals = \"IDLE\"\ncount = 3\nabort = [\"INIT\"]\n", 100, &variables, false,
         &variables
     );
 
-    EXPECT_EQ(this->completed, 10U);
-    EXPECT_TRUE(player->stopped_at().has_value());
+    CHECK_EQ(this->completed, 10U);
+    CHECK(player->stopped_at().has_value());
 }
 
-TEST_F(Playing, HoldsAnEventUntilItsConditionHolds) {
+TEST_CASE_FIXTURE(Playing, "Playing.HoldsAnEventUntilItsConditionHolds") {
     SteppedVariables variables("state", {{0, 1.0}, {25, 2.0}});
     this->play(
         "[[events]]\nat = 0\npress = \"button\"\nfor = 0.002\nwhen = \"state\"\nequals = \"RUN\"\n", 40, &variables,
         false, &variables
     );
 
-    ASSERT_FALSE(this->probe.pressed_ticks.empty());
-    EXPECT_EQ(this->probe.pressed_ticks.front(), 25U);
+    REQUIRE_FALSE(this->probe.pressed_ticks.empty());
+    CHECK_EQ(this->probe.pressed_ticks.front(), 25U);
 }
 
-TEST(Scenario, ReadsAnEventConditionAndAStopCount) {
+TEST_CASE("Scenario.ReadsAnEventConditionAndAStopCount") {
     const Scenario scenario = Scenario::parse(
         "[[events]]\nat = 1\nsend = \"a\"\nwhen = \"state\"\nequals = \"IDLE\"\n"
         "[stop]\nwhen = \"state\"\nequals = \"IDLE\"\ncount = 2\n"
     );
 
-    ASSERT_EQ(scenario.events.size(), 1U);
-    EXPECT_EQ(scenario.events.front().when, "state");
-    EXPECT_EQ(scenario.events.front().equals, "IDLE");
-    EXPECT_EQ(scenario.stop.value_or(StopCondition{}).count, 2);
-    EXPECT_TRUE(refusal_of("[[events]]\nat = 1\nsend = \"a\"\nwhen = \"state\"\n").contains("needs both"));
-    EXPECT_TRUE(refusal_of("[stop]\nwhen = \"a\"\nequals = 1\ncount = 0\n").contains("count must be"));
+    REQUIRE_EQ(scenario.events.size(), 1U);
+    CHECK_EQ(scenario.events.front().when, "state");
+    CHECK_EQ(scenario.events.front().equals, "IDLE");
+    CHECK_EQ(scenario.stop.value_or(StopCondition{}).count, 2);
+    CHECK(refusal_of("[[events]]\nat = 1\nsend = \"a\"\nwhen = \"state\"\n").contains("needs both"));
+    CHECK(refusal_of("[stop]\nwhen = \"a\"\nequals = 1\ncount = 0\n").contains("count must be"));
 }
 
-TEST_F(Playing, RunsToTheEndWhileTheConditionDoesNotHold) {
+TEST_CASE_FIXTURE(Playing, "Playing.RunsToTheEndWhileTheConditionDoesNotHold") {
     const MapVariables variables({{"state", 2.0}});
     const auto         player = this->play("[stop]\nwhen = \"state\"\nequals = \"IDLE\"\n", 20, &variables);
 
-    EXPECT_FALSE(player->stopped_at().has_value());
-    EXPECT_EQ(this->completed, 20U);
+    CHECK_FALSE(player->stopped_at().has_value());
+    CHECK_EQ(this->completed, 20U);
 }
 
-TEST_F(Playing, NeverStopsWithoutAnythingToReadTheVariableFrom) {
+TEST_CASE_FIXTURE(Playing, "Playing.NeverStopsWithoutAnythingToReadTheVariableFrom") {
     const auto player = this->play("[stop]\nwhen = \"state\"\nequals = \"INIT\"\n", 20);
 
-    EXPECT_FALSE(player->stopped_at().has_value());
-    EXPECT_EQ(this->completed, 20U);
+    CHECK_FALSE(player->stopped_at().has_value());
+    CHECK_EQ(this->completed, 20U);
 }
 }  // namespace
 }  // namespace micras::sim

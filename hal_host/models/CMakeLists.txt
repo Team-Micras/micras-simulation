@@ -17,8 +17,6 @@ target_compile_features(micras_hal_host_models PUBLIC cxx_std_23)
 target_compile_options(micras_hal_host_models PRIVATE -Wall -Wextra)
 
 if(MICRAS_SIM_TESTS)
-    include(GoogleTest)
-
     # ST's register driver header names the registers the tests address, so a model
     # register at another address than the driver's fails here.
     add_executable(micras_hal_host_models_tests
@@ -26,9 +24,9 @@ if(MICRAS_SIM_TESTS)
         tests/lsm6dsv_model_test.cpp
     )
     target_link_libraries(micras_hal_host_models_tests PRIVATE
-        micras_hal_host_models lsm6dsv_headers GTest::gtest_main
+        micras_hal_host_models lsm6dsv_headers doctest::doctest_with_main
     )
     target_compile_options(micras_hal_host_models_tests PRIVATE -Wall -Wextra)
 
-    gtest_discover_tests(micras_hal_host_models_tests)
+    doctest_discover_tests(micras_hal_host_models_tests)
 endif()

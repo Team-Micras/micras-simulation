@@ -2,13 +2,13 @@
 #include <stdexcept>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/core/firmware_thread.hpp"
 
 namespace micras::sim {
 namespace {
-TEST(FirmwareThread, RunsTheProgramUpToEachYield) {
+TEST_CASE("FirmwareThread.RunsTheProgramUpToEachYield") {
     std::vector<int> trace;
 
     FirmwareThread firmware([&](FirmwareThread& thread) {
@@ -19,16 +19,16 @@ TEST(FirmwareThread, RunsTheProgramUpToEachYield) {
     });
 
     firmware.run_until_yield();
-    EXPECT_EQ(trace, (std::vector<int>{0}));
+    CHECK_EQ(trace, (std::vector<int>{0}));
 
     firmware.run_until_yield();
-    EXPECT_EQ(trace, (std::vector<int>{0, 1}));
+    CHECK_EQ(trace, (std::vector<int>{0, 1}));
 
     firmware.run_until_yield();
-    EXPECT_EQ(trace, (std::vector<int>{0, 1, 2}));
+    CHECK_EQ(trace, (std::vector<int>{0, 1, 2}));
 }
 
-TEST(FirmwareThread, NeverRunsBesideTheSimulation) {
+TEST_CASE("FirmwareThread.NeverRunsBesideTheSimulation") {
     std::atomic<int> awake{0};
     std::atomic<int> overlaps{0};
 
@@ -53,7 +53,7 @@ TEST(FirmwareThread, NeverRunsBesideTheSimulation) {
         awake--;
     }
 
-    EXPECT_EQ(overlaps, 0);
+    CHECK_EQ(overlaps, 0);
 }
 
 /**
@@ -74,7 +74,7 @@ private:
     bool& flag;  // NOLINT(*-avoid-const-or-ref-data-members): the test owns the flag.
 };
 
-TEST(FirmwareThread, EndlessProgramsAreUnwoundByFinish) {
+TEST_CASE("FirmwareThread.EndlessProgramsAreUnwoundByFinish") {
     bool destructor_ran = false;
 
     {
@@ -87,11 +87,11 @@ TEST(FirmwareThread, EndlessProgramsAreUnwoundByFinish) {
         });
 
         firmware.run_until_yield();
-        EXPECT_FALSE(firmware.has_finished());
+        CHECK_FALSE(firmware.has_finished());
         firmware.finish();
     }
 
-    EXPECT_TRUE(destructor_ran);
+    CHECK(destructor_ran);
 }
 
 /**
@@ -116,7 +116,7 @@ private:
     bool&           flag;    // NOLINT(*-avoid-const-or-ref-data-members): the test owns the flag.
 };
 
-TEST(FirmwareThread, UnwindingIsNotBlockedByAYieldingDestructor) {
+TEST_CASE("FirmwareThread.UnwindingIsNotBlockedByAYieldingDestructor") {
     bool destructor_ran = false;
 
     FirmwareThread firmware([&](FirmwareThread& thread) {
@@ -130,31 +130,31 @@ TEST(FirmwareThread, UnwindingIsNotBlockedByAYieldingDestructor) {
     firmware.run_until_yield();
     firmware.finish();
 
-    EXPECT_TRUE(destructor_ran);
+    CHECK(destructor_ran);
 }
 
-TEST(FirmwareThread, ReportsAProgramThatReturns) {
+TEST_CASE("FirmwareThread.ReportsAProgramThatReturns") {
     FirmwareThread firmware([](FirmwareThread&) { });
 
     firmware.run_until_yield();
-    EXPECT_TRUE(firmware.has_finished());
-    EXPECT_NO_THROW(firmware.rethrow_any_error());
+    CHECK(firmware.has_finished());
+    CHECK_NOTHROW(firmware.rethrow_any_error());
 }
 
-TEST(FirmwareThread, CarriesAProgramErrorBackToTheSimulation) {
+TEST_CASE("FirmwareThread.CarriesAProgramErrorBackToTheSimulation") {
     FirmwareThread firmware([](FirmwareThread&) { throw std::runtime_error("the firmware gave up"); });
 
     firmware.run_until_yield();
-    EXPECT_TRUE(firmware.has_finished());
-    EXPECT_THROW(firmware.rethrow_any_error(), std::runtime_error);
+    CHECK(firmware.has_finished());
+    CHECK_THROWS_AS(firmware.rethrow_any_error(), std::runtime_error);
 }
 
-TEST(FirmwareThread, RunningAFinishedProgramIsHarmless) {
+TEST_CASE("FirmwareThread.RunningAFinishedProgramIsHarmless") {
     FirmwareThread firmware([](FirmwareThread&) { });
 
     firmware.run_until_yield();
-    EXPECT_NO_THROW(firmware.run_until_yield());
-    EXPECT_NO_THROW(firmware.finish());
+    CHECK_NOTHROW(firmware.run_until_yield());
+    CHECK_NOTHROW(firmware.finish());
 }
 }  // namespace
 }  // namespace micras::sim

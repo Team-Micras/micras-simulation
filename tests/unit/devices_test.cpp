@@ -4,10 +4,11 @@
 #include <numbers>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/core/clock.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
@@ -40,9 +41,9 @@ DriveDescription tiny_drive() {
 /**
  * @brief The tiny robot's world and a clock of 1042 us ticks.
  */
-class Devices : public testing::Test {
+class Devices {
 protected:
-    void SetUp() override { load_tiny_world(this->world, this->clock); }
+    Devices() { load_tiny_world(this->world, this->clock); }
 
     /**
      * @brief Get the tiny robot's wheel joint position.
@@ -117,29 +118,29 @@ private:
     std::size_t wheel() const { return static_cast<std::size_t>(this->world.require_id(mjOBJ_JOINT, "wheel")); }
 };
 
-TEST_F(Devices, AppliesTheDutyCycleDifferenceTimesTheSupply) {
+TEST_CASE_FIXTURE(Devices, "Devices.AppliesTheDutyCycleDifferenceTimesTheSupply") {
     DcMotor motor = this->motor();
 
     this->forward = 50.0F;
     motor.actuate(this->world, this->clock);
-    EXPECT_DOUBLE_EQ(this->motor_control(), 3.0);
+    CHECK_EQ(this->motor_control(), doctest::Approx(3.0).epsilon(1e-12));
 
     this->forward = 25.0F;
     this->backward = 75.0F;
     motor.actuate(this->world, this->clock);
-    EXPECT_DOUBLE_EQ(this->motor_control(), -3.0);
+    CHECK_EQ(this->motor_control(), doctest::Approx(-3.0).epsilon(1e-12));
 }
 
-TEST_F(Devices, NeverAppliesMoreThanTheSupply) {
+TEST_CASE_FIXTURE(Devices, "Devices.NeverAppliesMoreThanTheSupply") {
     DcMotor motor = this->motor();
 
     this->forward = 150.0F;
     motor.actuate(this->world, this->clock);
 
-    EXPECT_DOUBLE_EQ(this->motor_control(), 6.0);
+    CHECK_EQ(this->motor_control(), doctest::Approx(6.0).epsilon(1e-12));
 }
 
-TEST_F(Devices, DrivesTheCurrentAgainstTheBackEmf) {
+TEST_CASE_FIXTURE(Devices, "Devices.DrivesTheCurrentAgainstTheBackEmf") {
     DcMotor motor = this->motor();
     this->wheel_speed() = 10.0;
 
@@ -147,20 +148,20 @@ TEST_F(Devices, DrivesTheCurrentAgainstTheBackEmf) {
     motor.actuate(this->world, this->clock);
 
     const double back_emf = 0.003 * 5.0 * 10.0;
-    EXPECT_DOUBLE_EQ(motor.current(), (3.0 - back_emf) / 10.0);
+    CHECK_EQ(motor.current(), doctest::Approx((3.0 - back_emf) / 10.0).epsilon(1e-12));
 }
 
-TEST_F(Devices, BrakesWithBothInputsLow) {
+TEST_CASE_FIXTURE(Devices, "Devices.BrakesWithBothInputsLow") {
     DcMotor motor = this->motor();
     this->wheel_speed() = 10.0;
 
     motor.actuate(this->world, this->clock);
 
-    EXPECT_DOUBLE_EQ(this->motor_control(), 0.0);
-    EXPECT_LT(motor.current(), 0.0);
+    CHECK_EQ(this->motor_control(), doctest::Approx(0.0).epsilon(1e-12));
+    CHECK_LT(motor.current(), 0.0);
 }
 
-TEST_F(Devices, LeavesTheWindingOpenWhenTheBridgeIsDisabled) {
+TEST_CASE_FIXTURE(Devices, "Devices.LeavesTheWindingOpenWhenTheBridgeIsDisabled") {
     DcMotor motor = this->motor();
     this->wheel_speed() = 10.0;
     this->forward = 100.0F;
@@ -168,11 +169,11 @@ TEST_F(Devices, LeavesTheWindingOpenWhenTheBridgeIsDisabled) {
 
     motor.actuate(this->world, this->clock);
 
-    EXPECT_DOUBLE_EQ(this->motor_control(), 0.003 * 5.0 * 10.0);
-    EXPECT_DOUBLE_EQ(motor.current(), 0.0);
+    CHECK_EQ(this->motor_control(), doctest::Approx(0.003 * 5.0 * 10.0).epsilon(1e-12));
+    CHECK_EQ(motor.current(), doctest::Approx(0.0).epsilon(1e-12));
 }
 
-TEST_F(Devices, RecordsTheMotorsVoltageAndCurrent) {
+TEST_CASE_FIXTURE(Devices, "Devices.RecordsTheMotorsVoltageAndCurrent") {
     DcMotor motor = this->motor();
     this->forward = 50.0F;
     motor.actuate(this->world, this->clock);
@@ -180,13 +181,13 @@ TEST_F(Devices, RecordsTheMotorsVoltageAndCurrent) {
     std::vector<CsvCell> row;
     motor.append(row);
 
-    EXPECT_EQ(motor.columns(), (std::vector<std::string>{"wheel_voltage", "wheel_current"}));
-    ASSERT_EQ(row.size(), 2U);
-    EXPECT_DOUBLE_EQ(std::get<double>(row.at(0)), 3.0);
+    CHECK_EQ(motor.columns(), (std::vector<std::string>{"wheel_voltage", "wheel_current"}));
+    REQUIRE_EQ(row.size(), 2U);
+    CHECK_EQ(std::get<double>(row.at(0)), doctest::Approx(3.0).epsilon(1e-12));
 }
 
-TEST_F(Devices, RefusesAMotorOnAnActuatorTheModelDoesNotHave) {
-    EXPECT_THROW(
+TEST_CASE_FIXTURE(Devices, "Devices.RefusesAMotorOnAnActuatorTheModelDoesNotHave") {
+    CHECK_THROWS_AS(
         DcMotor(
             this->world, {.name = "ghost",
                           .actuator = "ghost",
@@ -200,7 +201,7 @@ TEST_F(Devices, RefusesAMotorOnAnActuatorTheModelDoesNotHave) {
     );
 }
 
-TEST_F(Devices, CountsTheWheelAngleAtTheEncodersResolution) {
+TEST_CASE_FIXTURE(Devices, "Devices.CountsTheWheelAngleAtTheEncodersResolution") {
     std::optional<int32_t> written;
     QuadratureEncoder      encoder(
         this->world,
@@ -212,14 +213,14 @@ TEST_F(Devices, CountsTheWheelAngleAtTheEncodersResolution) {
 
     this->wheel_angle() = 1024.5 * radians_per_count;
     encoder.sample(this->world, this->clock);
-    EXPECT_EQ(written, 1024);
+    CHECK_EQ(written, 1024);
 
     this->wheel_angle() = (2.5 * 4096.0 + 0.5) * radians_per_count;
     encoder.sample(this->world, this->clock);
-    EXPECT_EQ(written, 10240);
+    CHECK_EQ(written, 10240);
 }
 
-TEST_F(Devices, CountsDownWhenTheWheelTurnsBackwards) {
+TEST_CASE_FIXTURE(Devices, "Devices.CountsDownWhenTheWheelTurnsBackwards") {
     std::optional<int32_t> written;
     QuadratureEncoder      encoder(
         this->world,
@@ -231,12 +232,12 @@ TEST_F(Devices, CountsDownWhenTheWheelTurnsBackwards) {
     this->wheel_angle() = -1023.5 * 2.0 * std::numbers::pi / 4096.0;
     encoder.sample(this->world, this->clock);
 
-    EXPECT_EQ(written, -1024);
+    CHECK_EQ(written, -1024);
 
     std::vector<CsvCell> row;
     encoder.append(row);
-    EXPECT_EQ(encoder.columns(), (std::vector<std::string>{"wheel_count"}));
-    EXPECT_EQ(std::get<int64_t>(row.at(0)), -1024);
+    CHECK_EQ(encoder.columns(), (std::vector<std::string>{"wheel_count"}));
+    CHECK_EQ(std::get<int64_t>(row.at(0)), -1024);
 }
 
 /**
@@ -292,38 +293,38 @@ protected:
     // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
-TEST_F(Link, SendsNoMoreThanTheBaudRateAllows) {
+TEST_CASE_FIXTURE(Link, "Link.SendsNoMoreThanTheBaudRateAllows") {
     SerialLink link = this->link();
     this->bus.add_listener(this->collector);
     this->firmware_sends(5000);
 
     link.sample(this->world, this->clock);
-    EXPECT_EQ(this->collector.received.size(), static_cast<std::size_t>(bytes_per_tick()));
+    CHECK_EQ(this->collector.received.size(), static_cast<std::size_t>(bytes_per_tick()));
 
     for (int tick = 1; tick < 100; tick++) {
         link.sample(this->world, this->clock);
     }
 
-    EXPECT_EQ(this->collector.received.size(), static_cast<std::size_t>(100 * bytes_per_tick()));
-    EXPECT_EQ(this->collector.received.at(200), 200U);
+    CHECK_EQ(this->collector.received.size(), static_cast<std::size_t>(100 * bytes_per_tick()));
+    CHECK_EQ(this->collector.received.at(200), 200U);
 }
 
-TEST_F(Link, ReceivesNoMoreThanTheBaudRateAllows) {
+TEST_CASE_FIXTURE(Link, "Link.ReceivesNoMoreThanTheBaudRateAllows") {
     SerialLink                 link = this->link();
     const std::vector<uint8_t> message(5000, 0x55);
     this->bus.queue_for_firmware(message);
 
     link.sample(this->world, this->clock);
-    EXPECT_EQ(this->incoming.size(), static_cast<std::size_t>(bytes_per_tick()));
+    CHECK_EQ(this->incoming.size(), static_cast<std::size_t>(bytes_per_tick()));
 
     for (int tick = 1; tick < 100; tick++) {
         link.sample(this->world, this->clock);
     }
 
-    EXPECT_EQ(this->incoming.size(), static_cast<std::size_t>(100 * bytes_per_tick()));
+    CHECK_EQ(this->incoming.size(), static_cast<std::size_t>(100 * bytes_per_tick()));
 }
 
-TEST_F(Link, DoesNotSaveUpBandwidthWhileIdle) {
+TEST_CASE_FIXTURE(Link, "Link.DoesNotSaveUpBandwidthWhileIdle") {
     SerialLink link = this->link();
     this->bus.add_listener(this->collector);
 
@@ -335,11 +336,11 @@ TEST_F(Link, DoesNotSaveUpBandwidthWhileIdle) {
     this->bus.queue_for_firmware(std::vector<uint8_t>(5000, 0x55));
     link.sample(this->world, this->clock);
 
-    EXPECT_LE(this->collector.received.size(), static_cast<std::size_t>(1.0 + bytes_per_tick()));
-    EXPECT_LE(this->incoming.size(), static_cast<std::size_t>(1.0 + bytes_per_tick()));
+    CHECK_LE(this->collector.received.size(), static_cast<std::size_t>(1.0 + bytes_per_tick()));
+    CHECK_LE(this->incoming.size(), static_cast<std::size_t>(1.0 + bytes_per_tick()));
 }
 
-TEST_F(Link, CarriesASlowTrickleWholeAndInOrder) {
+TEST_CASE_FIXTURE(Link, "Link.CarriesASlowTrickleWholeAndInOrder") {
     SerialLink link = this->link();
     this->bus.add_listener(this->collector);
 
@@ -348,20 +349,20 @@ TEST_F(Link, CarriesASlowTrickleWholeAndInOrder) {
         link.sample(this->world, this->clock);
     }
 
-    EXPECT_EQ(this->collector.received, (std::vector<uint8_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
+    CHECK_EQ(this->collector.received, (std::vector<uint8_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
 }
 
-TEST_F(Devices, DrivesADigitalInputsPinWithItsPolarity) {
+TEST_CASE_FIXTURE(Devices, "Devices.DrivesADigitalInputsPinWithItsPolarity") {
     std::optional<bool> pin;
     DigitalInput        input({.name = "switch", .active_low = true, .drive = [&pin](bool level) { pin = level; }});
 
-    EXPECT_FALSE(input.is_active());
-    EXPECT_EQ(pin, true);
+    CHECK_FALSE(input.is_active());
+    CHECK_EQ(pin, true);
 
     input.set(true);
-    EXPECT_TRUE(input.is_active());
-    EXPECT_EQ(pin, false);
-    EXPECT_EQ(input.name(), "switch");
+    CHECK(input.is_active());
+    CHECK_EQ(pin, false);
+    CHECK_EQ(input.name(), "switch");
 }
 }  // namespace
 }  // namespace micras::sim

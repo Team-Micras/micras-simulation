@@ -3,13 +3,13 @@
 #include <fstream>
 #include <span>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/recording/run_metadata.hpp"
 
 namespace micras::sim {
 namespace {
-TEST(RunMetadata, SerializesInTheBaselineLayout) {
+TEST_CASE("RunMetadata.SerializesInTheBaselineLayout") {
     const RunMetadata metadata{
         .target = "tiny",
         .target_dir = "targets/tiny",
@@ -74,28 +74,28 @@ TEST(RunMetadata, SerializesInTheBaselineLayout) {
                                  "  ]\n"
                                  "}\n";
 
-    EXPECT_EQ(metadata.to_json(), expected);
+    CHECK_EQ(metadata.to_json(), expected);
 }
 
-TEST(RunMetadata, EscapesJsonStrings) {
+TEST_CASE("RunMetadata.EscapesJsonStrings") {
     RunMetadata metadata;
     metadata.args = std::string("quote\" backslash\\ newline\n tab\t bell") + '\001';
 
     const std::string json = metadata.to_json();
     const std::string expected = R"("args": "quote\" backslash\\ newline\n tab\t bell\u0001")";
-    EXPECT_NE(json.find(expected), std::string::npos);
+    CHECK_NE(json.find(expected), std::string::npos);
 }
 
-TEST(RunMetadata, HashesFilesWithSha256) {
+TEST_CASE("RunMetadata.HashesFilesWithSha256") {
     const std::filesystem::path path = std::filesystem::temp_directory_path() / "micras_sha256_test.txt";
     std::ofstream(path) << "abc";
 
-    EXPECT_EQ(RunMetadata::sha256_of(path), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-    EXPECT_EQ(RunMetadata::sha256_of("/nonexistent/file"), "");
+    CHECK_EQ(RunMetadata::sha256_of(path), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    CHECK_EQ(RunMetadata::sha256_of("/nonexistent/file"), "");
     std::filesystem::remove(path);
 }
 
-TEST(RunMetadata, JoinsArgumentsAfterTheProgramName) {
+TEST_CASE("RunMetadata.JoinsArgumentsAfterTheProgramName") {
     std::array<std::string, 4> arguments{"bin", "--maze", "maze1", "--out"};
     std::array<char*, 4>       argv{};
 
@@ -103,8 +103,8 @@ TEST(RunMetadata, JoinsArgumentsAfterTheProgramName) {
         argv.at(i) = arguments.at(i).data();
     }
 
-    EXPECT_EQ(RunMetadata::join_args(argv), "--maze maze1 --out");
-    EXPECT_EQ(RunMetadata::join_args(std::span(argv).first(1)), "");
+    CHECK_EQ(RunMetadata::join_args(argv), "--maze maze1 --out");
+    CHECK_EQ(RunMetadata::join_args(std::span(argv).first(1)), "");
 }
 }  // namespace
 }  // namespace micras::sim

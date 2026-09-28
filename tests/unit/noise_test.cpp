@@ -3,7 +3,7 @@
 #include <string_view>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/core/noise.hpp"
 
@@ -30,29 +30,29 @@ std::vector<double> draw(const NoiseConfig& config, std::string_view stream, std
     return samples;
 }
 
-TEST(Noise, RepeatsAStreamForTheSameSeedAndName) {
-    EXPECT_EQ(draw({.seed = 3}, "gyro", 100), draw({.seed = 3}, "gyro", 100));
+TEST_CASE("Noise.RepeatsAStreamForTheSameSeedAndName") {
+    CHECK_EQ(draw({.seed = 3}, "gyro", 100), draw({.seed = 3}, "gyro", 100));
 }
 
-TEST(Noise, GivesEachNameItsOwnStream) {
-    EXPECT_NE(draw({.seed = 3}, "gyro", 100), draw({.seed = 3}, "accelerometer", 100));
-    EXPECT_NE(draw({.seed = 3}, "a", 100), draw({.seed = 3}, "b", 100));
+TEST_CASE("Noise.GivesEachNameItsOwnStream") {
+    CHECK_NE(draw({.seed = 3}, "gyro", 100), draw({.seed = 3}, "accelerometer", 100));
+    CHECK_NE(draw({.seed = 3}, "a", 100), draw({.seed = 3}, "b", 100));
 }
 
-TEST(Noise, GivesEachSeedItsOwnStream) {
-    EXPECT_NE(draw({.seed = 3}, "gyro", 100), draw({.seed = 4}, "gyro", 100));
+TEST_CASE("Noise.GivesEachSeedItsOwnStream") {
+    CHECK_NE(draw({.seed = 3}, "gyro", 100), draw({.seed = 4}, "gyro", 100));
 }
 
-TEST(Noise, ScalesTheSameSamplesBySigma) {
+TEST_CASE("Noise.ScalesTheSameSamplesBySigma") {
     const std::vector<double> unit = draw({.seed = 5}, "gyro", 50);
     const std::vector<double> scaled = draw({.seed = 5}, "gyro", 50, 2.5);
 
     for (std::size_t i = 0; i < unit.size(); i++) {
-        EXPECT_DOUBLE_EQ(scaled.at(i), 2.5 * unit.at(i));
+        CHECK_EQ(scaled.at(i), doctest::Approx(2.5 * unit.at(i)).epsilon(1e-12));
     }
 }
 
-TEST(Noise, DrawsACentredGaussianOfTheRequestedSpread) {
+TEST_CASE("Noise.DrawsACentredGaussianOfTheRequestedSpread") {
     const std::vector<double> samples = draw({.seed = 11}, "gyro", 20000, 2.0);
     double                    sum = 0.0;
     double                    squares = 0.0;
@@ -65,22 +65,22 @@ TEST(Noise, DrawsACentredGaussianOfTheRequestedSpread) {
     const auto   count = static_cast<double>(samples.size());
     const double mean = sum / count;
 
-    EXPECT_NEAR(mean, 0.0, 0.05);
-    EXPECT_NEAR(std::sqrt(squares / count - mean * mean), 2.0, 0.05);
+    CHECK_LE(std::abs(mean - 0.0), 0.05);
+    CHECK_LE(std::abs(std::sqrt(squares / count - mean * mean) - 2.0), 0.05);
 }
 
-TEST(Noise, DrawsNothingInAnIdealWorld) {
+TEST_CASE("Noise.DrawsNothingInAnIdealWorld") {
     Noise noise({.seed = 3, .ideal = true}, "gyro");
 
     for (int i = 0; i < 100; i++) {
-        EXPECT_EQ(noise.gaussian(1.0), 0.0);
+        CHECK_EQ(noise.gaussian(1.0), 0.0);
     }
 }
 
-TEST(Noise, DrawsNothingForAZeroSigma) {
+TEST_CASE("Noise.DrawsNothingForAZeroSigma") {
     Noise noise({.seed = 3}, "gyro");
 
-    EXPECT_EQ(noise.gaussian(0.0), 0.0);
+    CHECK_EQ(noise.gaussian(0.0), 0.0);
 }
 }  // namespace
 }  // namespace micras::sim

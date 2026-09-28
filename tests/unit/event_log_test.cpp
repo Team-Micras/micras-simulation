@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
@@ -17,9 +17,9 @@ namespace {
 /**
  * @brief The tiny robot, lifted clear of the floor or lowered onto it at chosen instants.
  */
-class Logging : public testing::Test {
+class Logging {
 protected:
-    void SetUp() override {
+    Logging() {
         load_tiny_world(this->context.world, this->context.clock);
         this->chassis = this->context.world.require_id(mjOBJ_GEOM, "chassis");
         this->floor = this->context.world.require_id(mjOBJ_GEOM, "floor");
@@ -52,7 +52,7 @@ protected:
     // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
-TEST_F(Logging, LogsOneCollisionPerContactEpisode) {
+TEST_CASE_FIXTURE(Logging, "Logging.LogsOneCollisionPerContactEpisode") {
     EventLog log({this->chassis}, {}, {}, nullptr);
 
     this->tick(log, 0.0, false);
@@ -60,14 +60,14 @@ TEST_F(Logging, LogsOneCollisionPerContactEpisode) {
     this->tick(log, 0.002, true);
     this->tick(log, 0.003, true);
 
-    EXPECT_EQ(log.collisions(), 1U);
-    ASSERT_EQ(log.entries().size(), 1U);
-    EXPECT_EQ(log.entries().front().kind, "collision");
-    EXPECT_EQ(log.entries().front().detail, "chassis");
-    EXPECT_DOUBLE_EQ(log.entries().front().time, 0.001);
+    CHECK_EQ(log.collisions(), 1U);
+    REQUIRE_EQ(log.entries().size(), 1U);
+    CHECK_EQ(log.entries().front().kind, "collision");
+    CHECK_EQ(log.entries().front().detail, "chassis");
+    CHECK_EQ(log.entries().front().time, doctest::Approx(0.001).epsilon(1e-12));
 }
 
-TEST_F(Logging, CountsAContactWithinTheSeparationTimeAsTheSameCollision) {
+TEST_CASE_FIXTURE(Logging, "Logging.CountsAContactWithinTheSeparationTimeAsTheSameCollision") {
     EventLog log({this->chassis}, {}, {}, nullptr);
 
     this->tick(log, 0.0, true);
@@ -75,10 +75,10 @@ TEST_F(Logging, CountsAContactWithinTheSeparationTimeAsTheSameCollision) {
     this->tick(log, 0.03, false);
     this->tick(log, 0.04, true);
 
-    EXPECT_EQ(log.collisions(), 1U);
+    CHECK_EQ(log.collisions(), 1U);
 }
 
-TEST_F(Logging, CountsAContactAfterTheSeparationTimeAsANewCollision) {
+TEST_CASE_FIXTURE(Logging, "Logging.CountsAContactAfterTheSeparationTimeAsANewCollision") {
     EventLog log({this->chassis}, {}, {}, nullptr);
 
     this->tick(log, 0.0, true);
@@ -86,31 +86,31 @@ TEST_F(Logging, CountsAContactAfterTheSeparationTimeAsANewCollision) {
     this->tick(log, 0.05, false);
     this->tick(log, 0.08, true);
 
-    EXPECT_EQ(log.collisions(), 2U);
-    ASSERT_EQ(log.entries().size(), 2U);
-    EXPECT_DOUBLE_EQ(log.entries().back().time, 0.08);
+    CHECK_EQ(log.collisions(), 2U);
+    REQUIRE_EQ(log.entries().size(), 2U);
+    CHECK_EQ(log.entries().back().time, doctest::Approx(0.08).epsilon(1e-12));
 }
 
-TEST_F(Logging, NeverCountsAContactWithAnIgnoredGeom) {
+TEST_CASE_FIXTURE(Logging, "Logging.NeverCountsAContactWithAnIgnoredGeom") {
     EventLog log({this->chassis}, {this->floor}, {}, nullptr);
 
     this->tick(log, 0.0, true);
     this->tick(log, 1.0, false);
     this->tick(log, 2.0, true);
 
-    EXPECT_EQ(log.collisions(), 0U);
-    EXPECT_TRUE(log.entries().empty());
+    CHECK_EQ(log.collisions(), 0U);
+    CHECK(log.entries().empty());
 }
 
-TEST_F(Logging, WatchesOnlyTheGeomsItWasGiven) {
+TEST_CASE_FIXTURE(Logging, "Logging.WatchesOnlyTheGeomsItWasGiven") {
     EventLog log({}, {}, {}, nullptr);
 
     this->tick(log, 0.0, true);
 
-    EXPECT_EQ(log.collisions(), 0U);
+    CHECK_EQ(log.collisions(), 0U);
 }
 
-TEST_F(Logging, NamesEachNewStateFromItsTable) {
+TEST_CASE_FIXTURE(Logging, "Logging.NamesEachNewStateFromItsTable") {
     EventLog log({}, {}, {{"state", {"INIT", "IDLE", "RUN"}}}, &this->variables);
 
     this->tick(log, 0.0, false);
@@ -122,16 +122,16 @@ TEST_F(Logging, NamesEachNewStateFromItsTable) {
     this->variables.set("state", 2);
     this->tick(log, 0.4, false);
 
-    ASSERT_EQ(log.entries().size(), 3U);
-    EXPECT_EQ(log.entries().at(0).kind, "state");
-    EXPECT_EQ(log.entries().at(0).detail, "INIT");
-    EXPECT_DOUBLE_EQ(log.entries().at(0).time, 0.1);
-    EXPECT_EQ(log.entries().at(1).detail, "IDLE");
-    EXPECT_EQ(log.entries().at(2).detail, "RUN");
-    EXPECT_DOUBLE_EQ(log.entries().at(2).time, 0.4);
+    REQUIRE_EQ(log.entries().size(), 3U);
+    CHECK_EQ(log.entries().at(0).kind, "state");
+    CHECK_EQ(log.entries().at(0).detail, "INIT");
+    CHECK_EQ(log.entries().at(0).time, doctest::Approx(0.1).epsilon(1e-12));
+    CHECK_EQ(log.entries().at(1).detail, "IDLE");
+    CHECK_EQ(log.entries().at(2).detail, "RUN");
+    CHECK_EQ(log.entries().at(2).time, doctest::Approx(0.4).epsilon(1e-12));
 }
 
-TEST_F(Logging, WritesAValueWithNoNameAsANumber) {
+TEST_CASE_FIXTURE(Logging, "Logging.WritesAValueWithNoNameAsANumber") {
     EventLog log({}, {}, {{"state", {"INIT"}}}, &this->variables);
 
     this->variables.set("state", 7);
@@ -139,12 +139,12 @@ TEST_F(Logging, WritesAValueWithNoNameAsANumber) {
     this->variables.set("state", -1);
     this->tick(log, 0.1, false);
 
-    ASSERT_EQ(log.entries().size(), 2U);
-    EXPECT_EQ(log.entries().at(0).detail, "7");
-    EXPECT_EQ(log.entries().at(1).detail, "-1");
+    REQUIRE_EQ(log.entries().size(), 2U);
+    CHECK_EQ(log.entries().at(0).detail, "7");
+    CHECK_EQ(log.entries().at(1).detail, "-1");
 }
 
-TEST_F(Logging, SkipsAVariableThatIsNotReportedYet) {
+TEST_CASE_FIXTURE(Logging, "Logging.SkipsAVariableThatIsNotReportedYet") {
     EventLog log({}, {}, {{"state", {"INIT", "IDLE"}}}, &this->variables);
 
     this->variables.set("state", 1);
@@ -154,22 +154,22 @@ TEST_F(Logging, SkipsAVariableThatIsNotReportedYet) {
     this->variables.set("state", 1);
     this->tick(log, 0.2, false);
 
-    ASSERT_EQ(log.entries().size(), 1U);
-    EXPECT_EQ(log.entries().front().detail, "IDLE");
+    REQUIRE_EQ(log.entries().size(), 1U);
+    CHECK_EQ(log.entries().front().detail, "IDLE");
 }
 
-TEST_F(Logging, WatchesEveryVariableItWasGiven) {
+TEST_CASE_FIXTURE(Logging, "Logging.WatchesEveryVariableItWasGiven") {
     EventLog log({}, {}, {{"mode", {"SLOW", "FAST"}}, {"state", {"INIT"}}}, &this->variables);
 
     this->variables.set("mode", 1);
     this->tick(log, 0.0, false);
 
-    ASSERT_EQ(log.entries().size(), 1U);
-    EXPECT_EQ(log.entries().front().kind, "mode");
-    EXPECT_EQ(log.entries().front().detail, "FAST");
+    REQUIRE_EQ(log.entries().size(), 1U);
+    CHECK_EQ(log.entries().front().kind, "mode");
+    CHECK_EQ(log.entries().front().detail, "FAST");
 }
 
-TEST_F(Logging, KeepsTheFirstEntriesOnlyButKeepsCounting) {
+TEST_CASE_FIXTURE(Logging, "Logging.KeepsTheFirstEntriesOnlyButKeepsCounting") {
     EventLog log({this->chassis}, {}, {{"counter", {}}}, &this->variables);
 
     for (std::size_t i = 0; i < EventLog::max_events + 10; i++) {
@@ -179,9 +179,9 @@ TEST_F(Logging, KeepsTheFirstEntriesOnlyButKeepsCounting) {
 
     this->tick(log, 1000.0, true);
 
-    EXPECT_EQ(log.entries().size(), EventLog::max_events);
-    EXPECT_EQ(log.entries().back().detail, std::to_string(EventLog::max_events - 1));
-    EXPECT_EQ(log.collisions(), 1U);
+    CHECK_EQ(log.entries().size(), EventLog::max_events);
+    CHECK_EQ(log.entries().back().detail, std::to_string(EventLog::max_events - 1));
+    CHECK_EQ(log.collisions(), 1U);
 }
 }  // namespace
 }  // namespace micras::sim
