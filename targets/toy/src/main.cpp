@@ -1,7 +1,5 @@
 /**
  * @file
- *
- * @brief Runs the toy target in the simulator.
  */
 
 #include <cstddef>
