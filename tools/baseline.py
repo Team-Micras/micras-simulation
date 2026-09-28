@@ -20,10 +20,16 @@ sees them next to the values. ``record`` refuses to overwrite a summary: a new
 behaviour is a new baseline version, never a re-recording that makes a
 difference go away.
 
+The robot's plugin is found as ``analyze.py`` finds it: ``--plugin``, then
+``$MICRAS_SIM_PLUGIN``, then the target's folder that ``meta.json`` names.
+
 Usage::
 
-    baseline.py record  <run> <baseline>/<scenario>
-    baseline.py compare <run> <baseline>/<scenario> [--exact]
+    baseline.py record  <run> <baseline>/<scenario> [--plugin <analysis.py>]
+    baseline.py compare <run> <baseline>/<scenario> [--plugin <analysis.py>] [--exact]
+
+``--exact`` is the byte identity check: it also fails when ``data.csv`` is not the
+recorded run's bytes.
 """
 
 from __future__ import annotations
@@ -61,10 +67,10 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def summarize(run_directory: Path) -> dict:
+def summarize(run_directory: Path, plugin_override: Path | None = None) -> dict:
     """Build the summary of one run from its files."""
     run = analyze.Run(run_directory, None, None)
-    plugin = analyze.load_plugin(run, None)
+    plugin = analyze.load_plugin(run, plugin_override)
     report = analyze.build_report(run, analyze.resolve_maze(run), plugin)
     meta = run.meta
     collisions = [event for event in meta.get("events", []) if event.get("kind") == "collision"]
@@ -155,9 +161,12 @@ def main() -> int:
     parser.add_argument("run", type=Path)
     parser.add_argument("baseline", type=Path, help="the scenario's folder in a baseline version")
     parser.add_argument("--exact", action="store_true", help="also fail when the bytes differ")
+    parser.add_argument(
+        "--plugin", type=Path, default=None, help="analysis plugin to use instead of the target's (also $MICRAS_SIM_PLUGIN)"
+    )
     arguments = parser.parse_args()
 
-    summary = summarize(arguments.run)
+    summary = summarize(arguments.run, arguments.plugin)
     path = arguments.baseline / "summary.json"
 
     if arguments.action == "record":

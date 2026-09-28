@@ -103,6 +103,7 @@ std::string RunMetadata::to_json() const {
     out.imbue(std::locale::classic());
     out << "{\n";
     field(out, "target", this->target);
+    field(out, "target_dir", this->target_dir);
     field(out, "firmware_sha", this->firmware_sha);
     field(out, "robot_path", this->robot_path);
     field(out, "robot_sha256", this->robot_sha256);

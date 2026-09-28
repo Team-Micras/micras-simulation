@@ -61,6 +61,11 @@ struct RunMetadata {
      */
     std::string target;
 
+    /**
+     * @brief Folder of the robot target, where the analysis tools find its plugin.
+     */
+    std::string target_dir;
+
     std::string firmware_sha;
     std::string robot_path;
     std::string robot_sha256;

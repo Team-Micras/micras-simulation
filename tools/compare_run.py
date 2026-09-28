@@ -2,7 +2,8 @@
 """Compare two run directories made on the same machine.
 
 data.csv is compared byte for byte, and meta.json on every field but the
-command line, which is what differs between the two runs being compared.
+command line, which is what differs between the two runs being compared, and the
+paths of the robot, the maze and the target, which differ between two checkouts.
 
 This is how a window, a monitor or a video is proven to change nothing. The
 stored baselines are summaries, compared by ``tools/baseline.py``.
@@ -14,7 +15,7 @@ import sys
 from pathlib import Path
 
 #: meta.json fields that may differ between two runs of the same behaviour.
-IGNORED_FIELDS = ("args",)
+IGNORED_FIELDS = ("args", "robot_path", "maze_path", "target_dir")
 
 
 def locate_difference(run_lines: list[str], reference_lines: list[str]) -> list[str]:

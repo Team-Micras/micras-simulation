@@ -156,6 +156,13 @@ public:
     virtual RunContext& context() = 0;
 
     /**
+     * @brief Get the folder of the target, whose tools/analysis.py is its analysis plugin.
+     *
+     * @return The folder, written to meta.json as target_dir.
+     */
+    virtual std::filesystem::path directory() const = 0;
+
+    /**
      * @brief Get the robot's physical description.
      *
      * @return Path of its robot.toml, which the world is built from.

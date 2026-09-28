@@ -12,6 +12,7 @@ namespace {
 TEST(RunMetadata, SerializesInTheBaselineLayout) {
     const RunMetadata metadata{
         .target = "tiny",
+        .target_dir = "targets/tiny",
         .firmware_sha = "0be27df",
         .robot_path = "robot.toml",
         .robot_sha256 = "a1",
@@ -41,6 +42,7 @@ TEST(RunMetadata, SerializesInTheBaselineLayout) {
 
     const std::string expected = "{\n"
                                  "  \"target\": \"tiny\",\n"
+                                 "  \"target_dir\": \"targets/tiny\",\n"
                                  "  \"firmware_sha\": \"0be27df\",\n"
                                  "  \"robot_path\": \"robot.toml\",\n"
                                  "  \"robot_sha256\": \"a1\",\n"

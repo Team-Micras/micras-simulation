@@ -412,6 +412,7 @@ void Application::run(std::span<char*> arguments) {
 
     const RunMetadata metadata{
         .target = this->target.name(),
+        .target_dir = this->target.directory().string(),
         .firmware_sha = this->target.firmware_sha(),
         .robot_path = this->target.robot_file().string(),
         .robot_sha256 = RunMetadata::sha256_of(this->target.robot_file()),

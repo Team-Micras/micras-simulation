@@ -160,7 +160,11 @@ the goal was reached, the pose estimate's error against the ground truth, the
 tracking error and voltage saturation. Only numpy and matplotlib are needed.
 
 `tools/analyze.py` knows only the engine's columns; what a robot's own columns
-mean comes from its plugin, `targets/<robot>/tools/analysis.py`.
+mean comes from its plugin, `tools/analysis.py` in the target's folder, which
+`meta.json` records as `target_dir`. `--plugin` or `$MICRAS_SIM_PLUGIN` name
+another; `tools/baseline.py` finds it the same way. `baseline.py compare --exact`
+is the byte identity check, and `tools/compare_run.py` compares two runs of one
+build, ignoring the fields that name paths.
 
 ## Watching a run
 

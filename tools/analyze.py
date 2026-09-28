@@ -11,9 +11,10 @@ prefix (``<label>_ncon``, ``<label>_fn``, ``<label>_slip``, ``<label>_penetratio
 ``wheel_speed_<label>``, ``motor_torque_<label>``, and the ``<device>_voltage``
 columns of the devices). A contact label with a ``_slip`` column is a wheel.
 
-What a robot means by its own columns comes from its plugin, a module at
-``targets/<target>/tools/analysis.py`` loaded when ``meta.json`` names the target,
-or from ``--plugin``. A plugin may define any of:
+What a robot means by its own columns comes from its plugin, the first of: the
+module named by ``--plugin``, the one named by ``$MICRAS_SIM_PLUGIN``,
+``<target_dir>/tools/analysis.py`` for the target folder ``meta.json`` names, and
+``targets/<target>/tools/analysis.py`` of this repository. A plugin may define any of:
 
 * ``run_start(run)``: the time the robot starts its task, marked on every plot,
 * ``report(run, report)``: extra report sections, merged into the report,
@@ -34,6 +35,7 @@ import argparse
 import csv
 import importlib.util
 import json
+import os
 from pathlib import Path
 from types import ModuleType
 
@@ -135,20 +137,38 @@ class Run:
         return float(np.median(np.diff(self.time)))
 
 
+def plugin_path(run: Run, override: Path | None) -> Path | None:
+    """Find the robot's analysis plugin: --plugin, $MICRAS_SIM_PLUGIN, the target's folder, this repository."""
+    if override is not None:
+        return override
+
+    environment = os.environ.get("MICRAS_SIM_PLUGIN")
+
+    if environment:
+        return Path(environment)
+
+    candidates = []
+    target_dir = run.meta.get("target_dir")
+    target = run.meta.get("target")
+
+    if target_dir:
+        candidates.append(Path(target_dir) / "tools" / "analysis.py")
+
+    if target:
+        candidates.append(REPOSITORY / "targets" / target / "tools" / "analysis.py")
+
+    return next((candidate for candidate in candidates if candidate.exists()), None)
+
+
 def load_plugin(run: Run, override: Path | None) -> ModuleType | None:
     """Load the robot's analysis plugin, if it has one."""
-    path = override
+    path = plugin_path(run, override)
 
     if path is None:
-        target = run.meta.get("target")
+        return None
 
-        if not target:
-            return None
-
-        path = REPOSITORY / "targets" / target / "tools" / "analysis.py"
-
-        if not path.exists():
-            return None
+    if not path.exists():
+        raise SystemExit(f"no analysis plugin at {path}")
 
     spec = importlib.util.spec_from_file_location(f"analysis_{path.parent.parent.name}", path)
 
@@ -610,7 +630,7 @@ def main() -> None:
     parser.add_argument("run", type=Path)
     parser.add_argument("--t0", type=float, default=None)
     parser.add_argument("--t1", type=float, default=None)
-    parser.add_argument("--plugin", type=Path, default=None, help="analysis plugin to use instead of the target's")
+    parser.add_argument("--plugin", type=Path, default=None, help="analysis plugin to use instead of the target's (also $MICRAS_SIM_PLUGIN)")
     arguments = parser.parse_args()
 
     run = Run(arguments.run, arguments.t0, arguments.t1)
