@@ -16,9 +16,10 @@ namespace micras::sim {
 /**
  * @brief A block of CSV columns the recorder writes after the ground truth.
  *
- * @note names() is asked once, when the first row is written, so a source whose
- *       columns depend on something the firmware reports during the first tick
- *       can still name them.
+ * @note names() is asked once, when the first row is written, and no row is
+ *       written before every source is ready, so a source whose columns depend
+ *       on something the firmware reports only once it has started, such as the
+ *       variables its robot registers, can still name them.
  */
 class ColumnSource {
 public:
@@ -30,6 +31,13 @@ public:
     ColumnSource& operator=(ColumnSource&&) = delete;
 
     virtual ~ColumnSource() = default;
+
+    /**
+     * @brief Check whether the source can name its columns and fill them.
+     *
+     * @return True once it can; always true unless the source says otherwise.
+     */
+    virtual bool ready() const { return true; }
 
     /**
      * @brief Get the column names, in the order append() fills them.

@@ -22,9 +22,10 @@ namespace micras::sim {
  * @brief Samples the simulation state once per firmware tick into a CSV file.
  *
  * @note A row is the ground truth, then every column source in the order it
- *       was added. The header is written with the first row, so a source may
- *       learn its column names during the first tick. Two sources naming the
- *       same column is an error, not a second column nobody can tell apart.
+ *       was added. The header is written with the first row, and the first row
+ *       is the first one due once every source is ready, so a source may learn
+ *       its column names while the run goes. Two sources naming the same column
+ *       is an error, not a second column nobody can tell apart.
  */
 class CsvRecorder : public IRunListener {
 public:
@@ -48,7 +49,7 @@ public:
     void add_source(ColumnSource& source);
 
     /**
-     * @brief Write one CSV row for the current simulation state.
+     * @brief Write one CSV row for the current simulation state, unless a source is not ready yet.
      *
      * @param tick Index of the firmware tick that was just executed.
      */

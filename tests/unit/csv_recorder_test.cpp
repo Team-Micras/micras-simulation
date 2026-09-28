@@ -49,11 +49,42 @@ private:
     std::size_t cells_per_row;
 };
 
+/**
+ * @brief A column source that can name its columns only once it is told it can.
+ */
+class LateColumns : public FixedColumns {
+public:
+    LateColumns() : FixedColumns{2} { }
+
+    std::vector<std::string> names() override { return {"third", "fourth"}; }
+
+    bool ready() const override { return this->started; }
+
+    void start() { this->started = true; }
+
+private:
+    bool started{false};
+};
+
 class Recording : public testing::Test {
 protected:
     void SetUp() override {
         this->world.load(MICRAS_TEST_MODEL);
         this->world.reset();
+    }
+
+    /**
+     * @brief Read back every line of the CSV.
+     */
+    std::vector<std::string> lines() const {
+        std::ifstream            file(this->path);
+        std::vector<std::string> read;
+
+        for (std::string line; std::getline(file, line);) {
+            read.push_back(line);
+        }
+
+        return read;
     }
 
     /**
@@ -109,6 +140,27 @@ TEST_F(Recording, AppendsTheSourcesAfterTheGroundTruth) {
     }
 
     EXPECT_TRUE(this->header().ends_with(",iterations,first,second"));
+}
+
+TEST_F(Recording, WritesNoRowBeforeEverySourceIsReady) {
+    FixedColumns early(2);
+    LateColumns  late;
+
+    {
+        CsvRecorder recorder(this->world, tiny_config(), this->path);
+        recorder.add_source(early);
+        recorder.add_source(late);
+        recorder.sample(1);
+        recorder.sample(2);
+        late.start();
+        recorder.sample(3);
+    }
+
+    const std::vector<std::string> written = this->lines();
+
+    ASSERT_EQ(written.size(), 2U);
+    EXPECT_TRUE(written.at(0).starts_with("tick,"));
+    EXPECT_TRUE(written.at(1).starts_with("3,"));
 }
 
 TEST_F(Recording, RejectsASourceThatFillsTooFewCells) {

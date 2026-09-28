@@ -54,6 +54,10 @@ void CsvRecorder::on_after_tick(const Simulation& simulation) {
 
 void CsvRecorder::sample(uint64_t tick) {
     if (not this->header_written) {
+        if (not std::ranges::all_of(this->sources, [](const ColumnSource* source) { return source->ready(); })) {
+            return;
+        }
+
         this->write_header();
     }
 
