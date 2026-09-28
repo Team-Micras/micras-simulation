@@ -1,0 +1,32 @@
+# The calibration of the gyroscope asked for over the radio, with the boost switch alone on, and
+# stopped halfway through its turn at 12 rad/s: the rotation ramps down, the scale measured before
+# is kept, and the robot is idle once it stands still.
+robot = "micras"
+arena = "maze1"
+seconds = 8
+seed = 1
+
+# The center of the start cell, facing the outer wall, which the calibration measures before and
+# after its turn: there the board clears the walls as it turns.
+[start]
+x = 0.09
+y = 0.09
+yaw_deg = 180.0
+
+[[events]]
+at = 0.1
+set = "dip_boost"
+value = true
+
+[[events]]
+at = 0.5
+send = "calibrate"
+
+[[events]]
+at = 5.0
+send = "stop"
+
+[stop]
+when = "state"
+equals = ["IDLE", "ERROR"]
+after = 6.0

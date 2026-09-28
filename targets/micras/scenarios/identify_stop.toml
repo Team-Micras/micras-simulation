@@ -1,0 +1,32 @@
+# The identification of the drive train asked for over the radio, with the racing line switch alone
+# on, and stopped as it drives forward at 1.5 m/s, well before the wall it would reach: the drivers
+# stay on with a null command, which brakes the motors, and the robot is idle once it stands still.
+robot = "micras"
+arena = "maze1"
+seconds = 8
+seed = 1
+
+# Where the firmware expects to be placed (constants.hpp start_offset): its origin
+# about 40 mm in front of the face of the back wall, the board clear of it.
+[start]
+x = 0.09
+y = 0.0463
+yaw_deg = 90.0
+
+[[events]]
+at = 0.1
+set = "dip_racing_line"
+value = true
+
+[[events]]
+at = 0.5
+send = "calibrate"
+
+[[events]]
+at = 4.8
+send = "stop"
+
+[stop]
+when = "state"
+equals = ["IDLE", "ERROR"]
+after = 5.8

@@ -123,10 +123,25 @@ The Micras scenarios:
 | `explore` | an exploration started by the button |
 | `explore_link` | an exploration started over the radio |
 | `explore_stop` | the same, stopped over the radio a tenth of a second into the run |
+| `explore_stop_straight` | an exploration stopped on a straight at its top speed, 1 m/s |
+| `explore_stop_turn` | an exploration stopped halfway through a search turn, which it brakes along |
+| `explore_stop_spin` | an exploration stopped as it turns around in place at a dead end |
+| `explore_stop_save` | an exploration stopped while it saves the map at the goal: the stop waits for the save |
+| `calibrate_stop` | the calibration of the wall sensors, stopped while it measures the side sensors |
+| `gyroscope_stop` | the calibration of the gyroscope, stopped halfway through its turn at 12 rad/s |
+| `identify_stop` | the identification of the drive train, stopped as it drives forward at 1.5 m/s |
+| `solve_unmapped` | a fastest run with no map: stopped while it plans, then left in ERROR and taken out of it |
+| `solve_stop` | the whole contest, stopped in the fastest run on a straight at 3 m/s |
 | `explore_solve` | the whole contest: explore, come back, then a long press for the fastest run, with the fan switch on |
 | `explore_solve_all` | the same with every switch of the fast run on: fan, racing line, boost and risky turns |
 | `solve` | the fastest run alone, from a map a previous run saved: pass its `--flash` |
 | `solve_all` | the same with every switch on |
+
+A stop over the radio brakes a robot that drives its motors to a standstill in
+BRAKE before it is idle, and the Micras analysis reports how far, how much it
+turned and how long it took from the stop to rest. The stop scenarios are checked
+runs; `solve_stop` is recorded one row a millisecond (`--record-every 8`), which
+keeps its 90 s small.
 
 ```bash
 ./build/host-release/targets/micras/micras_sim --scenario targets/micras/scenarios/explore_solve.toml \
@@ -247,15 +262,15 @@ cmake --build --preset host-release --target sim_check
 ```
 
 The Micras gate: its unit tests, the flash surviving from one run into the next,
-the checked scenarios (idle, the first 30 s of an exploration, and an exploration
-stopped over the radio), their health (no warnings, no collision, no non-finite
+the checked scenarios (idle, the first 30 s of an exploration, and every stop
+scenario above), their health (no warnings, no collision, no non-finite
 sample, no unbound port, no watchdog expiry, no emergency stop, no dropped byte)
 and the recorded baseline summaries.
 
 Baselines live in `targets/<robot>/baselines/`; `CLAUDE.md` explains what they
 hold and the rules around them. `sim_record_baseline` records the version
 `MICRAS_SIM_BASELINE` names and refuses to overwrite one: bump it instead, and
-nothing is ever lost. `sim_run_idle`, `sim_run_explore`, `sim_run_explore_stop`,
+nothing is ever lost. `sim_run_idle`, `sim_run_explore`, `sim_run_stops`,
 `sim_check_flash` and `sim_compare_baseline` are the gate's steps on their own. With
 `-DMICRAS_SIM_EXACT=ON` a baseline comparison also fails when a checked run's
 `data.csv` is not byte identical to the recorded one: the check for a change that
@@ -341,7 +356,7 @@ targets/micras/  the micromouse:
   cube/              the Cube layer the firmware includes, by hand
   src/               target, bindings, variables
   robot.toml         the physical description
-  scenarios/         idle, explore, explore_link, explore_solve(_all), solve(_all)
+  scenarios/         idle, explore, explore_link, explore_solve(_all), solve(_all), the stops
   baselines/         recorded summaries
   scripts/           the recipes' scripts
   tools/             analysis plugin, wall calibration, robot report, turn designer

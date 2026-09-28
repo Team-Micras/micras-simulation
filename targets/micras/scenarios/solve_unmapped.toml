@@ -1,0 +1,45 @@
+# A fastest run asked for over the radio with no map saved, twice. The first is stopped while it
+# plans, and the robot is idle again. The second finds no route and gives up in ERROR, where a stop
+# leaves it, and LEAVE_ERROR makes it idle again, since the error did not come from the start.
+robot = "micras"
+arena = "maze1"
+seconds = 4
+seed = 1
+
+# Where the firmware expects to be placed (constants.hpp start_offset): its origin
+# about 40 mm in front of the face of the back wall, the board clear of it.
+[start]
+x = 0.09
+y = 0.0463
+yaw_deg = 90.0
+
+[[events]]
+at = 0.5
+send = "solve"
+
+[[events]]
+at = 0.5
+when = "state"
+equals = "PLAN"
+send = "stop"
+
+[[events]]
+at = 1.0
+send = "solve"
+
+[[events]]
+at = 1.5
+when = "state"
+equals = "ERROR"
+send = "stop"
+
+[[events]]
+at = 2.0
+when = "state"
+equals = "ERROR"
+send = "leave_error"
+
+[stop]
+when = "state"
+equals = "IDLE"
+after = 2.0

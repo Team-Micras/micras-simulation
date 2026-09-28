@@ -159,7 +159,11 @@ if(PROJECT_IS_TOP_LEVEL)
     set(MICRAS_SIM_RUNS "${CMAKE_CURRENT_BINARY_DIR}/runs")
     set(MICRAS_SIM_PLUGIN "${CMAKE_CURRENT_SOURCE_DIR}/tools/analysis.py")
     set(MICRAS_SIM_BASELINE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/baselines/${MICRAS_SIM_BASELINE}")
-    set(MICRAS_SIM_CHECKED_RUNS idle explore explore_stop)
+    set(MICRAS_SIM_STOP_RUNS
+        explore_stop explore_stop_straight explore_stop_turn explore_stop_spin explore_stop_save calibrate_stop
+        gyroscope_stop identify_stop solve_unmapped solve_stop
+    )
+    set(MICRAS_SIM_CHECKED_RUNS idle explore ${MICRAS_SIM_STOP_RUNS})
     set(MICRAS_SIM_EXPLORE_SECONDS 30)
 
     set(MICRAS_SIM_RUN_IDLE
@@ -169,10 +173,18 @@ if(PROJECT_IS_TOP_LEVEL)
         "${MICRAS_SIM_SCRIPTS}/run_explore.sh" "$<TARGET_FILE:micras_sim>" "${MICRAS_SIM_SCENARIOS}"
         "${MICRAS_SIM_RUNS}" "${MICRAS_SIM_EXPLORE_SECONDS}"
     )
-    set(MICRAS_SIM_RUN_EXPLORE_STOP
-        "${MICRAS_SIM_SCRIPTS}/run_scenario.sh" "$<TARGET_FILE:micras_sim>" "${MICRAS_SIM_SCENARIOS}" "${MICRAS_SIM_RUNS}"
-        explore_stop
-    )
+    set(MICRAS_SIM_RUN_STOPS)
+
+    foreach(RUN ${MICRAS_SIM_STOP_RUNS})
+        list(APPEND MICRAS_SIM_RUN_STOPS
+            COMMAND "${MICRAS_SIM_SCRIPTS}/run_scenario.sh" "$<TARGET_FILE:micras_sim>" "${MICRAS_SIM_SCENARIOS}"
+                    "${MICRAS_SIM_RUNS}" ${RUN}
+        )
+
+        if(RUN STREQUAL "solve_stop")
+            list(APPEND MICRAS_SIM_RUN_STOPS --record-every 8)
+        endif()
+    endforeach()
     set(MICRAS_SIM_COMPARE_BASELINE
         "${MICRAS_SIM_SCRIPTS}/compare_baseline.sh" "${MICRAS_SIM_TOOLS_DIR}" "${MICRAS_SIM_PLUGIN}" "${MICRAS_SIM_RUNS}"
         "${MICRAS_SIM_BASELINE_DIR}" "${MICRAS_SIM_EXACT}" ${MICRAS_SIM_CHECKED_RUNS}
@@ -194,9 +206,9 @@ if(PROJECT_IS_TOP_LEVEL)
         VERBATIM USES_TERMINAL
     )
 
-    add_custom_target(sim_run_explore_stop
-        COMMAND ${MICRAS_SIM_RUN_EXPLORE_STOP}
-        COMMENT "An exploration stopped over the radio -> runs/explore_stop"
+    add_custom_target(sim_run_stops
+        ${MICRAS_SIM_RUN_STOPS}
+        COMMENT "Every run and procedure stopped over the radio -> runs/<scenario>"
         VERBATIM USES_TERMINAL
     )
 
@@ -225,7 +237,7 @@ if(PROJECT_IS_TOP_LEVEL)
         COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${CMAKE_CURRENT_BINARY_DIR}" --output-on-failure
         COMMAND ${MICRAS_SIM_RUN_IDLE}
         COMMAND ${MICRAS_SIM_RUN_EXPLORE}
-        COMMAND ${MICRAS_SIM_RUN_EXPLORE_STOP}
+        ${MICRAS_SIM_RUN_STOPS}
         COMMAND "${MICRAS_SIM_SCRIPTS}/record_baseline.sh" "${MICRAS_SIM_TOOLS_DIR}" "${MICRAS_SIM_PLUGIN}"
                 "${MICRAS_SIM_RUNS}" "${MICRAS_SIM_BASELINE_DIR}" ${MICRAS_SIM_CHECKED_RUNS}
         COMMENT "Recording baselines/${MICRAS_SIM_BASELINE}"
@@ -244,7 +256,7 @@ if(PROJECT_IS_TOP_LEVEL)
         COMMAND ${MICRAS_SIM_RUN_EXPLORE}
         COMMAND ${MICRAS_SIM_CHECK_FLASH}
         COMMAND ${MICRAS_SIM_RUN_IDLE}
-        COMMAND ${MICRAS_SIM_RUN_EXPLORE_STOP}
+        ${MICRAS_SIM_RUN_STOPS}
         COMMAND ${MICRAS_SIM_COMPARE_BASELINE}
         COMMAND "${MICRAS_SIM_SCRIPTS}/check_health.sh" "${MICRAS_SIM_TOOLS_DIR}" "${MICRAS_SIM_RUNS}"
                 ${MICRAS_SIM_CHECKED_RUNS}
@@ -283,7 +295,7 @@ if(PROJECT_IS_TOP_LEVEL)
         VERBATIM USES_TERMINAL
     )
 
-    foreach(RECIPE sim_run_idle sim_run_explore sim_run_explore_stop sim_contest sim_contest_all sim_record_baseline sim_check_flash sim_check
+    foreach(RECIPE sim_run_idle sim_run_explore sim_run_stops sim_contest sim_contest_all sim_record_baseline sim_check_flash sim_check
                    sim_serve sim_watch)
         add_dependencies(${RECIPE} micras_sim)
     endforeach()

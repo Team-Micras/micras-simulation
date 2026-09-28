@@ -1,8 +1,8 @@
-# An exploration started over the link and stopped over it a tenth of a second into the run, as
-# micras-monitor's STOP does. The robot brakes to rest along its path and is idle once it stands still.
+# An exploration stopped over the radio on a straight at its top speed, 1 m/s, a few tenths of a
+# second before it slows for the next turn: the robot brakes along the path it was following.
 robot = "micras"
 arena = "maze1"
-seconds = 8
+seconds = 12
 seed = 1
 
 # Where the firmware expects to be placed (constants.hpp start_offset): its origin
@@ -17,10 +17,10 @@ at = 0.5
 send = "explore"
 
 [[events]]
-at = 3.6
+at = 8.81
 send = "stop"
 
 [stop]
 when = "state"
 equals = ["IDLE", "ERROR"]
-after = 6.0
+after = 9.8

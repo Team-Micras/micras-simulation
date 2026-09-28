@@ -1,8 +1,8 @@
-# An exploration started over the link and stopped over it a tenth of a second into the run, as
-# micras-monitor's STOP does. The robot brakes to rest along its path and is idle once it stands still.
+# The calibration of the wall sensors asked for over the radio, with every switch off, and stopped
+# while the side sensors are measured: the calibration is cancelled and the robot is idle.
 robot = "micras"
 arena = "maze1"
-seconds = 8
+seconds = 6
 seed = 1
 
 # Where the firmware expects to be placed (constants.hpp start_offset): its origin
@@ -14,13 +14,15 @@ yaw_deg = 90.0
 
 [[events]]
 at = 0.5
-send = "explore"
+send = "calibrate"
 
 [[events]]
-at = 3.6
+at = 0.5
+when = "state"
+equals = "CALIBRATE"
 send = "stop"
 
 [stop]
 when = "state"
 equals = ["IDLE", "ERROR"]
-after = 6.0
+after = 4.5
