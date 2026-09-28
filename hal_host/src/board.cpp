@@ -27,18 +27,17 @@ using SpiKey = std::tuple<const void*, const void*, uint16_t>;
  * @brief Every port and name, created on first use.
  */
 struct Registry {
-    std::map<Key, GpioPort>                        gpios;
-    std::map<Key, PwmPort>                         pwms;
-    std::map<Key, PwmDmaPort>                      pwm_dmas;
-    std::map<const void*, AdcPort>                 adcs;
-    std::map<const void*, UartPort>                uarts;
-    std::map<const void*, EncoderPort>             encoders;
-    std::map<std::string, SamplePort, std::less<>> samples;
-    std::map<SpiKey, SpiPort>                      spis;
-    std::map<Key, std::string>                     gpio_names;
-    std::map<const void*, std::string>             handle_names;
-    FlashPort                                      flash{{.name = "flash"}};
-    McuPort                                        mcu{{.name = "mcu"}};
+    std::map<Key, GpioPort>            gpios;
+    std::map<Key, PwmPort>             pwms;
+    std::map<Key, PwmDmaPort>          pwm_dmas;
+    std::map<const void*, AdcPort>     adcs;
+    std::map<const void*, UartPort>    uarts;
+    std::map<const void*, EncoderPort> encoders;
+    std::map<SpiKey, SpiPort>          spis;
+    std::map<Key, std::string>         gpio_names;
+    std::map<const void*, std::string> handle_names;
+    FlashPort                          flash{{.name = "flash"}};
+    McuPort                            mcu{{.name = "mcu"}};
 };
 
 /**
@@ -126,17 +125,6 @@ EncoderPort& Board::encoder(const void* timer) {
     return find_or_create(registry().encoders, timer, [timer] { return handle_name(timer) + " encoder"; });
 }
 
-SamplePort& Board::samples(std::string_view name) {
-    auto found = registry().samples.find(name);
-
-    if (found == registry().samples.end()) {
-        found = registry().samples.emplace(std::string{name}, SamplePort{}).first;
-        found->second.name = std::string{name};
-    }
-
-    return found->second;
-}
-
 SpiPort& Board::spi(const void* spi, const void* cs_port, uint16_t cs_pin) {
     return find_or_create(registry().spis, SpiKey{spi, cs_port, cs_pin}, [spi, cs_port, cs_pin] {
         return std::format("{} {}", handle_name(spi), gpio_name(Key{cs_port, cs_pin}));
@@ -190,7 +178,6 @@ std::vector<std::string> Board::unbound() {
     collect(registry().adcs);
     collect(registry().uarts);
     collect(registry().encoders);
-    collect(registry().samples);
     collect(registry().spis);
 
     return names;

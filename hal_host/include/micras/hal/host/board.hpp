@@ -88,14 +88,6 @@ public:
     static EncoderPort& encoder(const void* timer);
 
     /**
-     * @brief Get a named sample port, for a swapped chip driver.
-     *
-     * @param name Name both sides agree on.
-     * @return The port.
-     */
-    static SamplePort& samples(std::string_view name);
-
-    /**
      * @brief Get the port of one chip select of an SPI bus.
      *
      * @param spi SPI handle.

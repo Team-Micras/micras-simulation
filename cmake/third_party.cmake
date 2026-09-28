@@ -17,8 +17,9 @@ FetchContent_Declare(tomlplusplus
 )
 FetchContent_MakeAvailable(tomlplusplus)
 
-# ST's register driver of the LSM6DSV, the tag the firmware fetches. Only its header
-# is used: the IMU proxy's configuration names the driver's enums.
+# ST's register driver of the LSM6DSV, the tag the firmware fetches. The IMU proxy's
+# configuration names the driver's enums, and a robot target that compiles the proxy
+# compiles the driver's source too.
 FetchContent_Declare(lsm6dsv
     GIT_REPOSITORY https://github.com/STMicroelectronics/lsm6dsv-pid.git
     GIT_TAG        v5.1.1

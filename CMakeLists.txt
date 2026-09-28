@@ -172,7 +172,6 @@ file(GLOB_RECURSE HARNESS_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/app/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/proxy/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/cube/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/tests/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/targets/*/tools/*.cpp"

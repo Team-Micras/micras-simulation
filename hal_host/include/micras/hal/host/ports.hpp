@@ -7,7 +7,6 @@
 #ifndef MICRAS_HAL_HOST_PORTS_HPP
 #define MICRAS_HAL_HOST_PORTS_HPP
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -228,26 +227,6 @@ struct EncoderPort : Port {
      * @brief Count, positive forward.
      */
     int32_t count{0};
-};
-
-/**
- * @brief Samples a swapped chip driver reads, such as an inertial measurement unit's.
- */
-struct SamplePort : Port {
-    /**
-     * @brief Largest number of values one sample holds.
-     */
-    static constexpr std::size_t max_values{16};
-
-    /**
-     * @brief Latest sample.
-     */
-    std::array<float, max_values> values{};
-
-    /**
-     * @brief Incremented with every new sample.
-     */
-    uint32_t sequence{0};
 };
 
 /**
