@@ -3,7 +3,8 @@
 #
 # Proves that nothing but the physics decides a run: the same scenario run twice, then with a window,
 # with a video and with a bridge nobody connects to, each data.csv and meta.json the same as the plain
-# run's (tools/compare_run.py). The window needs xvfb-run or a display; MICRAS_SKIP_VIEWER=1 skips it.
+# run's (tools/compare_run.py). The window needs xvfb-run or a display; MICRAS_SKIP_VIEWER=1 skips it
+# even where one exists.
 # The video needs EGL, a GPU or Mesa's surfaceless platform.
 
 set -euo pipefail
@@ -39,15 +40,15 @@ plain_run plain
 plain_run again
 compare again
 
-if command -v xvfb-run > /dev/null; then
+if [[ "${MICRAS_SKIP_VIEWER:-0}" == 1 ]]; then
+    echo "MICRAS_SKIP_VIEWER=1: skipping the viewer comparison"
+elif command -v xvfb-run > /dev/null; then
     ASAN_OPTIONS="${graphics_options}" xvfb-run -a "${binary}" --scenario "${scenario}" --out "${out}/viewer" --viewer --viewer-size 640x480 \
         > "${out}/viewer.log"
     compare viewer
 elif [[ -n "${DISPLAY:-}" ]]; then
     ASAN_OPTIONS="${graphics_options}" "${binary}" --scenario "${scenario}" --out "${out}/viewer" --viewer --viewer-size 640x480 > "${out}/viewer.log"
     compare viewer
-elif [[ "${MICRAS_SKIP_VIEWER:-0}" == 1 ]]; then
-    echo "MICRAS_SKIP_VIEWER=1: skipping the viewer comparison"
 else
     echo "no display and no xvfb-run; install xvfb or set MICRAS_SKIP_VIEWER=1" >&2
     exit 1
