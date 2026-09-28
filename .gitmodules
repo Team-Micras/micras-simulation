@@ -1,4 +1,0 @@
-[submodule "MicrasFirmware"]
-	path = targets/micras/MicrasFirmware
-	url = https://github.com/Team-Micras/MicrasFirmware.git
-	branch = main

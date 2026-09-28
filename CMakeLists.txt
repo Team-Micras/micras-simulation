@@ -148,17 +148,7 @@ endforeach()
 micras_apply_warnings(micras_sim_engine micras_sim_view micras_sim_bridge micras_sim_app WERROR ${MICRAS_SIM_WERROR})
 
 ###############################################################################
-## Host micras_hal: compiled by each robot target against its own HAL headers
-###############################################################################
-
-# Not a library of its own: the micras_hal headers it implements, and the fake Cube
-# layer they include, belong to the robot being built. It includes nothing from the
-# engine, so it can move next to micras_hal unchanged.
-set(MICRAS_SIM_HAL_HOST_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/hal_host/include")
-file(GLOB MICRAS_SIM_HAL_HOST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/hal_host/src/*.cpp")
-
-###############################################################################
-## Tests, chip models and robot targets
+## Tests and robot targets
 ###############################################################################
 
 if(MICRAS_SIM_TESTS)
@@ -184,7 +174,6 @@ endif()
 if(PROJECT_IS_TOP_LEVEL)
     file(GLOB_RECURSE HARNESS_SOURCES CONFIGURE_DEPENDS
         "${PROJECT_SOURCE_DIR}/engine/*.cpp"
-        "${PROJECT_SOURCE_DIR}/hal_host/*.cpp"
         "${PROJECT_SOURCE_DIR}/view/*.cpp"
         "${PROJECT_SOURCE_DIR}/bridge/*.cpp"
         "${PROJECT_SOURCE_DIR}/app/*.cpp"
@@ -196,22 +185,16 @@ if(PROJECT_IS_TOP_LEVEL)
     )
     file(GLOB_RECURSE HARNESS_HEADERS CONFIGURE_DEPENDS
         "${PROJECT_SOURCE_DIR}/engine/*.hpp"
-        "${PROJECT_SOURCE_DIR}/hal_host/*.hpp"
         "${PROJECT_SOURCE_DIR}/view/*.hpp"
         "${PROJECT_SOURCE_DIR}/bridge/*.hpp"
         "${PROJECT_SOURCE_DIR}/app/*.hpp"
         "${PROJECT_SOURCE_DIR}/tests/*.hpp"
         "${PROJECT_SOURCE_DIR}/targets/*/include/*.hpp"
         "${PROJECT_SOURCE_DIR}/targets/*/tests/*.hpp"
-        "${PROJECT_SOURCE_DIR}/hal_host/*.h"
         "${PROJECT_SOURCE_DIR}/targets/*/cube/*.h"
     )
 
-    # hal_host/ is formatted here but linted in micras-lib, which holds its canonical copy.
-    set(HARNESS_LINTED ${HARNESS_SOURCES})
-    list(FILTER HARNESS_LINTED EXCLUDE REGEX "^${PROJECT_SOURCE_DIR}/hal_host/")
-
     include(cmake/lint.cmake)
-    micras_sim_add_lint_targets(FORMAT ${HARNESS_SOURCES} ${HARNESS_HEADERS} LINT ${HARNESS_LINTED})
+    micras_sim_add_lint_targets(FORMAT ${HARNESS_SOURCES} ${HARNESS_HEADERS} LINT ${HARNESS_SOURCES})
     include(cmake/checks.cmake)
 endif()

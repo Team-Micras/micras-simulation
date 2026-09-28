@@ -3,4 +3,3 @@ build/
 .cache/
 __pycache__/
 compile_commands.json
-targets/micras/FIRMWARE_CHANGES.md
