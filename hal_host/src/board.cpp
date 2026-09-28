@@ -36,7 +36,7 @@ struct Registry {
     std::map<SpiKey, SpiPort>          spis;
     std::map<Key, std::string>         gpio_names;
     std::map<const void*, std::string> handle_names;
-    FlashPort                          flash{{.name = "flash"}};
+    FlashPort                          flash{{.name = "flash"}, {}};
     McuPort                            mcu{{.name = "mcu"}};
 };
 

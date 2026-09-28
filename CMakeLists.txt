@@ -21,6 +21,7 @@ option(MICRAS_SIM_VIEWER "Build the live GLFW viewer" ON)
 option(MICRAS_SIM_BRIDGE "Build the WebSocket bridge to micras-monitor" ON)
 option(MICRAS_SIM_TESTS "Build the unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(MICRAS_SIM_TARGETS "Build the robot targets of targets/" ${PROJECT_IS_TOP_LEVEL})
+option(MICRAS_SIM_WERROR "Treat the simulator's compiler warnings as errors" OFF)
 
 # A project that adds the simulator runs its tools and names its mazes.
 set(MICRAS_SIM_TOOLS_DIR "${PROJECT_SOURCE_DIR}/tools" CACHE INTERNAL "The simulator's analysis and baseline tools")
@@ -28,6 +29,7 @@ set(MICRAS_SIM_MAZES_DIR "${PROJECT_SOURCE_DIR}/engine/arenas/maze/mazes" CACHE 
 
 include(cmake/mujoco.cmake)
 include(cmake/third_party.cmake)
+include(cmake/micras_warnings.cmake)
 
 ###############################################################################
 ## Engine: knows no robot and no HAL
@@ -140,8 +142,9 @@ target_compile_definitions(micras_sim_app PRIVATE
 foreach(TARGET micras_sim_engine micras_sim_view micras_sim_bridge micras_sim_app)
     target_compile_features(${TARGET} PUBLIC cxx_std_23)
     set_target_properties(${TARGET} PROPERTIES CXX_EXTENSIONS OFF)
-    target_compile_options(${TARGET} PRIVATE -Wall -Wextra)
 endforeach()
+
+micras_apply_warnings(micras_sim_engine micras_sim_view micras_sim_bridge micras_sim_app WERROR ${MICRAS_SIM_WERROR})
 
 ###############################################################################
 ## Host micras_hal: compiled by each robot target against its own HAL headers

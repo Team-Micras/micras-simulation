@@ -128,7 +128,9 @@ bool init_opengl() {
     }
 
     for (EGLint i = 0; i < device_count; i++) {
-        if (make_context_current(get_platform_display(EGL_PLATFORM_DEVICE_EXT, devices.at(i), nullptr))) {
+        if (make_context_current(
+                get_platform_display(EGL_PLATFORM_DEVICE_EXT, devices.at(static_cast<std::size_t>(i)), nullptr)
+            )) {
             return true;
         }
     }

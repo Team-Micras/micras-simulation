@@ -220,9 +220,9 @@ uint8_t Lsm6dsvModel::read(uint8_t address) {
     const uint8_t value = this->registers.at(address);
 
     if (address >= outx_l_g and address < outx_l_a and (address & 1) != 0) {
-        this->registers.at(status_reg) &= ~gda;
+        this->registers.at(status_reg) &= static_cast<uint8_t>(~gda);
     } else if (address >= outx_l_a and address < outx_l_a + 6 and (address & 1) != 0) {
-        this->registers.at(status_reg) &= ~xlda;
+        this->registers.at(status_reg) &= static_cast<uint8_t>(~xlda);
     }
 
     return value;
@@ -239,7 +239,7 @@ void Lsm6dsvModel::write(uint8_t address, uint8_t value) {
         return;
     }
 
-    this->registers.at(address) = address == ctrl3 ? value & ~boot : value;
+    this->registers.at(address) = address == ctrl3 ? static_cast<uint8_t>(value & ~boot) : value;
 }
 
 bool Lsm6dsvModel::main_page() const {
@@ -248,9 +248,9 @@ bool Lsm6dsvModel::main_page() const {
 
 void Lsm6dsvModel::encode(uint8_t first, const std::array<double, 3>& values, double sensitivity) {
     for (std::size_t axis = 0; axis < values.size(); axis++) {
-        const double counts = sensitivity > 0.0 ? std::round(values.at(axis) / sensitivity) : 0.0;
-        const auto   word = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(counts, -32768.0, 32767.0)));
-        const auto   low = static_cast<std::size_t>(first + (2 * axis));
+        const double      counts = sensitivity > 0.0 ? std::round(values.at(axis) / sensitivity) : 0.0;
+        const auto        word = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(counts, -32768.0, 32767.0)));
+        const std::size_t low = first + (2 * axis);
 
         this->registers.at(low) = static_cast<uint8_t>(word);
         this->registers.at(low + 1) = static_cast<uint8_t>(word >> 8U);

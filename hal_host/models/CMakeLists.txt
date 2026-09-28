@@ -14,7 +14,7 @@ target_include_directories(micras_hal_host_models PUBLIC
     "${MICRAS_SIM_HAL_HOST_INCLUDE}"
 )
 target_compile_features(micras_hal_host_models PUBLIC cxx_std_23)
-target_compile_options(micras_hal_host_models PRIVATE -Wall -Wextra)
+micras_apply_warnings(micras_hal_host_models WERROR ${MICRAS_SIM_WERROR})
 
 if(MICRAS_SIM_TESTS)
     # ST's register driver header names the registers the tests address, so a model
@@ -26,7 +26,7 @@ if(MICRAS_SIM_TESTS)
     target_link_libraries(micras_hal_host_models_tests PRIVATE
         micras_hal_host_models lsm6dsv_headers doctest::doctest_with_main
     )
-    target_compile_options(micras_hal_host_models_tests PRIVATE -Wall -Wextra)
+    micras_apply_warnings(micras_hal_host_models_tests WERROR ${MICRAS_SIM_WERROR})
 
     doctest_discover_tests(micras_hal_host_models_tests)
 endif()

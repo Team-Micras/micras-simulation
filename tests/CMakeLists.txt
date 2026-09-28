@@ -25,7 +25,7 @@ if(MICRAS_SIM_BRIDGE)
 endif()
 
 target_link_libraries(micras_sim_tests PRIVATE micras::sim_app doctest::doctest_with_main)
-target_compile_options(micras_sim_tests PRIVATE -Wall -Wextra)
+micras_apply_warnings(micras_sim_tests WERROR ${MICRAS_SIM_WERROR})
 target_compile_definitions(micras_sim_tests PRIVATE
     MICRAS_TEST_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/tiny_robot.xml"
     MICRAS_TEST_ROBOT="${CMAKE_CURRENT_SOURCE_DIR}/models/tiny_robot.toml"

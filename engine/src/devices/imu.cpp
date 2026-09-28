@@ -88,7 +88,10 @@ void Imu::append(std::vector<CsvCell>& row) const {
     const ImuDescription& chip = this->config.description;
 
     for (std::size_t channel = 0; channel < channels; channel++) {
-        row.emplace_back(this->delivered.at(channel) * (channel < 3 ? chip.gyro_resolution : chip.accel_resolution));
+        row.emplace_back(
+            static_cast<double>(this->delivered.at(channel)) *
+            (channel < 3 ? chip.gyro_resolution : chip.accel_resolution)
+        );
     }
 }
 }  // namespace micras::sim
