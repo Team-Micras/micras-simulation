@@ -247,15 +247,16 @@ cmake --build --preset host-release --target sim_check
 ```
 
 The Micras gate: its unit tests, the flash surviving from one run into the next,
-the checked scenarios (idle, and the first 30 s of an exploration), their health
-(no warnings, no collision, no non-finite sample, no unbound port, no watchdog
-expiry, no emergency stop, no dropped byte) and the recorded baseline summaries.
+the checked scenarios (idle, the first 30 s of an exploration, and an exploration
+stopped over the radio), their health (no warnings, no collision, no non-finite
+sample, no unbound port, no watchdog expiry, no emergency stop, no dropped byte)
+and the recorded baseline summaries.
 
 Baselines live in `targets/<robot>/baselines/`; `CLAUDE.md` explains what they
 hold and the rules around them. `sim_record_baseline` records the version
 `MICRAS_SIM_BASELINE` names and refuses to overwrite one: bump it instead, and
-nothing is ever lost. `sim_run_idle`, `sim_run_explore`, `sim_check_flash` and
-`sim_compare_baseline` are the gate's steps on their own. With
+nothing is ever lost. `sim_run_idle`, `sim_run_explore`, `sim_run_explore_stop`,
+`sim_check_flash` and `sim_compare_baseline` are the gate's steps on their own. With
 `-DMICRAS_SIM_EXACT=ON` a baseline comparison also fails when a checked run's
 `data.csv` is not byte identical to the recorded one: the check for a change that
 must not move a byte, such as a refactoring.
