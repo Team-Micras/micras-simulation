@@ -7,7 +7,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <future>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -96,6 +98,20 @@ static uint16_t hold_free_port(const Socket& socket) {
 static uint16_t free_port() {
     const Socket socket;
     return hold_free_port(socket);
+}
+
+static uint16_t start_on_a_free_port(const std::function<bool(uint16_t)>& start) {
+    constexpr int attempts{20};
+
+    for (int attempt = 0; attempt < attempts; attempt++) {
+        const uint16_t port = free_port();
+
+        if (start(port)) {
+            return port;
+        }
+    }
+
+    return 0;
 }
 
 /**
@@ -191,11 +207,14 @@ TEST_CASE("MonitorBridge.CarriesRawBytesBothWays") {
     }};
     const Simulation simulation(context, firmware);
 
-    std::vector<uint8_t> inbound;
-    std::string          error;
-    const uint16_t       port = free_port();
-    MonitorBridge        bridge(context.serial, port, error);
-    REQUIRE_MESSAGE(bridge.is_open(), error);
+    std::vector<uint8_t>           inbound;
+    std::string                    error;
+    std::unique_ptr<MonitorBridge> bridge;
+    const uint16_t                 port = start_on_a_free_port([&](uint16_t candidate) {
+        bridge = std::make_unique<MonitorBridge>(context.serial, candidate, error);
+        return bridge->is_open();
+    });
+    REQUIRE_MESSAGE(port != 0, error);
 
     const Socket client;
     REQUIRE(connect_and_stall(client, port));
@@ -206,17 +225,17 @@ TEST_CASE("MonitorBridge.CarriesRawBytesBothWays") {
     const auto deadline = steady_clock::now() + seconds(10);
 
     while (inbound.empty() and steady_clock::now() < deadline) {
-        bridge.on_before_tick(simulation);
+        bridge->on_before_tick(simulation);
         inbound = context.serial.take_for_firmware(command.size());
         std::this_thread::sleep_for(milliseconds(1));
     }
 
     CHECK_EQ(inbound, command);
-    CHECK(bridge.was_interactive());
+    CHECK(bridge->was_interactive());
 
     const std::vector<uint8_t> telemetry{0x02, 0x00, 0xAA, 0x00};
     context.serial.send_from_firmware(telemetry);
-    bridge.on_after_tick(simulation);
+    bridge->on_after_tick(simulation);
 
     CHECK_EQ(receive_binary(client), telemetry);
 }
@@ -224,8 +243,8 @@ TEST_CASE("MonitorBridge.CarriesRawBytesBothWays") {
 TEST_CASE("WebSocketServer.AClientThatStopsReadingNeverStallsTheCaller") {
     WebSocketServer server;
     std::string     error;
-    const uint16_t  port = free_port();
-    REQUIRE_MESSAGE(server.start(port, error), error);
+    const uint16_t  port = start_on_a_free_port([&](uint16_t candidate) { return server.start(candidate, error); });
+    REQUIRE_MESSAGE(port != 0, error);
 
     const Socket client;
     REQUIRE(connect_and_stall(client, port));
