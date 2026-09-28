@@ -3,6 +3,10 @@
  */
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <vector>
 
 #include "micras/sim/core/serial_bus.hpp"
 

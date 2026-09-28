@@ -1,4 +1,4 @@
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <numbers>
@@ -9,22 +9,25 @@
 #include <vector>
 
 #include <doctest/doctest.h>
+#include <mujoco/mjtype.h>
 
 #include "micras/sim/core/clock.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
 #include "micras/sim/core/serial_bus.hpp"
+#include "micras/sim/core/span_at.hpp"
 #include "micras/sim/devices/dc_motor.hpp"
 #include "micras/sim/devices/digital_input.hpp"
 #include "micras/sim/devices/quadrature_encoder.hpp"
 #include "micras/sim/devices/serial_link.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
+#include "micras/sim/robot/robot_description.hpp"
 #include "support.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief A made-up drive: a 6 V supply, a 10 ohm path, a 5:1 gearbox.
  */
-DriveDescription tiny_drive() {
+static DriveDescription tiny_drive() {
     return {
         .winding_resistance = 9.5,
         .bridge_resistance = 0.5,
@@ -38,6 +41,7 @@ DriveDescription tiny_drive() {
     };
 }
 
+namespace {
 /**
  * @brief The tiny robot's world and a clock of 1042 us ticks.
  */
@@ -55,7 +59,7 @@ protected:
         const std::span<const int> addresses(
             this->world.model()->jnt_qposadr, static_cast<std::size_t>(this->world.model()->njnt)
         );
-        return positions[static_cast<std::size_t>(addresses[this->wheel()])];
+        return at(positions, static_cast<std::size_t>(at(addresses, this->wheel())));
     }
 
     /**
@@ -68,7 +72,7 @@ protected:
         const std::span<const int> addresses(
             this->world.model()->jnt_dofadr, static_cast<std::size_t>(this->world.model()->njnt)
         );
-        return velocities[static_cast<std::size_t>(addresses[this->wheel()])];
+        return at(velocities, static_cast<std::size_t>(at(addresses, this->wheel())));
     }
 
     /**
@@ -80,7 +84,7 @@ protected:
         const std::span<const mjtNum> controls(
             this->world.data()->ctrl, static_cast<std::size_t>(this->world.model()->nu)
         );
-        return controls[static_cast<std::size_t>(this->world.require_id(mjOBJ_ACTUATOR, "motor"))];
+        return at(controls, static_cast<std::size_t>(this->world.require_id(mjOBJ_ACTUATOR, "motor")));
     }
 
     /**

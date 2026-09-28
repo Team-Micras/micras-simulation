@@ -4,22 +4,39 @@
  * @brief Offscreen EGL video recorder piping raw frames to ffmpeg.
  */
 
+#include <memory>
+#include <string>
+
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/simulation.hpp"
+#include "micras/sim/core/span_at.hpp"
+#include "micras/sim/core/variable_source.hpp"
+#include "micras/sim/view/panel_spec.hpp"
 #include "micras/sim/view/video_recorder.hpp"
+#include "micras/sim/view/view_options.hpp"
 
 #ifdef MICRAS_SIM_VIDEO
 
     #include <algorithm>
     #include <array>
     #include <cmath>
+    #include <cstddef>
+    #include <cstdint>
+    #include <cstdio>
     #include <format>
     #include <limits>
     #include <span>
-    #include <string>
     #include <utility>
     #include <vector>
 
     #include <EGL/egl.h>
     #include <EGL/eglext.h>
+    #include <EGL/eglplatform.h>
+    #include <mujoco/mjmodel.h>
+    #include <mujoco/mjrender.h>
+    #include <mujoco/mjtype.h>
+    #include <mujoco/mjvisualize.h>
+    #include <mujoco/mujoco.h>
 
     #include "camera.hpp"
 
@@ -50,6 +67,7 @@ const std::array<EGLint, 17> config_attributes{
 
 // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast, misc-misplaced-const): the EGL C API hands out its
 // extension entry points as void pointers and typedefs its handles as pointers.
+}  // namespace
 
 /**
  * @brief Try to bring up a current OpenGL context on one EGL display.
@@ -57,7 +75,7 @@ const std::array<EGLint, 17> config_attributes{
  * @param display Display to initialise.
  * @return True when the context is current and usable.
  */
-bool make_context_current(EGLDisplay display) {
+static bool make_context_current(EGLDisplay display) {
     if (display == EGL_NO_DISPLAY) {
         return false;
     }
@@ -107,7 +125,7 @@ bool make_context_current(EGLDisplay display) {
  *
  * @return True on success.
  */
-bool init_opengl() {
+static bool init_opengl() {
     if (make_context_current(eglGetDisplay(EGL_DEFAULT_DISPLAY))) {
         return true;
     }
@@ -141,7 +159,7 @@ bool init_opengl() {
 /**
  * @brief Release the current EGL context and its display.
  */
-void close_opengl() {
+static void close_opengl() {
     const EGLDisplay display = eglGetCurrentDisplay();
 
     if (display == EGL_NO_DISPLAY) {
@@ -158,8 +176,8 @@ void close_opengl() {
     eglTerminate(display);
 }
 
+namespace {
 // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast, misc-misplaced-const)
-
 }  // namespace
 
 std::unique_ptr<VideoRecorder> VideoRecorder::create(
@@ -220,6 +238,7 @@ std::unique_ptr<VideoRecorder> VideoRecorder::create(
                                 std::to_string(config.fps) + " -i - -c:v libx264 -pix_fmt yuv420p -crf 20 '" +
                                 config.path + "'";
 
+    // NOLINTNEXTLINE(bugprone-command-processor,misc-include-cleaner): ffmpeg encodes through a pipe, POSIX popen.
     recorder->encoder = popen(command.c_str(), "w");
 
     if (recorder->encoder == nullptr) {
@@ -237,6 +256,7 @@ std::unique_ptr<VideoRecorder> VideoRecorder::create(
 
 VideoRecorder::~VideoRecorder() {
     if (this->encoder != nullptr) {
+        // NOLINTNEXTLINE(misc-include-cleaner): POSIX pclose, declared by <cstdio> on POSIX systems.
         pclose(this->encoder);
     }
 
@@ -286,7 +306,8 @@ void VideoRecorder::extend_trail() {
     const std::span<const mjtNum> position = positions.subspan(3 * static_cast<std::size_t>(this->trail_body), 3);
 
     if (not this->trail.empty() and
-        std::hypot(position[0] - this->trail.back()[0], position[1] - this->trail.back()[1]) < trail_spacing) {
+        std::hypot(at(position, 0) - this->trail.back().at(0), at(position, 1) - this->trail.back().at(1)) <
+            trail_spacing) {
         return;
     }
 
@@ -294,23 +315,25 @@ void VideoRecorder::extend_trail() {
         std::size_t kept = 0;
 
         for (std::size_t i = 0; i < this->trail.size(); i += 2) {
-            this->trail[kept++] = this->trail[i];
+            this->trail.at(kept++) = this->trail.at(i);
         }
 
         this->trail.resize(kept);
     }
 
-    this->trail.push_back({position[0], position[1], 0.002});
+    this->trail.push_back({at(position, 0), at(position, 1), 0.002});
 }
 
 void VideoRecorder::draw_trail() {
     const std::span<mjvGeom> geoms{this->scene.geoms, static_cast<std::size_t>(this->scene.maxgeom)};
 
     for (std::size_t i = 1; i < this->trail.size() and this->scene.ngeom < this->scene.maxgeom; i++) {
-        mjvGeom* geom = &geoms[static_cast<std::size_t>(this->scene.ngeom)];
+        mjvGeom* geom = &at(geoms, static_cast<std::size_t>(this->scene.ngeom));
 
         mjv_initGeom(geom, mjGEOM_NONE, nullptr, nullptr, nullptr, trail_color.data());
-        mjv_connector(geom, mjGEOM_LINE, trail_width, this->trail[i - 1].data(), this->trail[i].data());
+        mjv_connector(
+            geom, mjGEOM_LINE, static_cast<mjtNum>(trail_width), this->trail.at(i - 1).data(), this->trail.at(i).data()
+        );
         geom->category = mjCAT_DECOR;
         this->scene.ngeom++;
     }
@@ -335,7 +358,7 @@ void VideoRecorder::capture(const std::string& labels, const std::string& values
 
     this->make_context_current();
 
-    const mjrRect viewport{0, 0, this->config.width, this->config.height};
+    const mjrRect viewport{.left = 0, .bottom = 0, .width = this->config.width, .height = this->config.height};
 
     mjv_updateScene(
         this->world->model(), this->world->data(), &this->option, nullptr, &this->camera, mjCAT_ALL, &this->scene

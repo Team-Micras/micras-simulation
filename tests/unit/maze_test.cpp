@@ -1,17 +1,18 @@
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
-#include <fstream>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include <doctest/doctest.h>
+#include <mujoco/mjtype.h>
 
 #include "micras/sim/arenas/maze.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/span_at.hpp"
 #include "micras/sim/core/text_file.hpp"
 
 namespace micras::sim {
@@ -148,9 +149,9 @@ TEST_CASE("Maze.PlacesTheWallsOnTheCellEdges") {
     );
     const auto first = static_cast<std::size_t>(3 * world.require_id(mjOBJ_GEOM, "maze_south_1_1"));
 
-    CHECK_LE(std::abs(positions[first] - 0.3), 1e-9);
-    CHECK_LE(std::abs(positions[first + 1] - 0.2), 1e-9);
-    CHECK_LE(std::abs(positions[first + 2] - (config.wall_height / 2)), 1e-9);
+    CHECK_LE(std::abs(at(positions, first) - 0.3), 1e-9);
+    CHECK_LE(std::abs(at(positions, first + 1) - 0.2), 1e-9);
+    CHECK_LE(std::abs(at(positions, first + 2) - (config.wall_height / 2)), 1e-9);
 }
 
 TEST_CASE("Maze.SeesTheFloorDarkAndEverythingElseAsWall") {

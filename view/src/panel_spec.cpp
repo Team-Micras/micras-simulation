@@ -2,6 +2,9 @@
  * @file
  */
 
+#include <cstddef>
+#include <string>
+
 #include "micras/sim/view/panel_spec.hpp"
 
 namespace micras::sim {

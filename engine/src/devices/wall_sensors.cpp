@@ -3,14 +3,30 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <numbers>
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include <mujoco/mjdata.h>
+#include <mujoco/mjmodel.h>
+#include <mujoco/mjtype.h>
+#include <mujoco/mujoco.h>
+
+#include "micras/sim/core/clock.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/noise.hpp"
+#include "micras/sim/core/span_at.hpp"
 #include "micras/sim/devices/wall_sensors.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
+#include "micras/sim/robot/robot_description.hpp"
 
 namespace micras::sim {
 namespace {
@@ -18,6 +34,7 @@ namespace {
  * @brief Angle, in half angles, the cone is traced out to.
  */
 constexpr double cone_extent{2.5};
+}  // namespace
 
 /**
  * @brief Relative intensity of an emitter or sensitivity of a receiver off its axis.
@@ -26,7 +43,7 @@ constexpr double cone_extent{2.5};
  * @param half_angle Angle at which it halves.
  * @return Factor between 0 and 1.
  */
-double lobe(double angle, double half_angle) {
+static double lobe(double angle, double half_angle) {
     const double ratio = angle / half_angle;
     return std::exp2(-ratio * ratio);
 }
@@ -39,7 +56,7 @@ double lobe(double angle, double half_angle) {
  * @param intensity Radiant intensity on the axis, in W/sr.
  * @return The rays, each carrying the flux of its patch of the cone.
  */
-std::vector<std::array<double, 4>> cone(int count, double half_angle, double intensity) {
+static std::vector<std::array<double, 4>> cone(int count, double half_angle, double intensity) {
     constexpr int                      rings = 3;
     const int                          per_ring = std::max(1, (count - 1) / rings);
     const double                       step = cone_extent * half_angle / (rings + 0.5);
@@ -64,7 +81,6 @@ std::vector<std::array<double, 4>> cone(int count, double half_angle, double int
 
     return rays;
 }
-}  // namespace
 
 WallSensors::WallSensors(const MujocoWorld& world, Config config, const NoiseConfig& noise) :
     config{std::move(config)}, noise{noise, this->config.name} {
@@ -76,7 +92,7 @@ WallSensors::WallSensors(const MujocoWorld& world, Config config, const NoiseCon
     }
 
     for (const auto& ray : cone(optics.rays, optics.emitter_half_angle, optics.emitter_intensity)) {
-        this->rays.push_back({{ray[0], ray[1], ray[2]}, ray[3]});
+        this->rays.push_back({.direction = {ray.at(0), ray.at(1), ray.at(2)}, .flux = ray.at(3)});
     }
 
     std::set<int> group_ids;
@@ -114,11 +130,12 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
     const std::span<const mjtNum> receiver_frame = site_frames.subspan(9 * receiver_site, 9);
 
     for (std::size_t ray = 0; ray < this->rays.size(); ray++) {
-        const std::array<double, 3>& local = this->rays[ray].direction;
+        const std::array<double, 3>& local = this->rays.at(ray).direction;
 
         for (std::size_t axis = 0; axis < 3; axis++) {
-            this->directions[3 * ray + axis] =
-                frame[3 * axis] * local[0] + frame[3 * axis + 1] * local[1] + frame[3 * axis + 2] * local[2];
+            this->directions.at(3 * ray + axis) = at(frame, 3 * axis) * local.at(0) +
+                                                  at(frame, 3 * axis + 1) * local.at(1) +
+                                                  at(frame, 3 * axis + 2) * local.at(2);
         }
     }
 
@@ -130,9 +147,9 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
     double total = 0.0;
 
     for (std::size_t ray = 0; ray < this->rays.size(); ray++) {
-        const double distance = this->distances[ray];
+        const double distance = this->distances.at(ray);
 
-        if (distance < 0.0 or this->geoms[ray] < 0) {
+        if (distance < 0.0 or this->geoms.at(ray) < 0) {
             continue;
         }
 
@@ -140,8 +157,8 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
         double                length = 0.0;
 
         for (std::size_t axis = 0; axis < 3; axis++) {
-            const double hit = origin[axis] + distance * this->directions[3 * ray + axis];
-            to_receiver.at(axis) = receiver_position[axis] - hit;
+            const double hit = at(origin, axis) + distance * this->directions.at(3 * ray + axis);
+            to_receiver.at(axis) = at(receiver_position, axis) - hit;
             length += to_receiver.at(axis) * to_receiver.at(axis);
         }
 
@@ -155,8 +172,8 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
         double incidence = 0.0;
 
         for (std::size_t axis = 0; axis < 3; axis++) {
-            emission += this->normals[3 * ray + axis] * to_receiver.at(axis) / length;
-            incidence -= receiver_frame[3 * axis] * to_receiver.at(axis) / length;
+            emission += this->normals.at(3 * ray + axis) * to_receiver.at(axis) / length;
+            incidence -= at(receiver_frame, 3 * axis) * to_receiver.at(axis) / length;
         }
 
         if (emission <= 0.0 or incidence <= 0.0) {
@@ -164,7 +181,7 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
         }
 
         const double off_axis = std::acos(std::min(1.0, incidence));
-        total += this->config.reflectance(this->geoms[ray]) * this->rays[ray].flux * emission * incidence *
+        total += this->config.reflectance(this->geoms.at(ray)) * this->rays.at(ray).flux * emission * incidence *
                  lobe(off_axis, optics.receiver_half_angle) / (std::numbers::pi * length * length);
     }
 
@@ -205,7 +222,7 @@ void WallSensors::sample(MujocoWorld& world, const Clock& clock) {
 
     if (scan + 1 == this->groups.size()) {
         for (std::size_t sensor = 0; sensor < sensors; sensor++) {
-            const std::size_t own = optics.sensors.at(sensor).group == this->groups[0] ? 0 : 1;
+            const std::size_t own = optics.sensors.at(sensor).group == this->groups.at(0) ? 0 : 1;
             const std::size_t other = 1 - own;
             this->intensities.at(sensor) = (static_cast<double>(this->counts.at(own * sensors + sensor)) -
                                             static_cast<double>(this->counts.at(other * sensors + sensor))) /

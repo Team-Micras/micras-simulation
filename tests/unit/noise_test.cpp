@@ -8,7 +8,6 @@
 #include "micras/sim/core/noise.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Draw a number of samples from a fresh stream.
  *
@@ -18,7 +17,8 @@ namespace {
  * @param sigma Standard deviation of every sample.
  * @return The samples.
  */
-std::vector<double> draw(const NoiseConfig& config, std::string_view stream, std::size_t count, double sigma = 1.0) {
+static std::vector<double>
+    draw(const NoiseConfig& config, std::string_view stream, std::size_t count, double sigma = 1.0) {
     Noise               noise(config, stream);
     std::vector<double> samples;
     samples.reserve(count);
@@ -30,6 +30,7 @@ std::vector<double> draw(const NoiseConfig& config, std::string_view stream, std
     return samples;
 }
 
+namespace {
 TEST_CASE("Noise.RepeatsAStreamForTheSameSeedAndName") {
     CHECK_EQ(draw({.seed = 3}, "gyro", 100), draw({.seed = 3}, "gyro", 100));
 }

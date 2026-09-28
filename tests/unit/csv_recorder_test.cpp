@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -6,15 +8,16 @@
 
 #include <doctest/doctest.h>
 
+#include "micras/sim/recording/column_source.hpp"
 #include "micras/sim/recording/csv_recorder.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
 #include "micras/sim/recording/ground_truth.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Ground truth of the tiny robot: one column of each kind the probes cover.
  */
-GroundTruthConfig tiny_config() {
+static GroundTruthConfig tiny_config() {
     return {
         .body = "robot",
         .columns = {
@@ -30,6 +33,7 @@ GroundTruthConfig tiny_config() {
     };
 }
 
+namespace {
 /**
  * @brief A column source with fixed names and values.
  */

@@ -3,12 +3,21 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <numbers>
 #include <span>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include "micras/sim/core/clock.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/noise.hpp"
 #include "micras/sim/devices/imu.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
+#include "micras/sim/robot/robot_description.hpp"
 
 namespace micras::sim {
 namespace {

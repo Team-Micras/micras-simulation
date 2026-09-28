@@ -2,6 +2,7 @@
  * @file
  */
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -11,15 +12,16 @@
 #include <thread>
 #include <vector>
 
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <doctest/doctest.h>
 
 #include "micras/sim/bridge/monitor_bridge.hpp"
 #include "micras/sim/bridge/web_socket_server.hpp"
+#include "micras/sim/core/firmware_thread.hpp"
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "support.hpp"
@@ -49,6 +51,7 @@ public:
 private:
     int descriptor;
 };
+}  // namespace
 
 /**
  * @brief Build a loopback address.
@@ -56,7 +59,7 @@ private:
  * @param port Port in host order, 0 for any.
  * @return The address.
  */
-sockaddr_in loopback(uint16_t port) {
+static sockaddr_in loopback(uint16_t port) {
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
@@ -70,9 +73,11 @@ sockaddr_in loopback(uint16_t port) {
  * @param socket Socket to bind.
  * @return The port it holds.
  */
-uint16_t hold_free_port(const Socket& socket) {
+static uint16_t hold_free_port(const Socket& socket) {
     sockaddr_in address = loopback(0);
     socklen_t   length = sizeof(address);
+
+    REQUIRE_GE(socket.get(), 0);
 
     // NOLINTBEGIN(*-reinterpret-cast): the sockets API takes its addresses as sockaddr.
     CHECK_EQ(bind(socket.get(), reinterpret_cast<sockaddr*>(&address), sizeof(address)), 0);
@@ -88,7 +93,7 @@ uint16_t hold_free_port(const Socket& socket) {
  *
  * @return The port, released again.
  */
-uint16_t free_port() {
+static uint16_t free_port() {
     const Socket socket;
     return hold_free_port(socket);
 }
@@ -103,8 +108,9 @@ uint16_t free_port() {
  * @param port Port the server listens on.
  * @return True once the server answered the handshake.
  */
-bool connect_and_stall(const Socket& socket, uint16_t port) {
+static bool connect_and_stall(const Socket& socket, uint16_t port) {
     const int receive_buffer = 1024;
+    // NOLINTNEXTLINE(misc-include-cleaner): <sys/socket.h> provides them through a kernel header.
     setsockopt(socket.get(), SOL_SOCKET, SO_RCVBUF, &receive_buffer, sizeof(receive_buffer));
 
     sockaddr_in address = loopback(port);
@@ -124,12 +130,12 @@ bool connect_and_stall(const Socket& socket, uint16_t port) {
     std::string         response;
     std::array<char, 1> character{};
 
-    while (response.find("\r\n\r\n") == std::string::npos) {
+    while (!response.contains("\r\n\r\n")) {
         if (recv(socket.get(), character.data(), 1, 0) != 1) {
             return false;
         }
 
-        response.push_back(character[0]);
+        response.push_back(character.at(0));
     }
 
     return response.starts_with("HTTP/1.1 101");
@@ -142,7 +148,7 @@ bool connect_and_stall(const Socket& socket, uint16_t port) {
  * @param payload Bytes to send, fewer than 126.
  * @return True when the whole frame was written.
  */
-bool send_binary(const Socket& socket, const std::vector<uint8_t>& payload) {
+static bool send_binary(const Socket& socket, const std::vector<uint8_t>& payload) {
     const std::array<uint8_t, 4> mask{0x12, 0x34, 0x56, 0x78};
     std::vector<uint8_t>         frame{0x82, static_cast<uint8_t>(0x80 | payload.size())};
     frame.insert(frame.end(), mask.begin(), mask.end());
@@ -160,14 +166,14 @@ bool send_binary(const Socket& socket, const std::vector<uint8_t>& payload) {
  * @param socket Connected socket.
  * @return The frame's payload, empty when it was not a short binary frame.
  */
-std::vector<uint8_t> receive_binary(const Socket& socket) {
+static std::vector<uint8_t> receive_binary(const Socket& socket) {
     std::array<uint8_t, 2> head{};
 
-    if (recv(socket.get(), head.data(), head.size(), MSG_WAITALL) != 2 or head[0] != 0x82 or head[1] >= 126) {
+    if (recv(socket.get(), head.data(), head.size(), MSG_WAITALL) != 2 or head.at(0) != 0x82 or head.at(1) >= 126) {
         return {};
     }
 
-    std::vector<uint8_t> payload(head[1]);
+    std::vector<uint8_t> payload(head.at(1));
 
     if (recv(socket.get(), payload.data(), payload.size(), MSG_WAITALL) != static_cast<ssize_t>(payload.size())) {
         return {};
@@ -176,6 +182,7 @@ std::vector<uint8_t> receive_binary(const Socket& socket) {
     return payload;
 }
 
+namespace {
 TEST_CASE("MonitorBridge.CarriesRawBytesBothWays") {
     RunContext context;
     load_tiny_world(context.world, context.clock);

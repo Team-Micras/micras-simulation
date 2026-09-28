@@ -1,14 +1,17 @@
 #include <cmath>
-#include <map>
+#include <cstddef>
 #include <span>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include <doctest/doctest.h>
+#include <mujoco/mjtype.h>
+#include <mujoco/mujoco.h>
 
+#include "micras/sim/core/firmware_thread.hpp"
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
+#include "micras/sim/core/span_at.hpp"
 #include "micras/sim/recording/event_log.hpp"
 #include "support.hpp"
 
@@ -36,7 +39,7 @@ protected:
         MujocoWorld&            world = this->context.world;
         const std::span<mjtNum> positions(world.data()->qpos, static_cast<std::size_t>(world.model()->nq));
 
-        positions[2] = touching ? 0.005 : 0.1;
+        at(positions, 2) = touching ? 0.005 : 0.1;
         world.data()->time = time;
         mj_forward(world.model(), world.data());
         log.on_after_tick(this->simulation);

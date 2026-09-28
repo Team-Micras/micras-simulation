@@ -1,9 +1,10 @@
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <limits>
-#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <doctest/doctest.h>
 

@@ -4,24 +4,35 @@
 
 #include <algorithm>
 #include <charconv>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <format>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <toml++/toml.hpp>
 
+#include "micras/sim/core/clock.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/serial_bus.hpp"
+#include "micras/sim/core/simulation.hpp"
 #include "micras/sim/core/text_file.hpp"
+#include "micras/sim/core/variable_source.hpp"
 #include "micras/sim/scenario/scenario.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Refuse keys of a table outside a known set.
  *
@@ -29,7 +40,8 @@ namespace {
  * @param known Keys it may have.
  * @param where Name of the table, for messages.
  */
-void refuse_unknown(const toml::table& table, const std::set<std::string_view>& known, const std::string& where) {
+static void
+    refuse_unknown(const toml::table& table, const std::set<std::string_view>& known, const std::string& where) {
     for (const auto& [key, node] : table) {
         if (not known.contains(key.str())) {
             throw std::runtime_error(std::format("{}: unknown key {}", where, key.str()));
@@ -45,7 +57,7 @@ void refuse_unknown(const toml::table& table, const std::set<std::string_view>& 
  * @param where Name of the table, for messages.
  * @return The number.
  */
-double require_number(const toml::table& table, std::string_view key, const std::string& where) {
+static double require_number(const toml::table& table, std::string_view key, const std::string& where) {
     const std::optional<double> value = table[key].value<double>();
 
     if (not value.has_value()) {
@@ -62,7 +74,7 @@ double require_number(const toml::table& table, std::string_view key, const std:
  * @param where Name of the table, for messages.
  * @return The value as text.
  */
-std::string condition_value(const toml::node_view<const toml::node>& node, const std::string& where) {
+static std::string condition_value(const toml::node_view<const toml::node>& node, const std::string& where) {
     if (const auto text = node.value<std::string>(); text.has_value()) {
         return *text;
     }
@@ -81,7 +93,8 @@ std::string condition_value(const toml::node_view<const toml::node>& node, const
  * @param where Name of the table, for messages.
  * @return The values as text.
  */
-std::vector<std::string> condition_values(const toml::node_view<const toml::node>& node, const std::string& where) {
+static std::vector<std::string>
+    condition_values(const toml::node_view<const toml::node>& node, const std::string& where) {
     std::vector<std::string> values;
 
     if (const toml::array* array = node.as_array(); array != nullptr) {
@@ -102,7 +115,7 @@ std::vector<std::string> condition_values(const toml::node_view<const toml::node
  * @param where Name of the table, for messages.
  * @return The condition.
  */
-StopCondition read_stop(const toml::table& table, const std::string& where) {
+static StopCondition read_stop(const toml::table& table, const std::string& where) {
     refuse_unknown(table, {"when", "equals", "after", "count", "abort"}, where);
     const std::optional<std::string> variable = table["when"].value<std::string>();
 
@@ -136,7 +149,7 @@ StopCondition read_stop(const toml::table& table, const std::string& where) {
  * @param where Name of the event, for messages.
  * @return The event.
  */
-ScenarioEvent read_event(const toml::table& table, const std::string& where) {
+static ScenarioEvent read_event(const toml::table& table, const std::string& where) {
     refuse_unknown(table, {"at", "press", "for", "set", "value", "send", "when", "equals"}, where);
 
     ScenarioEvent event;
@@ -194,8 +207,6 @@ ScenarioEvent read_event(const toml::table& table, const std::string& where) {
 
     return event;
 }
-
-}  // namespace
 
 Scenario Scenario::load(const std::filesystem::path& path) {
     return parse(read_text_file(path, "scenario"), path.string());
@@ -349,8 +360,8 @@ RunControl ScenarioPlayer::on_before_tick(const Simulation& simulation) {
     }
 
     while (this->next_event < this->scenario.events.size() and
-           clock.tick_at(this->scenario.events[this->next_event].at) <= tick and this->is_due(this->next_event)) {
-        const ScenarioEvent& event = this->scenario.events[this->next_event++];
+           clock.tick_at(this->scenario.events.at(this->next_event).at) <= tick and this->is_due(this->next_event)) {
+        const ScenarioEvent& event = this->scenario.events.at(this->next_event++);
         const uint64_t       end = tick + std::max<uint64_t>(1, clock.tick_at(event.duration));
 
         switch (event.kind) {
@@ -358,7 +369,7 @@ RunControl ScenarioPlayer::on_before_tick(const Simulation& simulation) {
                 if (not this->human) {
                     DigitalInput* input = this->hooks.inputs.find(event.target)->second;
                     input->set(true);
-                    this->releases.push_back({input, end});
+                    this->releases.push_back({.input = input, .tick = end});
                 }
 
                 break;

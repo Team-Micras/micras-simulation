@@ -1,4 +1,3 @@
-#include <array>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -7,9 +6,9 @@
 #include <doctest/doctest.h>
 
 #include "micras/sim/app/cli.hpp"
+#include "micras/sim/app/wiring.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Parse a command line written the way a shell would pass it.
  *
@@ -17,7 +16,7 @@ namespace {
  * @param target_options Options the robot target adds.
  * @return Parsed options.
  */
-CliOptions parse(std::vector<std::string> words, std::span<const CliOption> target_options = {}) {
+static CliOptions parse(std::vector<std::string> words, std::span<const CliOption> target_options = {}) {
     std::vector<std::string> owned{"robot_sim"};
     owned.insert(owned.end(), words.begin(), words.end());
 
@@ -31,6 +30,7 @@ CliOptions parse(std::vector<std::string> words, std::span<const CliOption> targ
     return Cli::parse(std::span(argv), target_options);
 }
 
+namespace {
 TEST_CASE("Cli.ReadsTheRequiredOptions") {
     const CliOptions options = parse({"--out", "runs/here"});
 

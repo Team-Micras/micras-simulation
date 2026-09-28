@@ -2,9 +2,13 @@
  * @file
  */
 
+#include <cstdint>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "micras/sim/devices/digital_input.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
 
 namespace micras::sim {
 DigitalInput::DigitalInput(Config config) : config{std::move(config)} {

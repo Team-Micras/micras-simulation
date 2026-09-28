@@ -1,7 +1,9 @@
 #include <array>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <span>
+#include <string>
 
 #include <doctest/doctest.h>
 

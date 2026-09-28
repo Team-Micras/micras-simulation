@@ -5,23 +5,32 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include <mujoco/mjdata.h>
+#include <mujoco/mjmodel.h>
+#include <mujoco/mjtype.h>
+#include <mujoco/mujoco.h>
+
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
 #include "micras/sim/recording/ground_truth.hpp"
 
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic): mjData exposes flat C arrays indexed by id.
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Convert a MuJoCo quaternion to roll, pitch and yaw.
  *
  * @param quaternion Quaternion as w, x, y, z.
  * @return Roll, pitch and yaw in radians, ZYX convention.
  */
-std::array<double, 3> to_euler(const mjtNum* quaternion) {
+static std::array<double, 3> to_euler(const mjtNum* quaternion) {
     const double scalar = quaternion[0];
     const double x = quaternion[1];
     const double y = quaternion[2];
@@ -43,7 +52,7 @@ std::array<double, 3> to_euler(const mjtNum* quaternion) {
  * @param body Name of the body, for the error message.
  * @return Index into mjData::qvel.
  */
-int free_joint_dof(const mjModel* model, int body_id, const std::string& body) {
+static int free_joint_dof(const mjModel* model, int body_id, const std::string& body) {
     if (model->body_jntnum[body_id] < 1) {
         throw std::runtime_error("body '" + body + "' has no joint, a free joint is required");
     }
@@ -60,6 +69,7 @@ int free_joint_dof(const mjModel* model, int body_id, const std::string& body) {
     return model->jnt_dofadr[root_joint];
 }
 
+namespace {
 /**
  * @brief Column names every row starts with, before the robot's own.
  */
@@ -101,7 +111,7 @@ GroundTruth::GroundTruth(const MujocoWorld& world, GroundTruthConfig config) :
                 break;
         }
 
-        this->resolved.push_back({column.probe, address});
+        this->resolved.push_back({.probe = column.probe, .address = address});
     }
 }
 
@@ -146,7 +156,7 @@ GroundTruth::ContactStats GroundTruth::collect_contacts(int geom_id) const {
 
         std::array<mjtNum, 6> force{};
         mj_contactForce(model, data, i, force.data());
-        stats.normal_force += force[0];
+        stats.normal_force += force.at(0);
 
         if (contact.dim >= 3) {
             const int address = contact.efc_address;
@@ -205,11 +215,11 @@ std::vector<CsvCell> GroundTruth::sample(uint64_t tick) {
     const auto    euler = to_euler(data->xquat + 4L * this->body_id);
     const mjtNum* velocity = data->qvel + this->free_joint_qvel;
 
-    const double forward_speed = velocity[0] * std::cos(euler[2]) + velocity[1] * std::sin(euler[2]);
+    const double forward_speed = velocity[0] * std::cos(euler.at(2)) + velocity[1] * std::sin(euler.at(2));
 
     std::vector<CsvCell> cells{
-        tick,     data->time,  position[0], position[1], position[2], euler[0],      euler[1],
-        euler[2], velocity[0], velocity[1], velocity[2], velocity[5], forward_speed,
+        tick,        data->time,  position[0], position[1], position[2], euler.at(0),   euler.at(1),
+        euler.at(2), velocity[0], velocity[1], velocity[2], velocity[5], forward_speed,
     };
 
     this->row_contacts.clear();

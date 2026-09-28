@@ -2,19 +2,33 @@
  * @file
  */
 
+#include <memory>
+#include <string>
+
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/simulation.hpp"
+#include "micras/sim/core/variable_source.hpp"
 #include "micras/sim/view/mujoco_viewer.hpp"
+#include "micras/sim/view/panel_spec.hpp"
+#include "micras/sim/view/view_options.hpp"
 
 #ifdef MICRAS_SIM_VIEWER
 
     #include <algorithm>
     #include <format>
-    #include <string>
     #include <utility>
 
     #include <GLFW/glfw3.h>
     #include <imgui.h>
+    #include <mujoco/mjdata.h>
+    #include <mujoco/mjmodel.h>
+    #include <mujoco/mjrender.h>
+    #include <mujoco/mjtype.h>
+    #include <mujoco/mjvisualize.h>
+    #include <mujoco/mujoco.h>
 
     #include "camera.hpp"
+    #include "micras/sim/view/control_panel.hpp"
 
 namespace micras::sim {
 namespace {
@@ -22,6 +36,7 @@ namespace {
  * @brief How much one scroll step zooms.
  */
 constexpr double zoom_per_scroll{-0.05};
+}  // namespace
 
 /**
  * @brief Get the viewer a GLFW window belongs to.
@@ -29,10 +44,11 @@ constexpr double zoom_per_scroll{-0.05};
  * @param window Window the event came from.
  * @return The viewer.
  */
-MujocoViewer* viewer_of(GLFWwindow* window) {
+static MujocoViewer* viewer_of(GLFWwindow* window) {
     return static_cast<MujocoViewer*>(glfwGetWindowUserPointer(window));
 }
 
+namespace {
 /**
  * @brief Count how many GLFW users are still up.
  *
@@ -208,8 +224,8 @@ void MujocoViewer::on_finish(const Simulation& simulation) {
 }
 
 void MujocoViewer::apply_perturbation() {
-    mjModel* model = this->world->model();
-    mjData*  data = this->world->data();
+    const mjModel* model = this->world->model();
+    mjData*        data = this->world->data();
 
     mju_zero(data->xfrc_applied, static_cast<int>(6 * model->nbody));
 
@@ -228,7 +244,7 @@ void MujocoViewer::draw(const Simulation& simulation) {
     int height = 0;
     glfwGetFramebufferSize(this->window, &width, &height);
 
-    const mjrRect viewport{0, 0, width, height};
+    const mjrRect viewport{.left = 0, .bottom = 0, .width = width, .height = height};
 
     mjv_updateScene(
         this->world->model(), this->world->data(), &this->option, &this->perturb, &this->camera, mjCAT_ALL, &this->scene

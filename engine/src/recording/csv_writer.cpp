@@ -4,8 +4,17 @@
 
 #include <array>
 #include <charconv>
+#include <cstddef>
+#include <filesystem>
+#include <memory>
+#include <ostream>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <system_error>
+#include <variant>
 
+#include "micras/sim/core/span_at.hpp"
 #include "micras/sim/recording/csv_writer.hpp"
 
 namespace micras::sim {
@@ -17,7 +26,7 @@ CsvWriter::CsvWriter(const std::filesystem::path& path) : file{path} {
 
 void CsvWriter::write_header(std::span<const std::string> columns) {
     for (std::size_t i = 0; i < columns.size(); i++) {
-        this->file << (i > 0 ? "," : "") << columns[i];
+        this->file << (i > 0 ? "," : "") << at(columns, i);
     }
 
     this->file << '\n';
@@ -25,7 +34,7 @@ void CsvWriter::write_header(std::span<const std::string> columns) {
 
 void CsvWriter::write_row(std::span<const CsvCell> cells) {
     for (std::size_t i = 0; i < cells.size(); i++) {
-        this->file << (i > 0 ? "," : "") << format(cells[i]);
+        this->file << (i > 0 ? "," : "") << format(at(cells, i));
     }
 
     this->file << '\n' << std::flush;
@@ -37,7 +46,7 @@ std::string CsvWriter::format(const CsvCell& cell) {
             if constexpr (std::is_same_v<decltype(value), double>) {
                 std::array<char, 32> buffer{};
                 const auto           result =
-                    std::to_chars(buffer.data(), buffer.data() + buffer.size(), value, std::chars_format::general, 9);
+                    std::to_chars(buffer.data(), std::to_address(buffer.end()), value, std::chars_format::general, 9);
 
                 if (result.ec != std::errc{}) {
                     throw std::runtime_error("a CSV cell did not fit the formatting buffer");

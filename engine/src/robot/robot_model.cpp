@@ -8,18 +8,18 @@
 #include <string>
 
 #include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/robot/robot_description.hpp"
 #include "micras/sim/robot/robot_model.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Format a vector for an MJCF attribute.
  *
  * @param vector The vector.
  * @return Space separated components.
  */
-std::string text(const Vector3& vector) {
-    return std::format("{:.9g} {:.9g} {:.9g}", vector[0], vector[1], vector[2]);
+static std::string text(const Vector3& vector) {
+    return std::format("{:.9g} {:.9g} {:.9g}", vector.at(0), vector.at(1), vector.at(2));
 }
 
 /**
@@ -29,7 +29,7 @@ std::string text(const Vector3& vector) {
  * @param names Names of the model.
  * @return MJCF of the geoms.
  */
-std::string chassis_geoms(const RobotDescription& robot, const RobotModelNames& names) {
+static std::string chassis_geoms(const RobotDescription& robot, const RobotModelNames& names) {
     const ChassisDescription& chassis = robot.chassis;
     std::string               geoms = std::format(
         "      <geom name=\"{}\" type=\"mesh\" mesh=\"{}_board\" material=\"{}_board\" friction=\"{:.9g}\"/>\n",
@@ -38,11 +38,12 @@ std::string chassis_geoms(const RobotDescription& robot, const RobotModelNames& 
 
     for (const BoxPart& part : chassis.boxes) {
         const Vector3 center{
-            (part.min[0] + part.max[0]) / 2, (part.min[1] + part.max[1]) / 2, (part.min[2] + part.max[2]) / 2
+            (part.min.at(0) + part.max.at(0)) / 2, (part.min.at(1) + part.max.at(1)) / 2,
+            (part.min.at(2) + part.max.at(2)) / 2
         };
         const Vector3 half{
-            std::abs(part.max[0] - part.min[0]) / 2, std::abs(part.max[1] - part.min[1]) / 2,
-            std::abs(part.max[2] - part.min[2]) / 2
+            std::abs(part.max.at(0) - part.min.at(0)) / 2, std::abs(part.max.at(1) - part.min.at(1)) / 2,
+            std::abs(part.max.at(2) - part.min.at(2)) / 2
         };
 
         geoms += std::format(
@@ -52,7 +53,7 @@ std::string chassis_geoms(const RobotDescription& robot, const RobotModelNames& 
     }
 
     for (const CylinderPart& part : chassis.cylinders) {
-        const Vector3 center{part.base[0], part.base[1], part.base[2] + part.height / 2};
+        const Vector3 center{part.base.at(0), part.base.at(1), part.base.at(2) + part.height / 2};
 
         geoms += std::format(
             "      <geom name=\"{}\" type=\"cylinder\" pos=\"{}\" size=\"{:.9g} {:.9g}\" material=\"{}_parts\"/>\n",
@@ -87,7 +88,7 @@ std::string chassis_geoms(const RobotDescription& robot, const RobotModelNames& 
  *       do scrub, is absorbed by a soft enough tyre, which is part of why
  *       contact_time_constant is what it is.
  */
-std::string wheel_body(const RobotDescription& robot, const std::string& name, double side) {
+static std::string wheel_body(const RobotDescription& robot, const std::string& name, double side) {
     const WheelsDescription& wheels = robot.wheels;
     const DriveDescription&  drive = robot.drive;
     const double             armature = drive.rotor_inertia * drive.gear_ratio * drive.gear_ratio;
@@ -114,12 +115,12 @@ std::string wheel_body(const RobotDescription& robot, const std::string& name, d
  * @param names Names of the model.
  * @return MJCF of the sites.
  */
-std::string sites(const RobotDescription& robot, const RobotModelNames& names) {
+static std::string sites(const RobotDescription& robot, const RobotModelNames& names) {
     const ImuDescription& imu = robot.imu;
     std::string           sites = std::format(
         "      <site name=\"{}\" pos=\"{}\" xyaxes=\"{} {}\"/>\n"
         "      <site name=\"{}\" pos=\"{}\"/>\n",
-        names.imu, text(imu.position), text(imu.axes[0]), text(imu.axes[1]), names.fan, text(robot.fan.position)
+        names.imu, text(imu.position), text(imu.axes.at(0)), text(imu.axes.at(1)), names.fan, text(robot.fan.position)
     );
 
     for (const WallSensorDescription& sensor : robot.wall_sensors.sensors) {
@@ -139,19 +140,20 @@ std::string sites(const RobotDescription& robot, const RobotModelNames& names) {
  * @param robot The description.
  * @return Space separated vertices.
  */
-std::string board_vertices(const RobotDescription& robot) {
+static std::string board_vertices(const RobotDescription& robot) {
     std::string vertices;
 
     for (const auto& point : robot.chassis.outline) {
         vertices += std::format(
-            "{:.9g} {:.9g} {:.9g} {:.9g} {:.9g} {:.9g} ", point[0], point[1], robot.chassis.board_bottom, point[0],
-            point[1], robot.chassis.board_top
+            "{:.9g} {:.9g} {:.9g} {:.9g} {:.9g} {:.9g} ", point.at(0), point.at(1), robot.chassis.board_bottom,
+            point.at(0), point.at(1), robot.chassis.board_top
         );
     }
 
     return vertices;
 }
 
+namespace {
 /**
  * @brief Height of the onboard camera above the top of the board, in meters.
  *
@@ -165,6 +167,7 @@ constexpr double onboard_height{0.025};
  * @note The sensor housings stand a little past the board, and would fill the bottom of the view.
  */
 constexpr double onboard_lead{0.01};
+}  // namespace
 
 /**
  * @brief Get where the onboard camera sits ahead of the body origin.
@@ -172,16 +175,15 @@ constexpr double onboard_lead{0.01};
  * @param robot The description.
  * @return The largest forward coordinate of the outline, plus the lead of the camera.
  */
-double front_of(const RobotDescription& robot) {
+static double front_of(const RobotDescription& robot) {
     double front = 0.0;
 
     for (const auto& point : robot.chassis.outline) {
-        front = std::max(front, static_cast<double>(point[0]));
+        front = std::max(front, static_cast<double>(point.at(0)));
     }
 
     return front + onboard_lead;
 }
-}  // namespace
 
 std::string robot_mjcf(const RobotDescription& robot) {
     const RobotModelNames   names = RobotModelNames::of(robot);

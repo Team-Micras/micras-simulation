@@ -1,17 +1,18 @@
-#include <doctest/doctest.h>
 #include <stdexcept>
+
+#include <doctest/doctest.h>
 
 #include "micras/sim/core/clock.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief A timestep that divides the loop into two steps.
  */
-Clock harness_clock() {
+static Clock harness_clock() {
     return Clock::from_model(0.000521, 1042);
 }
 
+namespace {
 TEST_CASE("Clock.DerivesTheStepCountFromTheModel") {
     const Clock clock = harness_clock();
     CHECK_EQ(clock.steps_per_tick(), 2);

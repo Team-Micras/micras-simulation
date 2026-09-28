@@ -2,27 +2,31 @@
  * @file
  */
 
-#include <concepts>
+#include <cstddef>
+#include <filesystem>
 #include <format>
 #include <fstream>
+#include <ios>
+#include <iterator>
 #include <locale>
 #include <span>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 
 #include <picosha2.h>
 
+#include "micras/sim/core/span_at.hpp"
 #include "micras/sim/recording/run_metadata.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Escape a string as a JSON string literal body.
  *
  * @param value Raw string.
  * @return Escaped string, without the surrounding quotes.
  */
-std::string json_escape(const std::string& value) {
+static std::string json_escape(const std::string& value) {
     std::string escaped;
     escaped.reserve(value.size());
 
@@ -65,7 +69,7 @@ std::string json_escape(const std::string& value) {
  * @param value Value of the field.
  * @param last Whether this is the last field of the object.
  */
-void field(std::ostringstream& out, const char* name, const std::string& value, bool last = false) {
+static void field(std::ostringstream& out, const char* name, const std::string& value, bool last = false) {
     out << "  \"" << name << "\": \"" << json_escape(value) << '"' << (last ? "\n" : ",\n");
 }
 
@@ -77,7 +81,7 @@ void field(std::ostringstream& out, const char* name, const std::string& value, 
  * @param value Value of the field.
  * @param last Whether this is the last field of the object.
  */
-void field(std::ostringstream& out, const char* name, bool value, bool last = false) {
+static void field(std::ostringstream& out, const char* name, bool value, bool last = false) {
     out << "  \"" << name << "\": " << (value ? "true" : "false") << (last ? "\n" : ",\n");
 }
 
@@ -94,10 +98,9 @@ void field(std::ostringstream& out, const char* name, bool value, bool last = fa
  */
 template <typename T>
 requires std::is_arithmetic_v<T>
-void field(std::ostringstream& out, const char* name, T value, bool last = false) {
+static void field(std::ostringstream& out, const char* name, T value, bool last = false) {
     out << "  \"" << name << "\": " << value << (last ? "\n" : ",\n");
 }
-}  // namespace
 
 std::string RunMetadata::to_json() const {
     std::ostringstream out;
@@ -139,7 +142,7 @@ std::string RunMetadata::to_json() const {
     out << "  \"events\": [";
 
     for (std::size_t i = 0; i < this->events.size(); i++) {
-        const RunEvent& event = this->events[i];
+        const RunEvent& event = this->events.at(i);
         out << (i > 0 ? "," : "") << "\n    {" << R"("time": )" << event.time << R"(, "kind": ")"
             << json_escape(event.kind) << R"(", "detail": ")" << json_escape(event.detail) << R"("})";
     }
@@ -177,7 +180,7 @@ std::string RunMetadata::join_args(std::span<char*> arguments) {
 
     for (std::size_t i = 1; i < arguments.size(); i++) {
         joined += (i > 1 ? " " : "");
-        joined += arguments[i];
+        joined += at(arguments, i);
     }
 
     return joined;

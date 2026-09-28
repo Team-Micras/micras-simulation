@@ -4,13 +4,21 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
 
 #include "micras/sim/app/cli.hpp"
+#include "micras/sim/app/wiring.hpp"
+#include "micras/sim/core/span_at.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Read the value that follows an option.
  *
@@ -18,12 +26,12 @@ namespace {
  * @param index Index of the option, advanced to the value.
  * @return The value.
  */
-std::string take_value(std::span<char*> arguments, std::size_t& index) {
+static std::string take_value(std::span<char*> arguments, std::size_t& index) {
     if (index + 1 >= arguments.size()) {
-        throw std::runtime_error("missing value for option " + std::string(arguments[index]));
+        throw std::runtime_error("missing value for option " + std::string(at(arguments, index)));
     }
 
-    return arguments[++index];
+    return at(arguments, ++index);
 }
 
 /**
@@ -35,12 +43,13 @@ std::string take_value(std::span<char*> arguments, std::size_t& index) {
  * @return The number.
  */
 template <typename T>
-T require_number(const std::string& value, const std::string& option) {
+static T require_number(const std::string& value, const std::string& option) {
     T                           number{};
     const std::span<const char> digits(value);
-    const auto                  result = std::from_chars(digits.data(), digits.data() + digits.size(), number);
+    const char* const           end = std::to_address(digits.end());
+    const auto                  result = std::from_chars(digits.data(), end, number);
 
-    if (result.ec != std::errc{} or result.ptr != digits.data() + digits.size()) {
+    if (result.ec != std::errc{} or result.ptr != end) {
         throw std::runtime_error(option + " expects a number, got '" + value + "'");
     }
 
@@ -55,7 +64,7 @@ T require_number(const std::string& value, const std::string& option) {
  * @param width Width to fill.
  * @param height Height to fill.
  */
-void parse_size(const std::string& value, const std::string& option, int& width, int& height) {
+static void parse_size(const std::string& value, const std::string& option, int& width, int& height) {
     const std::size_t cross = value.find('x');
 
     if (cross == std::string::npos) {
@@ -66,10 +75,12 @@ void parse_size(const std::string& value, const std::string& option, int& width,
     height = require_number<int>(value.substr(cross + 1), option);
 }
 
+namespace {
 /**
  * @brief Reads the value that follows the option being applied.
  */
 using ValueReader = std::function<std::string()>;
+}  // namespace
 
 /**
  * @brief Apply one of the window options.
@@ -79,7 +90,7 @@ using ValueReader = std::function<std::string()>;
  * @param options Options to fill.
  * @return False when the name is not a window option.
  */
-bool apply_viewer_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
+static bool apply_viewer_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
     if (argument == "--viewer") {
         options.viewer_enabled = true;
     } else if (argument == "--viewer-camera") {
@@ -103,7 +114,7 @@ bool apply_viewer_option(const std::string& argument, const ValueReader& value, 
  * @param options Options to fill.
  * @return False when the name is not a monitor option.
  */
-bool apply_monitor_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
+static bool apply_monitor_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
     if (argument == "--monitor") {
         options.monitor_enabled = true;
     } else if (argument == "--monitor-port") {
@@ -123,7 +134,7 @@ bool apply_monitor_option(const std::string& argument, const ValueReader& value,
  * @param options Options to fill.
  * @return False when the name is not a recording option.
  */
-bool apply_video_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
+static bool apply_video_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
     if (argument == "--video") {
         options.video.path = value();
     } else if (argument == "--video-fps") {
@@ -146,7 +157,7 @@ bool apply_video_option(const std::string& argument, const ValueReader& value, C
  *
  * @param options Options as parsed.
  */
-void validate(const CliOptions& options) {
+static void validate(const CliOptions& options) {
     if (options.out.empty()) {
         throw std::runtime_error("--out is required");
     }
@@ -198,7 +209,7 @@ void validate(const CliOptions& options) {
  * @param options Options to fill.
  * @return False when the name is not an option at all.
  */
-bool apply_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
+static bool apply_option(const std::string& argument, const ValueReader& value, CliOptions& options) {
     if (argument == "--out") {
         options.out = value();
     } else if (argument == "--scenario") {
@@ -222,7 +233,6 @@ bool apply_option(const std::string& argument, const ValueReader& value, CliOpti
 
     return true;
 }
-}  // namespace
 
 std::string Cli::usage(std::string_view program, std::span<const CliOption> target_options) {
     const std::string indent(7 + program.size(), ' ');
@@ -245,7 +255,7 @@ CliOptions Cli::parse(std::span<char*> arguments, std::span<const CliOption> tar
     CliOptions options;
 
     for (std::size_t i = 1; i < arguments.size(); i++) {
-        const std::string argument = arguments[i];
+        const std::string argument = at(arguments, i);
         const ValueReader value = [&arguments, &i] { return take_value(arguments, i); };
 
         if (apply_option(argument, value, options)) {

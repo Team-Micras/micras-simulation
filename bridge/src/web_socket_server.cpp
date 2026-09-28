@@ -2,6 +2,10 @@
  * @file
  */
 
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <string>
 #include <utility>
 
 #include "micras/sim/bridge/web_socket_server.hpp"
@@ -13,6 +17,10 @@
     #include <mutex>
     #include <thread>
 
+    #include <ixwebsocket/IXConnectionState.h>
+    #include <ixwebsocket/IXWebSocket.h>
+    #include <ixwebsocket/IXWebSocketMessage.h>
+    #include <ixwebsocket/IXWebSocketMessageType.h>
     #include <ixwebsocket/IXWebSocketServer.h>
 
 namespace micras::sim {
@@ -134,7 +142,7 @@ void WebSocketServer::stop() {
     }
 
     {
-        const std::lock_guard lock(this->impl->mutex);
+        const std::scoped_lock lock(this->impl->mutex);
         this->impl->stopping = true;
         this->impl->frames.clear();
     }
@@ -151,7 +159,7 @@ void WebSocketServer::broadcast(std::span<const uint8_t> bytes) {
     }
 
     {
-        const std::lock_guard lock(this->impl->mutex);
+        const std::scoped_lock lock(this->impl->mutex);
 
         if (this->impl->frames.size() >= max_queued_frames) {
             this->impl->frames.pop_front();
@@ -166,7 +174,7 @@ void WebSocketServer::broadcast(std::span<const uint8_t> bytes) {
 }
 
 uint64_t WebSocketServer::dropped_frames() const {
-    const std::lock_guard lock(this->impl->mutex);
+    const std::scoped_lock lock(this->impl->mutex);
     return this->impl->dropped;
 }
 }  // namespace micras::sim

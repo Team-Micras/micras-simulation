@@ -2,10 +2,17 @@
  * @file
  */
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <utility>
 #include <vector>
 
+#include "micras/sim/core/clock.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/serial_bus.hpp"
 #include "micras/sim/devices/serial_link.hpp"
 
 namespace micras::sim {

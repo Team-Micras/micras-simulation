@@ -5,22 +5,48 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <numbers>
 #include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
+#include <mujoco/mjmodel.h>
+#include <mujoco/mjtype.h>
 #include <mujoco/mujoco.h>
 
 #include "micras/sim/app/application.hpp"
+#include "micras/sim/app/cli.hpp"
 #include "micras/sim/app/crash_reporter.hpp"
+#include "micras/sim/app/target.hpp"
+#include "micras/sim/app/wiring.hpp"
+#include "micras/sim/arenas/maze.hpp"
+#include "micras/sim/bridge/monitor_bridge.hpp"
+#include "micras/sim/core/firmware_thread.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/run_context.hpp"
+#include "micras/sim/core/serial_bus.hpp"
+#include "micras/sim/core/span_at.hpp"
+#include "micras/sim/recording/column_source.hpp"
+#include "micras/sim/recording/ground_truth.hpp"
 #include "micras/sim/recording/run_metadata.hpp"
+#include "micras/sim/robot/robot_description.hpp"
 #include "micras/sim/robot/robot_model.hpp"
+#include "micras/sim/scenario/scenario.hpp"
+#include "micras/sim/view/mujoco_viewer.hpp"
+#include "micras/sim/view/panel_spec.hpp"
+#include "micras/sim/view/video_recorder.hpp"
+#include "micras/sim/view/view_options.hpp"
 
 namespace micras::sim {
 namespace {
@@ -38,6 +64,7 @@ constexpr std::string_view default_maze{"maze1"};
  * @brief Gap left between the robot's back and the wall behind it at the start, in metres.
  */
 constexpr double start_gap{0.001};
+}  // namespace
 
 /**
  * @brief Find a maze drawing: a path, or a name from the arena's collection.
@@ -45,7 +72,7 @@ constexpr double start_gap{0.001};
  * @param name The path or name.
  * @return The drawing's path.
  */
-std::filesystem::path resolve_maze(const std::string& name) {
+static std::filesystem::path resolve_maze(const std::string& name) {
     std::filesystem::path given{name};
 
     if (std::filesystem::exists(given)) {
@@ -68,7 +95,7 @@ std::filesystem::path resolve_maze(const std::string& name) {
  * @param scenario The scenario the run plays.
  * @return The maze's path or name.
  */
-std::string maze_name(const CliOptions& options, const Scenario& scenario) {
+static std::string maze_name(const CliOptions& options, const Scenario& scenario) {
     if (not options.maze.empty()) {
         return options.maze;
     }
@@ -88,11 +115,11 @@ std::string maze_name(const CliOptions& options, const Scenario& scenario) {
  * @param robot The robot.
  * @return The placement.
  */
-MujocoWorld::Placement start_of(const Maze& maze, const MazeConfig& config, const RobotDescription& robot) {
+static MujocoWorld::Placement start_of(const Maze& maze, const MazeConfig& config, const RobotDescription& robot) {
     double rear = 0.0;
 
     for (const auto& point : robot.chassis.outline) {
-        rear = std::max(rear, -point[0]);
+        rear = std::max(rear, -point.at(0));
     }
 
     const auto [column, row] = maze.start();
@@ -112,7 +139,7 @@ MujocoWorld::Placement start_of(const Maze& maze, const MazeConfig& config, cons
  * @param path Filled with the scenario's path, empty for none.
  * @return The scenario, empty when there is none.
  */
-Scenario read_scenario(const CliOptions& options, const Target& target, std::filesystem::path& path) {
+static Scenario read_scenario(const CliOptions& options, const Target& target, std::filesystem::path& path) {
     path = options.scenario;
 
     if (path.empty()) {
@@ -139,7 +166,7 @@ Scenario read_scenario(const CliOptions& options, const Target& target, std::fil
  * @param target Robot to run.
  * @return The target's context.
  */
-RunContext& prepare(
+static RunContext& prepare(
     const RobotDescription& robot, const std::filesystem::path& maze_path, const MazeConfig& config,
     const CliOptions& options, const Scenario& scenario, Target& target
 ) {
@@ -164,7 +191,7 @@ RunContext& prepare(
  * @param context The run's context, with its clock configured.
  * @return Number of ticks.
  */
-uint64_t ticks_of(const CliOptions& options, const Scenario& scenario, const RunContext& context) {
+static uint64_t ticks_of(const CliOptions& options, const Scenario& scenario, const RunContext& context) {
     if (options.ticks.has_value()) {
         return *options.ticks;
     }
@@ -186,7 +213,7 @@ uint64_t ticks_of(const CliOptions& options, const Scenario& scenario, const Run
  * @param clock Clock the frame period is derived from.
  * @return Number of ticks per frame, at least one.
  */
-uint64_t ticks_per_frame(int fps, const Clock& clock) {
+static uint64_t ticks_per_frame(int fps, const Clock& clock) {
     const double loop_period = clock.us_per_tick() * 1e-6;
     return std::max<uint64_t>(1, static_cast<uint64_t>(std::llround(1.0 / (fps * loop_period))));
 }
@@ -201,7 +228,7 @@ uint64_t ticks_per_frame(int fps, const Clock& clock) {
  * @param serial Bus the bridge attaches to.
  * @return The bridge, or null when disabled or when the port was taken.
  */
-std::unique_ptr<MonitorBridge> make_monitor(const CliOptions& options, SerialBus& serial) {
+static std::unique_ptr<MonitorBridge> make_monitor(const CliOptions& options, SerialBus& serial) {
     if (not options.monitor_enabled) {
         return nullptr;
     }
@@ -231,7 +258,7 @@ std::unique_ptr<MonitorBridge> make_monitor(const CliOptions& options, SerialBus
  * @param player The scenario, which gives the board up to the human.
  * @return The viewer, or null when disabled or when no window could open.
  */
-std::unique_ptr<MujocoViewer> make_viewer(
+static std::unique_ptr<MujocoViewer> make_viewer(
     const CliOptions& options, RunContext& context, const Target& target, const Wiring& wiring, ScenarioPlayer& player
 ) {
     if (not options.viewer_enabled) {
@@ -270,7 +297,7 @@ std::unique_ptr<MujocoViewer> make_viewer(
  * @param wiring What the robot prints on the overlay.
  * @return The recorder, or null when disabled or when EGL is unavailable.
  */
-std::unique_ptr<VideoRecorder>
+static std::unique_ptr<VideoRecorder>
     make_video_recorder(const CliOptions& options, RunContext& context, const Target& target, const Wiring& wiring) {
     if (options.video.path.empty()) {
         return nullptr;
@@ -304,7 +331,7 @@ std::unique_ptr<VideoRecorder>
  * @param config The maze's surfaces.
  * @return The target's wiring.
  */
-Wiring wire(Target& target, FirmwareThread& firmware, const RobotDescription& robot, const MazeConfig& config) {
+static Wiring wire(Target& target, FirmwareThread& firmware, const RobotDescription& robot, const MazeConfig& config) {
     RunContext&     context = target.context();
     const WorldInfo world{
         .robot = &robot,
@@ -326,21 +353,20 @@ Wiring wire(Target& target, FirmwareThread& firmware, const RobotDescription& ro
  * @param config The robot's ground truth, naming its body.
  * @return Geom ids.
  */
-std::vector<int> chassis_geoms(const MujocoWorld& world, const GroundTruthConfig& config) {
+static std::vector<int> chassis_geoms(const MujocoWorld& world, const GroundTruthConfig& config) {
     const mjModel*             model = world.model();
     const int                  root = world.require_id(mjOBJ_BODY, config.body);
     const std::span<const int> bodies(model->geom_bodyid, static_cast<std::size_t>(model->ngeom));
     std::vector<int>           geoms;
 
     for (int geom = 0; geom < model->ngeom; geom++) {
-        if (bodies[static_cast<std::size_t>(geom)] == root) {
+        if (at(bodies, static_cast<std::size_t>(geom)) == root) {
             geoms.push_back(geom);
         }
     }
 
     return geoms;
 }
-}  // namespace
 
 Application::Application(const CliOptions& options, Target& target) :
     options{options},
@@ -432,7 +458,7 @@ void Application::run(std::span<char*> arguments) {
         .ticks = this->simulation.completed_ticks(),
         .sim_time = this->context.world.time(),
         .stopped_at = this->player.stopped_at().value_or(-1.0),
-        .final_z = positions[(3 * static_cast<std::size_t>(body)) + 2],
+        .final_z = at(positions, (3 * static_cast<std::size_t>(body)) + 2),
         .target_fields = this->target.metadata(),
         .warnings_total = warnings,
         .serial_dropped_bytes = this->context.serial.dropped_bytes(),

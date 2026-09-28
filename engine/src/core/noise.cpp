@@ -3,12 +3,13 @@
  */
 
 #include <cmath>
+#include <cstdint>
 #include <numbers>
+#include <string_view>
 
 #include "micras/sim/core/noise.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Mix a seed with a name, FNV-1a over the name's bytes.
  *
@@ -16,7 +17,7 @@ namespace {
  * @param stream Name of the stream.
  * @return The stream's seed.
  */
-uint64_t mix(uint64_t seed, std::string_view stream) {
+static uint64_t mix(uint64_t seed, std::string_view stream) {
     uint64_t hash = 0xcbf29ce484222325ULL ^ seed;
 
     for (const char character : stream) {
@@ -26,7 +27,6 @@ uint64_t mix(uint64_t seed, std::string_view stream) {
 
     return hash;
 }
-}  // namespace
 
 Noise::Noise(const NoiseConfig& config, std::string_view stream) :
     engine{mix(config.seed, stream)}, on{not config.ideal} { }

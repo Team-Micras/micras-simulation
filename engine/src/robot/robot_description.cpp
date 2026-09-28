@@ -2,13 +2,19 @@
  * @file
  */
 
-#include <cmath>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <format>
 #include <numbers>
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <toml++/toml.hpp>
 
@@ -286,6 +292,7 @@ private:
     std::string           path;
     std::set<std::string> used;
 };
+}  // namespace
 
 /**
  * @brief Read the chassis table.
@@ -293,7 +300,7 @@ private:
  * @param section The [chassis] table.
  * @return The chassis.
  */
-ChassisDescription read_chassis(Section section) {
+static ChassisDescription read_chassis(Section section) {
     ChassisDescription chassis{
         .mass = section.number("mass"),
         .center_of_mass = section.vector3("center_of_mass"),
@@ -339,7 +346,7 @@ ChassisDescription read_chassis(Section section) {
  * @param section The [wall_sensors] table.
  * @return The wall sensors.
  */
-WallSensorsDescription read_wall_sensors(Section section) {
+static WallSensorsDescription read_wall_sensors(Section section) {
     WallSensorsDescription sensors{
         .emitter_half_angle = section.degrees("emitter_half_angle_deg"),
         .emitter_intensity = section.number("emitter_intensity"),
@@ -378,7 +385,7 @@ WallSensorsDescription read_wall_sensors(Section section) {
  * @param root The whole file.
  * @param robot Description to fill.
  */
-void read_components(Section& root, RobotDescription& robot) {
+static void read_components(Section& root, RobotDescription& robot) {
     Section integration = root.section("integration");
     robot.integration = {.timestep = integration.number("timestep")};
     integration.finish();
@@ -452,7 +459,6 @@ void read_components(Section& root, RobotDescription& robot) {
     robot.link = {.baud_rate = static_cast<uint32_t>(link.integer("baud_rate"))};
     link.finish();
 }
-}  // namespace
 
 RobotDescription RobotDescription::load(const std::filesystem::path& path) {
     return parse(read_text_file(path, "robot description"), path.string());

@@ -1,9 +1,11 @@
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <doctest/doctest.h>
 
+#include "micras/sim/core/firmware_thread.hpp"
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
 #include "support.hpp"

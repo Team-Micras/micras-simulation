@@ -3,10 +3,15 @@
  */
 
 #include <algorithm>
-#include <cmath>
+#include <cstddef>
+#include <filesystem>
 #include <format>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "micras/sim/arenas/maze.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
@@ -18,6 +23,7 @@ namespace {
  * @brief Characters one cell takes in a line of the drawing.
  */
 constexpr std::size_t cell_width{4};
+}  // namespace
 
 /**
  * @brief Split a drawing into lines, dropping trailing spaces and blank lines at the end.
@@ -25,7 +31,7 @@ constexpr std::size_t cell_width{4};
  * @param text The drawing.
  * @return Its lines, top first.
  */
-std::vector<std::string> lines_of(std::string_view text) {
+static std::vector<std::string> lines_of(std::string_view text) {
     std::vector<std::string> lines;
     std::istringstream       stream{std::string{text}};
     std::string              line;
@@ -52,10 +58,11 @@ std::vector<std::string> lines_of(std::string_view text) {
  * @param index Index of the character.
  * @return The character.
  */
-char at(const std::string& line, std::size_t index) {
-    return index < line.size() ? line[index] : ' ';
+static char at(const std::string& line, std::size_t index) {
+    return index < line.size() ? line.at(index) : ' ';
 }
 
+namespace {
 /**
  * @brief Half the thickness of the red paint on top of the walls and posts, in meters.
  *
@@ -94,16 +101,16 @@ Maze Maze::parse(std::string_view text) {
 
     for (std::size_t row = 0; row <= maze.rows; row++) {
         for (std::size_t column = 0; column < maze.columns; column++) {
-            maze.south[row][column] =
-                lines[2 * row].substr(std::min(lines[2 * row].size(), cell_width * column + 1), 3) == "---";
+            maze.south.at(row).at(column) =
+                lines.at(2 * row).substr(std::min(lines.at(2 * row).size(), cell_width * column + 1), 3) == "---";
         }
     }
 
     for (std::size_t row = 0; row < maze.rows; row++) {
-        const std::string& line = lines[2 * row + 1];
+        const std::string& line = lines.at(2 * row + 1);
 
         for (std::size_t column = 0; column <= maze.columns; column++) {
-            maze.west[row][column] = at(line, cell_width * column) == '|';
+            maze.west.at(row).at(column) = at(line, cell_width * column) == '|';
         }
 
         for (std::size_t column = 0; column < maze.columns; column++) {
@@ -121,11 +128,11 @@ Maze Maze::parse(std::string_view text) {
 }
 
 bool Maze::south_wall(std::size_t column, std::size_t row) const {
-    return row < this->south.size() and column < this->columns and this->south[row][column];
+    return row < this->south.size() and column < this->columns and this->south.at(row).at(column);
 }
 
 bool Maze::west_wall(std::size_t column, std::size_t row) const {
-    return row < this->rows and column < this->west[row].size() and this->west[row][column];
+    return row < this->rows and column < this->west.at(row).size() and this->west.at(row).at(column);
 }
 
 double Maze::reflectance(std::string_view geom_name, const MazeConfig& config) {

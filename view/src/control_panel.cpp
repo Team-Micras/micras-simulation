@@ -7,8 +7,10 @@
 #ifdef MICRAS_SIM_VIEWER
 
     #include <algorithm>
+    #include <cstddef>
     #include <format>
     #include <limits>
+    #include <string>
     #include <utility>
 
     #include <GLFW/glfw3.h>
@@ -16,6 +18,10 @@
     #include <imgui_impl_glfw.h>
     #include <imgui_impl_opengl3.h>
     #include <implot.h>
+
+    #include "micras/sim/core/simulation.hpp"
+    #include "micras/sim/core/variable_source.hpp"
+    #include "micras/sim/view/panel_spec.hpp"
 
 namespace micras::sim {
 PlotTrace::PlotTrace(std::string variable) : variable{std::move(variable)} { }
@@ -43,6 +49,7 @@ constexpr double speed_maximum{10.0};
  * @brief Switches drawn on one row before the next row starts.
  */
 constexpr std::size_t switches_per_row{4};
+}  // namespace
 
 /**
  * @brief Draw a colour swatch for one lamp.
@@ -50,13 +57,12 @@ constexpr std::size_t switches_per_row{4};
  * @param label Label shown beside it.
  * @param colour Colour to show.
  */
-void draw_swatch(const std::string& label, const Colour& colour) {
+static void draw_swatch(const std::string& label, const Colour& colour) {
     const ImVec4 value(colour.red / 255.0F, colour.green / 255.0F, colour.blue / 255.0F, 1.0F);
     ImGui::ColorButton(label.c_str(), value, ImGuiColorEditFlags_NoTooltip, ImVec2(24, 24));
     ImGui::SameLine();
     ImGui::TextUnformatted(label.c_str());
 }
-}  // namespace
 
 ControlPanel::ControlPanel(GLFWwindow* window, std::string title, PanelSpec spec, const VariableSource* variables) :
     title{std::move(title)}, spec{std::move(spec)}, variables{variables} {

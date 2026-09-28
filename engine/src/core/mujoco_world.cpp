@@ -5,16 +5,25 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
+#include <mujoco/mjdata.h>
+#include <mujoco/mjmodel.h>
+#include <mujoco/mjspec.h>
+#include <mujoco/mjtype.h>
+#include <mujoco/mujoco.h>
+
 #include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/span_at.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Check an index against the array it is about to reach into.
  *
@@ -23,8 +32,8 @@ namespace {
  * @param what Name of the array, for the error message.
  * @return The index, as an unsigned offset.
  */
-std::size_t require_index(int index, std::size_t size, const char* what) {
-    if (index < 0 or static_cast<std::size_t>(index) >= size) {
+static std::size_t require_index(int index, std::size_t size, const char* what) {
+    if (index < 0 or std::cmp_greater_equal(index, size)) {
         throw std::out_of_range(
             std::string(what) + " index " + std::to_string(index) + " is outside the " + std::to_string(size) +
             " entries the model has"
@@ -33,7 +42,6 @@ std::size_t require_index(int index, std::size_t size, const char* what) {
 
     return static_cast<std::size_t>(index);
 }
-}  // namespace
 
 MujocoWorld::~MujocoWorld() {
     this->unload();
@@ -85,16 +93,16 @@ void MujocoWorld::build(
         throw fail("the arena's MJCF does not parse");
     }
 
-    mjsBody* const arena_root = mjs_findBody(arena.get(), std::string{arena_body}.c_str());
-    mjsBody* const robot_root = mjs_findBody(robot.get(), std::string{robot_body}.c_str());
+    const mjsBody* const arena_root = mjs_findBody(arena.get(), std::string{arena_body}.c_str());
+    mjsBody* const       robot_root = mjs_findBody(robot.get(), std::string{robot_body}.c_str());
 
     if (arena_root == nullptr or robot_root == nullptr) {
         throw std::runtime_error("the arena or the robot does not have the body it was asked to attach or place");
     }
 
-    mjsFrame* const   frame = mjs_addFrame(mjs_findBody(robot.get(), "world"), nullptr);
-    const std::string prefix = std::string{arena_body} + "_";
-    const mjsElement* attached = mjs_attach(frame->element, arena_root->element, prefix.c_str(), "");
+    const mjsFrame* const frame = mjs_addFrame(mjs_findBody(robot.get(), "world"), nullptr);
+    const std::string     prefix = std::string{arena_body} + "_";
+    const mjsElement*     attached = mjs_attach(frame->element, arena_root->element, prefix.c_str(), "");
 
     if (attached == nullptr) {
         throw std::runtime_error(std::string("the arena cannot be attached: ") + mjs_getError(robot.get()));
@@ -167,7 +175,7 @@ int MujocoWorld::sensor_address(const std::string& name) const {
     const std::span<const int> addresses(
         this->model_handle->sensor_adr, static_cast<std::size_t>(this->model_handle->nsensor)
     );
-    return addresses[static_cast<std::size_t>(id)];
+    return at(addresses, static_cast<std::size_t>(id));
 }
 
 int MujocoWorld::joint_dof(const std::string& name) const {
@@ -175,7 +183,7 @@ int MujocoWorld::joint_dof(const std::string& name) const {
     const std::span<const int> addresses(
         this->model_handle->jnt_dofadr, static_cast<std::size_t>(this->model_handle->njnt)
     );
-    return addresses[static_cast<std::size_t>(id)];
+    return at(addresses, static_cast<std::size_t>(id));
 }
 
 int MujocoWorld::joint_qpos(const std::string& name) const {
@@ -183,7 +191,7 @@ int MujocoWorld::joint_qpos(const std::string& name) const {
     const std::span<const int> addresses(
         this->model_handle->jnt_qposadr, static_cast<std::size_t>(this->model_handle->njnt)
     );
-    return addresses[static_cast<std::size_t>(id)];
+    return at(addresses, static_cast<std::size_t>(id));
 }
 
 double MujocoWorld::sensor_value(int address) const {
@@ -191,13 +199,13 @@ double MujocoWorld::sensor_value(int address) const {
     const std::span<const mjtNum> readings(
         this->data_handle->sensordata, static_cast<std::size_t>(this->model_handle->nsensordata)
     );
-    return readings[require_index(address, readings.size(), "sensordata")];
+    return at(readings, require_index(address, readings.size(), "sensordata"));
 }
 
 void MujocoWorld::set_control(int actuator_id, double value) {
     this->require_loaded();
     const std::span<mjtNum> controls(this->data_handle->ctrl, static_cast<std::size_t>(this->model_handle->nu));
-    controls[require_index(actuator_id, controls.size(), "actuator")] = value;
+    at(controls, require_index(actuator_id, controls.size(), "actuator")) = value;
 }
 
 double MujocoWorld::timestep() const {

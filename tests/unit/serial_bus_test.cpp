@@ -1,3 +1,6 @@
+#include <cstdint>
+#include <vector>
+
 #include <doctest/doctest.h>
 
 #include "micras/sim/core/serial_bus.hpp"

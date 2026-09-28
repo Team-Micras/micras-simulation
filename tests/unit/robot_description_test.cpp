@@ -1,4 +1,4 @@
-#include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <numbers>
@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include <doctest/doctest.h>
+#include <mujoco/mjtype.h>
 
 #include "micras/sim/arenas/maze.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
@@ -15,13 +16,12 @@
 #include "micras/sim/robot/robot_model.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Read the tiny robot's description as text.
  *
  * @return Contents of tiny_robot.toml.
  */
-std::string tiny_text() {
+static std::string tiny_text() {
     const std::ifstream file(MICRAS_TEST_ROBOT);
     std::ostringstream  text;
     text << file.rdbuf();
@@ -36,7 +36,7 @@ std::string tiny_text() {
  * @param to Replacement.
  * @return The edited text.
  */
-std::string replaced(std::string text, std::string_view from, std::string_view to) {
+static std::string replaced(std::string text, std::string_view from, std::string_view to) {
     const std::size_t position = text.find(from);
     CHECK_MESSAGE(position != std::string::npos, "the tiny robot has no " << from);
 
@@ -53,7 +53,7 @@ std::string replaced(std::string text, std::string_view from, std::string_view t
  * @param text Contents of a robot.toml.
  * @return The error message, or empty when the description was accepted.
  */
-std::string refusal_of(std::string_view text) {
+static std::string refusal_of(std::string_view text) {
     try {
         RobotDescription::parse(text, "tiny.toml");
     } catch (const std::runtime_error& error) {
@@ -63,6 +63,7 @@ std::string refusal_of(std::string_view text) {
     return {};
 }
 
+namespace {
 TEST_CASE("RobotDescription.ReadsEverySection") {
     const RobotDescription robot = RobotDescription::load(MICRAS_TEST_ROBOT);
 
@@ -73,7 +74,7 @@ TEST_CASE("RobotDescription.ReadsEverySection") {
     CHECK_EQ(robot.wheels.track, doctest::Approx(0.05).epsilon(1e-12));
     CHECK_EQ(robot.drive.resistance(), doctest::Approx(10.5).epsilon(1e-12));
     CHECK_EQ(robot.encoders.counts_per_revolution, 4096U);
-    CHECK_EQ(robot.imu.axes[1][1], doctest::Approx(1.0).epsilon(1e-12));
+    CHECK_EQ(robot.imu.axes.at(1).at(1), doctest::Approx(1.0).epsilon(1e-12));
     CHECK_EQ(robot.fan.nominal_voltage, doctest::Approx(7.4).epsilon(1e-12));
     CHECK_EQ(robot.battery.cells, 2);
     CHECK_EQ(robot.link.baud_rate, 9600U);
@@ -85,7 +86,7 @@ TEST_CASE("RobotDescription.ReadsArraysOfParts") {
 
     REQUIRE_EQ(robot.chassis.boxes.size(), 1U);
     CHECK_EQ(robot.chassis.boxes.front().name, "cargo");
-    CHECK_EQ(robot.chassis.boxes.front().max[2], doctest::Approx(0.02).epsilon(1e-12));
+    CHECK_EQ(robot.chassis.boxes.front().max.at(2), doctest::Approx(0.02).epsilon(1e-12));
     REQUIRE_EQ(robot.chassis.cylinders.size(), 1U);
     CHECK_EQ(robot.chassis.cylinders.front().radius, doctest::Approx(0.005).epsilon(1e-12));
     REQUIRE_EQ(robot.wall_sensors.sensors.size(), 1U);

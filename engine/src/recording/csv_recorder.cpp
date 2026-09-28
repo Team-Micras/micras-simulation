@@ -3,13 +3,22 @@
  */
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/simulation.hpp"
+#include "micras/sim/recording/column_source.hpp"
 #include "micras/sim/recording/csv_recorder.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
+#include "micras/sim/recording/ground_truth.hpp"
 
 namespace micras::sim {
 CsvRecorder::CsvRecorder(
@@ -65,12 +74,12 @@ void CsvRecorder::sample(uint64_t tick) {
 
     for (std::size_t i = 0; i < this->sources.size(); i++) {
         const std::size_t before = cells.size();
-        this->sources[i]->append(cells);
+        this->sources.at(i)->append(cells);
 
-        if (cells.size() - before != this->widths[i]) {
+        if (cells.size() - before != this->widths.at(i)) {
             throw std::logic_error(
                 "a column source appended " + std::to_string(cells.size() - before) + " cells for " +
-                std::to_string(this->widths[i]) + " columns"
+                std::to_string(this->widths.at(i)) + " columns"
             );
         }
     }

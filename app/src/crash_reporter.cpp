@@ -4,11 +4,13 @@
 
 #include <array>
 #include <csignal>
+#include <cstddef>
 #include <cstdint>
 
 #include <unistd.h>
 
 #include "micras/sim/app/crash_reporter.hpp"
+#include "micras/sim/core/simulation.hpp"
 
 namespace micras::sim {
 namespace {
@@ -17,7 +19,9 @@ namespace {
  */
 // NOLINTNEXTLINE(*-avoid-non-const-global-variables): the only state a signal handler may read.
 volatile std::sig_atomic_t running_tick = -1;
+}  // namespace
 
+extern "C" {
 /**
  * @brief Name the tick a fatal signal interrupted and re-raise it.
  *
@@ -27,7 +31,7 @@ volatile std::sig_atomic_t running_tick = -1;
  *
  * @param signal_number Signal being handled.
  */
-extern "C" void report_and_reraise(int signal_number) {
+static void report_and_reraise(int signal_number) {
     constexpr std::array<char, 26> prefix{"firmware crashed at tick "};
     std::array<char, 24>           digits{};
     int64_t                        tick = running_tick;
@@ -59,7 +63,7 @@ extern "C" void report_and_reraise(int signal_number) {
     std::signal(signal_number, SIG_DFL);
     std::raise(signal_number);
 }
-}  // namespace
+}
 
 CrashReporter& CrashReporter::instance() {
     static CrashReporter reporter;

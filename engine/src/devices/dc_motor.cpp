@@ -3,11 +3,20 @@
  */
 
 #include <algorithm>
+#include <cstddef>
 #include <span>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include <mujoco/mjtype.h>
+
+#include "micras/sim/core/clock.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/span_at.hpp"
 #include "micras/sim/devices/dc_motor.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
+#include "micras/sim/robot/robot_description.hpp"
 
 namespace micras::sim {
 DcMotor::DcMotor(const MujocoWorld& world, Config config) :
@@ -19,7 +28,7 @@ void DcMotor::actuate(MujocoWorld& world, const Clock& /*clock*/) {
     const DriveDescription&       drive = this->config.drive;
     const std::span<const mjtNum> velocities(world.data()->qvel, static_cast<std::size_t>(world.model()->nv));
     const double                  back_emf =
-        drive.speed_constant * drive.gear_ratio * velocities[static_cast<std::size_t>(this->velocity_address)];
+        drive.speed_constant * drive.gear_ratio * at(velocities, static_cast<std::size_t>(this->velocity_address));
 
     if (this->config.enabled()) {
         const double duty = static_cast<double>(this->config.forward_duty() - this->config.backward_duty()) / 100.0;

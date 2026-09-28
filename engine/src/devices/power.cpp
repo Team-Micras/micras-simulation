@@ -4,12 +4,22 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include <mujoco/mjtype.h>
+
+#include "micras/sim/core/clock.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/noise.hpp"
 #include "micras/sim/devices/power.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
+#include "micras/sim/robot/robot_description.hpp"
 
 namespace micras::sim {
-namespace {
 /**
  * @brief Convert a voltage to ADC counts.
  *
@@ -19,10 +29,9 @@ namespace {
  * @param noise Noise added, in counts.
  * @return Counts, clipped to the ADC's range.
  */
-uint32_t to_counts(double voltage, double reference, double max_counts, double noise) {
+static uint32_t to_counts(double voltage, double reference, double max_counts, double noise) {
     return static_cast<uint32_t>(std::clamp(std::round(voltage / reference * max_counts + noise), 0.0, max_counts));
 }
-}  // namespace
 
 Battery::Battery(Config config, const NoiseConfig& noise) :
     config{std::move(config)},

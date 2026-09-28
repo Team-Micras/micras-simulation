@@ -1,11 +1,9 @@
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <numbers>
 #include <optional>
-#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -14,8 +12,12 @@
 
 #include <doctest/doctest.h>
 
+#include "micras/sim/core/firmware_thread.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
 #include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
+#include "micras/sim/core/variable_source.hpp"
+#include "micras/sim/devices/digital_input.hpp"
 #include "micras/sim/scenario/scenario.hpp"
 #include "support.hpp"
 
@@ -105,6 +107,7 @@ public:
 private:
     const DigitalInput& input;  // NOLINT(*-avoid-const-or-ref-data-members): the fixture outlives the probe.
 };
+}  // namespace
 
 /**
  * @brief Parse a scenario and return the message it was refused with.
@@ -112,7 +115,7 @@ private:
  * @param text Contents of a scenario file.
  * @return The error message, or empty when the scenario was accepted.
  */
-std::string refusal_of(std::string_view text) {
+static std::string refusal_of(std::string_view text) {
     try {
         Scenario::parse(text, "test.toml");
     } catch (const std::runtime_error& error) {
@@ -122,6 +125,7 @@ std::string refusal_of(std::string_view text) {
     return {};
 }
 
+namespace {
 TEST_CASE("Scenario.ReadsTheRunSettings") {
     const Scenario scenario = Scenario::parse(full_scenario);
 

@@ -389,6 +389,10 @@ firmware's headers and the host HAL's, which their own repositories lint, and
 simulator, the firmware compiled for the host included, gets the shared warning
 list through `micras_apply_warnings`, and `MICRAS_SIM_WERROR` makes them errors
 (the CI sets it); the dependencies are `SYSTEM`, so their headers raise nothing.
+Containers are indexed with `at()`, and a span, which has no `at()` before C++26,
+through `micras::sim::at` (`core/span_at.hpp`). `engine/src/.clang-tidy` tells
+include-cleaner that toml++ is included through `toml.hpp`, and that a TOML
+table's `operator[]` is a lookup, not an unchecked access.
 Doxygen on every declaration. **No comments inside function bodies** — if
 something needs explaining, it goes in an `@note` on the declaration, where a
 reader finds it before reading the code. Every `NOLINT` names its check and says

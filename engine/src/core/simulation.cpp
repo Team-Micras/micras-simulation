@@ -2,6 +2,10 @@
  * @file
  */
 
+#include <cstdint>
+
+#include "micras/sim/core/firmware_thread.hpp"
+#include "micras/sim/core/run_context.hpp"
 #include "micras/sim/core/simulation.hpp"
 
 namespace micras::sim {

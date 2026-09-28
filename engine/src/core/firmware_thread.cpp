@@ -4,8 +4,11 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "micras/sim/core/firmware_thread.hpp"
@@ -75,12 +78,12 @@ void FirmwareThread::finish() {
 }
 
 bool FirmwareThread::has_finished() const {
-    const std::lock_guard lock(this->mutex);
+    const std::scoped_lock lock(this->mutex);
     return this->finished;
 }
 
 void FirmwareThread::rethrow_any_error() const {
-    const std::lock_guard lock(this->mutex);
+    const std::scoped_lock lock(this->mutex);
 
     if (this->error) {
         std::rethrow_exception(this->error);
@@ -111,11 +114,11 @@ void FirmwareThread::thread_body() {
         this->program(*this);
     } catch (const RunFinished&) {  // NOLINT(bugprone-empty-catch): the expected way out, see finish().
     } catch (...) {
-        const std::lock_guard lock(this->mutex);
+        const std::scoped_lock lock(this->mutex);
         this->error = std::current_exception();
     }
 
-    const std::lock_guard lock(this->mutex);
+    const std::scoped_lock lock(this->mutex);
     this->finished = true;
     this->turn = Turn::SIMULATION;
     this->handoff.notify_all();
