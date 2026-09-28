@@ -140,13 +140,16 @@ set(MICRAS_SIM_HAL_HOST_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/hal_host/include")
 file(GLOB MICRAS_SIM_HAL_HOST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/hal_host/src/*.cpp")
 
 ###############################################################################
-## Tests and robot targets
+## Tests, chip models and robot targets
 ###############################################################################
 
 if(MICRAS_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# The SPI chips a robot's bindings attach to the host HAL's buses: micras::hal_host_models.
+add_subdirectory(hal_host/models)
 
 # Every robot target is a folder of targets/ with its own CMakeLists.txt.
 file(GLOB MICRAS_SIM_TARGET_DIRS LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/targets/*")
