@@ -58,9 +58,13 @@ micras_sim_app      CLI, application wiring, crash reporter; the Target interfac
 ```
 
 A robot target implements `Target` (`app/include/micras/sim/app/target.hpp`): its
-name, firmware commit, loop period, options, robot file, ground truth columns and
-program, and `wire()`, which binds its devices to the host ports and returns what
-it adds to the run (`Wiring`: columns, variables, panel, overlay, scenario hooks). Its `main` is one call to `micras::sim::run`.
+name, folder, firmware commit, loop period, options, robot file, ground truth
+columns and program, and `wire()`, which binds its devices to the host ports and
+returns what it adds to the run (`Wiring` in `app/include/micras/sim/app/wiring.hpp`:
+columns, variables, panel, overlay, scenario hooks). Its `main` is one call to
+`micras::sim::run`. The program receives the `FirmwareThread` it runs on, so a
+target with no HAL yields on it directly and needs no pointer kept from `wire()`.
+The README lists the headers a target may include; they are the public API.
 
 `MICRAS_SIM_VIEWER`, `MICRAS_SIM_VIDEO`, `MICRAS_SIM_BRIDGE`, `MICRAS_SIM_TESTS`
 and `MICRAS_SIM_TARGETS` must all still compile when OFF; `just check-options`

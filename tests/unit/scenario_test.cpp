@@ -290,9 +290,9 @@ protected:
     /**
      * @brief Stands in for the firmware: yields once per tick and never ends.
      */
-    FirmwareThread firmware{[this] {
+    FirmwareThread firmware{[](FirmwareThread& thread) {
         while (true) {
-            this->firmware.yield_tick();
+            thread.yield_tick();
         }
     }};
     // NOLINTEND(*-non-private-member-variables-in-classes)

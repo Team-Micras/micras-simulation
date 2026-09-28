@@ -108,7 +108,7 @@ void FirmwareThread::thread_body() {
     }
 
     try {
-        this->program();
+        this->program(*this);
     } catch (const RunFinished&) {  // NOLINT(bugprone-empty-catch): the expected way out, see finish().
     } catch (...) {
         const std::lock_guard lock(this->mutex);

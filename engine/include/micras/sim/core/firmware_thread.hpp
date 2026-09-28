@@ -42,9 +42,12 @@ public:
 class FirmwareThread {
 public:
     /**
-     * @brief The firmware program to run: the target's main.
+     * @brief The firmware program to run: the target's main, given the thread it runs on.
+     *
+     * @note A program that drives the handover itself calls yield_tick() on the
+     *       thread it is given.
      */
-    using Program = std::function<void()>;
+    using Program = std::function<void(FirmwareThread& thread)>;
 
     /**
      * @brief Take the program to run.

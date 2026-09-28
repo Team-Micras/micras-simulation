@@ -179,8 +179,8 @@ std::vector<uint8_t> receive_binary(const Socket& socket) {
 TEST(MonitorBridge, CarriesRawBytesBothWays) {
     RunContext context;
     load_tiny_world(context.world, context.clock);
-    FirmwareThread   firmware{[&firmware] {
-        while (firmware.yield_tick()) { }
+    FirmwareThread   firmware{[](FirmwareThread& thread) {
+        while (thread.yield_tick()) { }
     }};
     const Simulation simulation(context, firmware);
 

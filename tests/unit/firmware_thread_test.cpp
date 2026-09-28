@@ -10,15 +10,13 @@ namespace micras::sim {
 namespace {
 TEST(FirmwareThread, RunsTheProgramUpToEachYield) {
     std::vector<int> trace;
-    FirmwareThread*  handle = nullptr;
 
-    FirmwareThread firmware([&] {
+    FirmwareThread firmware([&](FirmwareThread& thread) {
         for (int step = 0; step < 3; step++) {
             trace.push_back(step);
-            handle->yield_tick();
+            thread.yield_tick();
         }
     });
-    handle = &firmware;
 
     firmware.run_until_yield();
     EXPECT_EQ(trace, (std::vector<int>{0}));
@@ -33,19 +31,17 @@ TEST(FirmwareThread, RunsTheProgramUpToEachYield) {
 TEST(FirmwareThread, NeverRunsBesideTheSimulation) {
     std::atomic<int> awake{0};
     std::atomic<int> overlaps{0};
-    FirmwareThread*  handle = nullptr;
 
-    FirmwareThread firmware([&] {
+    FirmwareThread firmware([&](FirmwareThread& thread) {
         while (true) {
             if (awake.fetch_add(1) != 0) {
                 overlaps++;
             }
 
             awake--;
-            handle->yield_tick();
+            thread.yield_tick();
         }
     });
-    handle = &firmware;
 
     for (int tick = 0; tick < 200; tick++) {
         firmware.run_until_yield();
@@ -79,18 +75,16 @@ private:
 };
 
 TEST(FirmwareThread, EndlessProgramsAreUnwoundByFinish) {
-    bool            destructor_ran = false;
-    FirmwareThread* handle = nullptr;
+    bool destructor_ran = false;
 
     {
-        FirmwareThread firmware([&] {
+        FirmwareThread firmware([&](FirmwareThread& thread) {
             const UnwindSentinel sentinel(destructor_ran);
 
             while (true) {
-                handle->yield_tick();
+                thread.yield_tick();
             }
         });
-        handle = &firmware;
 
         firmware.run_until_yield();
         EXPECT_FALSE(firmware.has_finished());
@@ -123,17 +117,15 @@ private:
 };
 
 TEST(FirmwareThread, UnwindingIsNotBlockedByAYieldingDestructor) {
-    FirmwareThread* handle = nullptr;
-    bool            destructor_ran = false;
+    bool destructor_ran = false;
 
-    FirmwareThread firmware([&] {
-        const YieldingSentinel sentinel(*handle, destructor_ran);
+    FirmwareThread firmware([&](FirmwareThread& thread) {
+        const YieldingSentinel sentinel(thread, destructor_ran);
 
         while (true) {
-            handle->yield_tick();
+            thread.yield_tick();
         }
     });
-    handle = &firmware;
 
     firmware.run_until_yield();
     firmware.finish();
@@ -142,7 +134,7 @@ TEST(FirmwareThread, UnwindingIsNotBlockedByAYieldingDestructor) {
 }
 
 TEST(FirmwareThread, ReportsAProgramThatReturns) {
-    FirmwareThread firmware([] {});
+    FirmwareThread firmware([](FirmwareThread&) {});
 
     firmware.run_until_yield();
     EXPECT_TRUE(firmware.has_finished());
@@ -150,7 +142,7 @@ TEST(FirmwareThread, ReportsAProgramThatReturns) {
 }
 
 TEST(FirmwareThread, CarriesAProgramErrorBackToTheSimulation) {
-    FirmwareThread firmware([] { throw std::runtime_error("the firmware gave up"); });
+    FirmwareThread firmware([](FirmwareThread&) { throw std::runtime_error("the firmware gave up"); });
 
     firmware.run_until_yield();
     EXPECT_TRUE(firmware.has_finished());
@@ -158,7 +150,7 @@ TEST(FirmwareThread, CarriesAProgramErrorBackToTheSimulation) {
 }
 
 TEST(FirmwareThread, RunningAFinishedProgramIsHarmless) {
-    FirmwareThread firmware([] {});
+    FirmwareThread firmware([](FirmwareThread&) {});
 
     firmware.run_until_yield();
     EXPECT_NO_THROW(firmware.run_until_yield());

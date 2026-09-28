@@ -14,7 +14,7 @@
 #include <string>
 #include <string_view>
 
-#include "micras/sim/app/target.hpp"
+#include "micras/sim/app/wiring.hpp"
 #include "micras/sim/view/view_options.hpp"
 
 namespace micras::sim {

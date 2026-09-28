@@ -50,9 +50,9 @@ protected:
      * @brief Stands in for the firmware: yields once per tick and never ends.
      */
     // NOLINTNEXTLINE(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
-    FirmwareThread firmware{[this] {
+    FirmwareThread firmware{[](FirmwareThread& thread) {
         while (true) {
-            this->firmware.yield_tick();
+            thread.yield_tick();
         }
     }};
 };
@@ -95,15 +95,13 @@ TEST_F(Run, AListenerCanStopTheRunBeforeTheTick) {
 }
 
 TEST_F(Run, StopsWhenTheProgramEnds) {
-    int             ticks = 0;
-    FirmwareThread* handle = nullptr;
+    int ticks = 0;
 
-    FirmwareThread program([&] {
+    FirmwareThread program([&](FirmwareThread& thread) {
         for (ticks = 0; ticks < 3; ticks++) {
-            handle->yield_tick();
+            thread.yield_tick();
         }
     });
-    handle = &program;
 
     Simulation simulation(this->context, program);
     simulation.run(100);
@@ -113,7 +111,7 @@ TEST_F(Run, StopsWhenTheProgramEnds) {
 }
 
 TEST_F(Run, CarriesAProgramErrorOutOfRun) {
-    FirmwareThread program([] { throw std::runtime_error("the firmware gave up"); });
+    FirmwareThread program([](FirmwareThread&) { throw std::runtime_error("the firmware gave up"); });
     Simulation     simulation(this->context, program);
 
     EXPECT_THROW(simulation.run(5), std::runtime_error);

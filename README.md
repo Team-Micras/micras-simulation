@@ -235,6 +235,35 @@ byte, such as a refactoring.
 `just format`, `just format-check` and `just lint` are the style targets; they
 use the firmware's own `.clang-format` and `.clang-tidy`.
 
+## A robot target
+
+A robot is a folder of `targets/` (or a directory of another project that adds
+this one) with a class implementing `micras::sim::Target` and a `main` that is one
+call to `micras::sim::run`. The target gives its name, loop period, robot file,
+ground truth columns, options and firmware program, and `wire()` builds its
+devices and returns what it adds to the run. The program is called with the
+`FirmwareThread` it runs on, so a program that drives the handover itself calls
+`yield_tick()` on it.
+
+The public headers, which a target may include and which change only with notice:
+
+| Header | What |
+|---|---|
+| `micras/sim/app/target.hpp` | `Target`, the interface |
+| `micras/sim/app/wiring.hpp` | `Wiring`, `WorldInfo`, `CliOption` |
+| `micras/sim/app/application.hpp` | `micras::sim::run` |
+| `micras/sim/view/panel_spec.hpp` | the panel and the overlay |
+| `micras/sim/core/run_context.hpp` | the world, the clock, the serial bus, the noise and the devices of a run |
+| `micras/sim/core/firmware_thread.hpp` | the firmware thread and its handover |
+| `micras/sim/recording/column_source.hpp`, `ground_truth.hpp`, `run_metadata.hpp` | CSV columns, ground truth, meta.json counters |
+| `micras/sim/core/variable_source.hpp` | the firmware variables the panel, the overlay and the scenarios read |
+| `micras/sim/robot/robot_description.hpp` | the robot's `robot.toml` |
+| `micras/sim/devices/*.hpp` | the devices a target builds |
+
+The robot is micromouse-shaped and runs in a maze: its `robot.toml` has every
+section of the schema (chassis, wheels, drive, encoders, IMU, fan, battery, link,
+wall sensors), and the arena is one of the mazes.
+
 ## Layout
 
 ```
