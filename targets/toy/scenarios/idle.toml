@@ -1,0 +1,10 @@
+# The toy switched on in the start cell and left alone: it waits.
+robot = "toy"
+arena = "maze1"
+seconds = 2
+seed = 1
+
+[start]
+x = 0.09
+y = 0.05
+yaw_deg = 90.0

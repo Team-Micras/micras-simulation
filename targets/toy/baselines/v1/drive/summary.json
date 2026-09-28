@@ -1,0 +1,46 @@
+{
+  "target": "toy",
+  "scenario": "drive.toml",
+  "args": "--scenario drive.toml --out drive",
+  "firmware_sha": "none",
+  "mujoco_version": "3.14.0",
+  "compiler": "GNU 15.2.0",
+  "data_sha256": "097ec972b9aa90d6ef8d1c66b2041258182ab56af70d52fa78ad926b75ad95cc",
+  "states": [
+    [
+      0.001,
+      "WAIT"
+    ],
+    [
+      0.201,
+      "DRIVE"
+    ],
+    [
+      1.703,
+      "TURN"
+    ],
+    [
+      2.65,
+      "DRIVE"
+    ],
+    [
+      3.205,
+      "STOP"
+    ]
+  ],
+  "values": {
+    "ticks": 3205,
+    "warnings_total": 0,
+    "collisions": 0,
+    "goal_time": null,
+    "stopped_at": 3.205
+  },
+  "tolerances": {
+    "state_time": 0.25,
+    "ticks": null,
+    "warnings_total": null,
+    "collisions": 2,
+    "goal_time": 1.0,
+    "stopped_at": 1.0
+  }
+}

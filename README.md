@@ -1,111 +1,175 @@
 # micras-simulation
 
-Runs the Micras firmware, unmodified, against a MuJoCo model of the robot and
-the maze. The firmware sees a proxy layer backed by physics instead of by
-hardware, so the same `micras::Micras` that flies on the board drives a
-simulated one here.
+A simulator for the robots built on `micras_hal`. It runs a robot's firmware as
+it is, its own `main`, its own proxies and its own configuration, over the host
+backend of `micras_hal`, against a MuJoCo model of the robot and its arena. The
+host backend and the models of the SPI chips live in
+[micras-lib](https://github.com/Team-Micras/micras-lib), next to `micras_hal`
+itself; a robot's project adds both. The micromouse, Micras, is the first robot
+built on it: its firmware adds this repository as a submodule and holds its
+target, its scenarios and its baselines in its own `sim/` folder, whose README
+covers them.
 
 Two ways to use it, both from the same binary:
 
 - **Headless and deterministic**, for measuring. Every run writes a CSV of the
-  whole state per tick plus a metadata file, and two runs of the same binary
-  with the same arguments produce byte-identical output.
+  whole state plus a metadata file, and two runs of the same binary with the
+  same arguments produce byte-identical output.
 - **Live**, for looking. A window with the robot, a control panel with the
   board's buttons and switches, plots of the firmware's own variables, and a
   WebSocket bridge that micras-monitor connects to as if it were the radio.
 
-Linux only. MuJoCo 3.3.6 is expected at `$HOME/.mujoco/mujoco-3.3.6`; override
-with `-DMUJOCO_DIR=<path>`.
+Linux only, x86-64. CMake downloads the pinned MuJoCo release (3.14.0) and
+checks its SHA-256; point `MUJOCO_DIR` (a CMake cache variable or an environment
+variable) at an installation to use that instead. The style targets want clang
+22's `clang-format-22`, `clang-tidy-22`, `run-clang-tidy-22` and
+`clang-apply-replacements-22`.
 
 ## Quick start
 
 ```bash
-just build
-just run-explore                 # 8 s explore run -> runs/explore_v2
-just analyze runs/explore_v2     # report.json and the plots
-just watch                       # the same scenario, 30 s, in a window
-just serve                       # the same scenario, 120 s, open to micras-monitor
-just check                       # the gate: everything above, with assertions
+cmake --preset host-release
+cmake --build --preset host-release
+./build/host-release/targets/toy/toy_sim --scenario targets/toy/scenarios/drive.toml --out runs/drive
+python3 tools/analyze.py runs/drive                               # report.json and the plots
+./build/host-release/targets/toy/toy_sim --scenario targets/toy/scenarios/drive.toml --out runs/window --viewer
+cmake --build --preset host --target micras_sim_check          # the simulator's gate
 ```
 
-`just` with no arguments lists every recipe. The build uses `CMakePresets.json`;
-`MICRAS_PRESET` picks between `default` (RelWithDebInfo), `debug` and `release`.
-Only `default` has a test preset, so `just test` and `just check` need it.
+Everything is CMake: the presets configure, and the checks are targets over the
+bash scripts of `scripts/`; `cmake --build --preset <preset> --target help` lists
+them. A run calls the binary directly (see [Running](#running)).
+
+| Preset | Build | For |
+|---|---|---|
+| `host` | Debug, with the address and undefined behavior sanitizers | the unit tests and the checks |
+| `host-release` | RelWithDebInfo | runs and baselines |
+| `host-ci` | `host`, with `MICRAS_SIM_WERROR=ON` | the CI |
+
+Each builds in `build/<preset>/`, with GCC 15 (`gcc-15`/`g++-15`) and Ninja, since
+another compiler may move the last bits of a run.
 
 ## Running
 
 ```bash
-./build/default/micras_simulation --model models/robot_v2.xml --seconds 10 --out runs/t1
+./build/host-release/targets/toy/toy_sim --scenario targets/toy/scenarios/drive.toml --out runs/toy
 ```
 
 | Flag | Meaning |
 |---|---|
-| `--model <xml>` | required, robot model |
 | `--out <dir>` | required, output directory, created if missing |
-| `--seconds <float>` | simulated seconds (default 10) |
-| `--ticks <int>` | exact firmware tick count, overrides `--seconds` |
-| `--maze <xml>` | recorded in `meta.json` only; the model already attaches its maze |
-| `--command none\|explore\|solve\|calibrate` | injects one `SERIAL_VARIABLE` packet writing `true` to the pool variable of the same name |
-| `--command-at <s>` | when to inject it (default 0.5); never before tick 1, because tick 0 carries the map request |
-| `--dip fan=0,diagonal=0,boost=0,risky=0` | DIP switch state before the first tick; indices follow `Interface::DipSwitchPins` |
-| `--button none\|short\|long\|extra_long` | start through the `Button` proxy instead of a packet |
-| `--button-at <s>` | when the button goes down (default 0.5) |
-| `--no-fan` | the `Fan` proxy writes 0 to its actuator instead of the requested speed |
+| `--scenario <toml>` | the scenario to play; without one the robot is switched on and left alone |
+| `--maze <name>\|<txt>` | the arena: a maze of `engine/arenas/maze/mazes/` by name, or a file (default `maze1`) |
+| `--seconds <float>` | simulated seconds, overriding the scenario's |
+| `--ticks <int>` | exact tick count, overrides `--seconds` |
+| `--seed <int>` | seed of every noise stream (default the scenario's, else 1) |
+| `--ideal` | no noise at all |
+| `--record-every <ticks>` | write one CSV row every N ticks (default 1); events are still detected every tick |
 | `--viewer` | open a window on the run |
-| `--viewer-camera <name>\|free` | starting camera (default `free`) |
+| `--viewer-camera <name>\|free` | starting camera |
 | `--viewer-fps <int>` | redraws per simulated second (default 30) |
 | `--viewer-size WxH` | window size, default 1200x900 |
 | `--monitor` | open the micras-monitor bridge |
 | `--monitor-port <int>` | port it listens on (default 8080) |
 | `--video <out.mp4>` | record an offscreen mp4 of the run |
 | `--video-fps <int>` | frame rate, default 30 |
-| `--video-camera <name>` | `overhead`, `side tracking` (default), `robot pov`, `maze_top_view`, or `free` |
+| `--video-camera <name>` | `side tracking` (the robot's default), `top tracking`, `onboard` (the robot's own view), `maze_top`, or `free` |
 | `--video-size WxH` | frame size, default 1280x720 |
+| `--video-trail` | draw the path the robot has traveled behind it |
+
+A target adds options of its own (the toy's `--turn-angle`), which the usage
+message lists.
 
 A window, a recording and a bridge are all optional and all off by default, and
-none of them is meant to change what the run produces. `just check` proves that
-for the window and for the bridge, by running the same scenario with and without
-each and comparing the two CSVs byte for byte. The recording has no such gate
-yet.
+none of them changes what the run produces. `micras_sim_check` proves it for
+each on the toy target, by running the same scenario with and without and
+comparing the two runs byte for byte.
+
+## Scenarios
+
+```toml
+# targets/toy/scenarios/drive.toml
+robot = "toy"
+arena = "maze1"
+seconds = 10
+seed = 1
+
+[start]
+x = 0.09
+y = 0.05
+yaw_deg = 90.0
+
+[[events]]
+at = 0.2
+press = "button"
+for = 0.1
+
+[[events]]
+at = 3.2
+send = "stop"
+
+[stop]
+when = "state"
+equals = ["STOP"]
+after = 0.5
+```
+
+An event can `press` an input for a time, `set` it, or `send` a link command
+(the target names the inputs and the commands it knows). An event
+with `when` and `equals` waits, from its `at` on, for the named firmware variable
+to take one of those values, and fires on the first tick it does. The run stops
+at `seconds`, or earlier when the stop condition's variable takes one of the
+named values after `after` seconds, for the `count`-th time (default 1), or at
+once when it takes one of the `abort` values.
 
 ## Output
 
-`<out>/data.csv` is one row per firmware tick: the ground truth from MuJoCo,
-what crossed the proxy boundary in both directions, and every monitoring
-variable the firmware publishes.
+`<out>/data.csv` is one row per tick (125 us) or per `--record-every` ticks: the
+body pose and velocity, the robot's ground truth (wheels, motors, contacts,
+solver), every monitoring variable the firmware publishes, and what each
+simulated device produced.
 
-`<out>/meta.json` is the provenance of the run — firmware SHA, model hash,
-MuJoCo and compiler versions, the arguments, the tick and time counts, and the
-assertions the gate checks (`warnings_total`, `pool_columns`,
-`telemetry_resyncs`, `interactive`). Nothing measured off the wall clock goes in
-it, so it is hash-stable too; the wall time is printed on stdout only.
+`<out>/meta.json` is the provenance and the outcome of the run: firmware commit,
+hashes of `robot.toml` and of the composed model, MuJoCo and compiler versions,
+the arguments, seed, tick counts, when the scenario stopped the run, the board's
+counters (`unbound_ports`, `watchdog_expiries`, `emergency_stops`,
+`serial_dropped_bytes`, `bridge_dropped_frames`), and the `events`: every state
+change and collision, detected at full rate. Nothing measured off the wall clock
+goes in it; the wall time is printed on stdout only.
 
 `interactive` is the honest flag: it is `true` only if a human actually touched
-a control the firmware can see. A window that was merely open leaves it `false`,
-and the run is still reproducible from `args`.
+a control the firmware can see or a monitor sent it something. A window that was
+merely open leaves it `false`, and the run is still reproducible from `args`.
+
+`<out>/model.xml` is the MJCF the run simulated: the robot generated from its
+`robot.toml`, composed with the arena.
 
 ## Analysis
 
 ```bash
-just analyze runs/explore_v2
+python3 tools/analyze.py runs/drive
 ```
 
-Writes `report.json` and six plots into the run directory: speeds, contacts,
-attitude, control, wheels, and a top-down trajectory coloured by time with the
-goal cells shaded and the odometry estimate dashed. The report covers duration,
-warnings, non-finite samples, per-wheel airborne fraction, slip, penetration,
-chassis contact, control saturation, odometry error against ground truth,
-deceleration events, the FSM transition timeline, and whether and when the goal
-was reached. Only numpy and matplotlib are needed.
+Writes `report.json` and plots into the run directory: speeds, contacts,
+attitude, actuators, wheels, a top-down trajectory over the maze with the goal
+cells shaded and the firmware's pose estimate dashed, and whatever the target's
+plugin adds. The
+report covers warnings, non-finite samples, airborne fraction, slip,
+penetration, chassis contact, the state timeline, collisions, whether and when
+the goal was reached, the pose estimate's error against the ground truth, the
+tracking error and voltage saturation. Only numpy and matplotlib are needed.
 
-`tools/run_stats.py` prints the per-run metrics, `tools/turn_stats.py` the
-per-turn table (offset and heading error at entry, executed versus commanded
-angle, and the smallest distance from the chassis to any wall during the turn).
+`tools/analyze.py` knows only the engine's columns and needs only numpy and
+matplotlib; what a robot's own columns mean comes from its plugin, `tools/analysis.py` in the target's folder, which
+`meta.json` records as `target_dir`. `--plugin` or `$MICRAS_SIM_PLUGIN` name
+another; `tools/baseline.py` finds it the same way. `baseline.py compare --exact`
+is the byte identity check, and `tools/compare_run.py` compares two runs of one
+build, ignoring the fields that name paths.
 
 ## Watching a run
 
 ```bash
-just watch
+./build/host-release/targets/toy/toy_sim --scenario targets/toy/scenarios/drive.toml --out runs/window --viewer
 ```
 
 | Key | Action |
@@ -117,74 +181,129 @@ just watch
 | esc | quit |
 
 Left drag orbits, right drag pans, middle drag and scroll zoom, and ctrl with
-left drag pushes the robot around. The panel holds the board itself: the button,
-the four DIP switches, the fan override, the LED, the two addressable LEDs and
-the buzzer as the firmware is driving them, the wheel commands and wall
-readings, and the desired versus measured linear and angular speed straight from
-the firmware pool, one plot per variable. Pausing, stepping, a speed limiter and
-a quit button are there too.
-
-Touching any board control hands the run over: the scripted `--command` and
-`--button` stop being applied, and the run is marked `interactive`.
+left drag pushes the robot around. The panel holds the board itself: the
+button, the DIP switches, the lamps the firmware drives, the readouts and plots
+of its variables, plus pause, step, a speed limiter and quit. Touching any board
+control hands the run over: the scenario stops driving the inputs, and the run
+is marked `interactive`.
 
 ## micras-monitor
 
 ```bash
-just serve
+./build/host-release/targets/toy/toy_sim --scenario targets/toy/scenarios/idle.toml --seconds 600 --out runs/link --monitor
 ```
 
-The bridge puts the firmware's radio on `ws://localhost:8080`. It speaks the
-same packet protocol the real board does, so micras-monitor connects to it
-without knowing it is a simulation. One binary frame per tick carries everything
-the firmware wrote; whatever the monitor sends is framed and queued on the bus,
-which hands the firmware one packet per tick exactly as the radio would.
-
-`tools/monitor_probe.py` is a dependency-free client for checking the bridge
-without the real monitor.
-
-## Firmware hardware tests
-
-The firmware's own `tests/` programs build against the same proxies:
-
-```bash
-just run-test test_imu --seconds 4 --out runs/imu
-```
-
-They take the same command line as the main program. `just smoke-tests` runs
-each of them briefly, which is what catches a program that stops handing ticks
-back to the simulation.
+The bridge puts the firmware's radio on `ws://localhost:8080` and carries raw
+bytes both ways, with no framing of its own: micras-monitor speaks the
+firmware's protocol to it exactly as it would over the air. The link is as fast
+as the radio's baud rate, not faster.
 
 ## The gate
 
 ```bash
-just check
+cmake --build --preset host --target micras_sim_check
 ```
 
-Builds, runs the unit tests through CTest, checks the harness config against the
-firmware submodule for drift, configures every optional subsystem off to keep it
-buildable, smoke-runs the hardware tests, proves that a window and a bridge
-change nothing, runs the three scenarios, analyses them, asserts their metadata,
-and compares all three against every recorded baseline.
+The simulator's gate, on the toy target (`targets/toy/`): builds everything, runs
+every unit test through CTest, configures and builds every optional part off to
+keep it buildable (`micras_sim_check_options`), checks that nothing outside
+`targets/` names a robot (`micras_sim_check_generic`), and proves on the toy that
+a run is reproducible and that a window, a video and a bridge nobody connects to
+change nothing, and compares the toy's runs with its baseline
+(`micras_sim_toy_check`). The window runs under `xvfb-run`, or on the display;
+`MICRAS_SKIP_VIEWER=1` skips it, even where `xvfb-run` or a display exists.
 
-Baselines live in `baseline/`; `CLAUDE.md` explains the two invariants they
-enforce. `just record-baseline` refuses to overwrite a version — bump it
-instead, and nothing is ever lost.
+Baselines live in `targets/<robot>/baselines/`; `CLAUDE.md` explains what they
+hold and the rules around them. `micras_sim_toy_record_baseline` records the toy's
+version `MICRAS_SIM_TOY_BASELINE` names and refuses to overwrite one: bump it
+instead, and nothing is ever lost. With `-DMICRAS_SIM_EXACT=ON` a baseline
+comparison also fails when a checked run's `data.csv` is not byte identical to the
+recorded one: the check for a change that must not move a byte, such as a
+refactoring. A project that adds the simulator reads the same option for its own
+baselines.
 
-`just format`, `just format-check` and `just lint` are the style targets; they
-use the firmware's own `.clang-format` and `.clang-tidy`.
+`micras_sim_format`, `micras_sim_format_check`, `micras_sim_lint` and
+`micras_sim_lint_fix` are the style targets; they use the configuration shared
+with micras-lib and the firmware (`.clang-format`, `.clang-tidy`).
+
+## A robot target
+
+A robot is a folder of `targets/` (or a directory of another project that adds
+this one) with a class implementing `micras::sim::Target` and a `main` that is one
+call to `micras::sim::run`. The target gives its name, loop period, robot file,
+ground truth columns, options and firmware program, and `wire()` builds its
+devices and returns what it adds to the run. The program is called with the
+`FirmwareThread` it runs on, so a program that drives the handover itself calls
+`yield_tick()` on it.
+
+The public headers, which a target may include and which change only with notice:
+
+| Header | What |
+|---|---|
+| `micras/sim/app/target.hpp` | `Target`, the interface |
+| `micras/sim/app/wiring.hpp` | `Wiring`, `WorldInfo`, `CliOption` |
+| `micras/sim/app/application.hpp` | `micras::sim::run` |
+| `micras/sim/view/panel_spec.hpp` | the panel and the overlay |
+| `micras/sim/core/run_context.hpp` | the world, the clock, the serial bus, the noise and the devices of a run |
+| `micras/sim/core/firmware_thread.hpp` | the firmware thread and its handover |
+| `micras/sim/core/variable_source.hpp` | the firmware variables the panel, the overlay and the scenarios read |
+| `micras/sim/core/span_at.hpp` | checked indexing of a `std::span` |
+| `micras/sim/recording/column_source.hpp`, `csv_writer.hpp` | CSV columns and the writer they fill |
+| `micras/sim/recording/ground_truth.hpp`, `run_metadata.hpp` | ground truth, `meta.json` counters |
+| `micras/sim/robot/robot_description.hpp` | the robot's `robot.toml` |
+| `micras/sim/robot/robot_model.hpp` | `RobotModelNames`, the names the generated model gives the robot's parts |
+| `micras/sim/scenario/scenario.hpp` | `ScenarioHooks`: the inputs, messages and state names a scenario uses |
+| `micras/sim/devices/*.hpp` | the devices a target builds |
+
+A target over `micras_hal` links micras-lib's host backend and defines the board
+target it asks for, the Cube layer its firmware includes, written by hand;
+micras-lib's README describes that contract. A project that adds this repository
+with `add_subdirectory` gets the libraries (`micras::sim_app` and the rest) and
+`MICRAS_SIM_TOOLS_DIR` and `MICRAS_SIM_MAZES_DIR`, and keeps its own style and
+check targets: the simulator defines its own only when it is the top-level
+project.
+
+The robot is micromouse-shaped and runs in a maze: its `robot.toml` has every
+section of the schema (chassis, wheels, drive, encoders, IMU, fan, battery, link,
+wall sensors), and the arena is one of the mazes.
+
+## The toy target
+
+`targets/toy/` is the simulator's reference: the smallest robot that uses every
+feature of the engine and of the `Target` interface, with no HAL and nothing of a
+real robot. Its `robot.toml` is the engine tests' tiny robot with a second wall
+sensor looking ahead. Its program, which yields on its own firmware thread once
+per 1 ms loop, waits; a press of the button or `go` over the link starts it; it
+drives with the fan on, counting its encoders, until the front wall sensor sees a
+wall, turns right by `--turn-angle` degrees (90 by default) integrating its gyro,
+drives on, and stops at `stop` over the link, which it answers. Its variables are
+its state, odometry, heading, front reading, pack voltage and motor currents; its
+panel has the button, a lamp per state and the pack voltage; its scenarios are
+`idle` and `drive`.
+
+## CI
+
+`.github/workflows/ci.yaml` runs on every push and pull request, in the image of
+`.docker/Dockerfile` (Ubuntu 26.04 with GCC 15, clang 22, CMake and Python; its
+host stage is the one micras-lib and the firmware use too): the `host-ci` build,
+CTest, `micras_sim_format_check`, `micras_sim_lint` and `micras_sim_check`. The
+baselines are compared within their tolerances there: a hash belongs to the
+machine that recorded it.
 
 ## Layout
 
 ```
-config/          target.hpp (MuJoCo wiring) and constants.hpp (tuning)
-include/micras/proxy/, src/proxy/    the 16 proxies the firmware sees
-include/micras/sim/, src/sim/        core/, telemetry/, recording/, view/, bridge/, app/
-models/          robot and maze models, plus the tuning experiments
-tools/           analysis, drift, assertions, comparison, monitor probe
-tests/           unit tests; the hardware tests compile from MicrasFirmware/tests/src/
-baseline/        recorded runs the gate compares against
-MicrasFirmware/  submodule
+engine/          world, clock, run loop, devices, robot description, scenarios, recording
+engine/arenas/   the maze arena and its mazes
+view/            window, panel, overlay, video
+bridge/          WebSocket server and monitor bridge
+app/             CLI and application wiring, the Target interface
+tests/           the engine's unit tests, on a tiny robot of their own
+tools/           analysis, baselines, run health and byte comparison
+scripts/         the checks' scripts, which the CMake targets call
+cmake/           dependencies, warnings, style and check targets
+targets/toy/     the reference target: toy robot, scenarios, baseline
 ```
 
-`CLAUDE.md` has the architecture, the invariants that hold the determinism
-together, and the tuning history behind the numbers in `config/constants.hpp`.
+`CLAUDE.md` has the architecture and the invariants that hold the determinism
+together.

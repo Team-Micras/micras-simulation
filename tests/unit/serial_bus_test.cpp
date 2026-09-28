@@ -1,70 +1,62 @@
-#include <gtest/gtest.h>
+#include <cstdint>
+#include <vector>
+
+#include <doctest/doctest.h>
 
 #include "micras/sim/core/serial_bus.hpp"
+#include "support.hpp"
 
 namespace micras::sim {
 namespace {
-/**
- * @brief Listener that keeps every byte it was handed.
- */
-class RecordingListener : public ISerialListener {
-public:
-    void on_firmware_bytes(std::span<const uint8_t> bytes) override {
-        this->received.insert(this->received.end(), bytes.begin(), bytes.end());
-    }
-
-    std::vector<uint8_t> received;
-};
-
-TEST(SerialBus, FansFirmwareOutputOutToEveryListener) {
-    SerialBus         bus;
-    RecordingListener first;
-    RecordingListener second;
+TEST_CASE("SerialBus.FansFirmwareOutputOutToEveryListener") {
+    SerialBus     bus;
+    ByteCollector first;
+    ByteCollector second;
 
     bus.add_listener(first);
     bus.add_listener(second);
     bus.send_from_firmware(std::vector<uint8_t>{1, 2});
     bus.send_from_firmware(std::vector<uint8_t>{3});
 
-    EXPECT_EQ(first.received, (std::vector<uint8_t>{1, 2, 3}));
-    EXPECT_EQ(second.received, first.received);
+    CHECK_EQ(first.received, (std::vector<uint8_t>{1, 2, 3}));
+    CHECK_EQ(second.received, first.received);
 }
 
-TEST(SerialBus, StopsDeliveringToARemovedListener) {
-    SerialBus         bus;
-    RecordingListener listener;
+TEST_CASE("SerialBus.StopsDeliveringToARemovedListener") {
+    SerialBus     bus;
+    ByteCollector listener;
 
     bus.add_listener(listener);
     bus.send_from_firmware(std::vector<uint8_t>{1});
     bus.remove_listener(listener);
     bus.send_from_firmware(std::vector<uint8_t>{2});
 
-    EXPECT_EQ(listener.received, (std::vector<uint8_t>{1}));
+    CHECK_EQ(listener.received, (std::vector<uint8_t>{1}));
 }
 
-TEST(SerialBus, DropsFirmwareOutputWhenNobodyIsListening) {
+TEST_CASE("SerialBus.DropsFirmwareOutputWhenNobodyIsListening") {
     SerialBus bus;
-    EXPECT_NO_THROW(bus.send_from_firmware(std::vector<uint8_t>{1}));
+    CHECK_NOTHROW(bus.send_from_firmware(std::vector<uint8_t>{1}));
 }
 
-TEST(SerialBus, HandsTheFirmwareOnePacketAtATime) {
+TEST_CASE("SerialBus.HandsTheFirmwareTheBytesInTheOrderTheyWereQueued") {
     SerialBus bus;
     bus.queue_for_firmware(std::vector<uint8_t>{1, 2});
     bus.queue_for_firmware(std::vector<uint8_t>{3});
 
-    EXPECT_EQ(bus.pending_packets(), 2U);
-    EXPECT_EQ(bus.take_for_firmware(), (std::vector<uint8_t>{1, 2}));
-    EXPECT_EQ(bus.take_for_firmware(), (std::vector<uint8_t>{3}));
-    EXPECT_TRUE(bus.take_for_firmware().empty());
-    EXPECT_EQ(bus.pending_packets(), 0U);
+    CHECK_EQ(bus.take_for_firmware(2), (std::vector<uint8_t>{1, 2}));
+    CHECK_EQ(bus.take_for_firmware(5), (std::vector<uint8_t>{3}));
+    CHECK(bus.take_for_firmware(1).empty());
 }
 
-TEST(SerialBus, ClearDropsEveryQueuedPacket) {
-    SerialBus bus;
-    bus.queue_for_firmware(std::vector<uint8_t>{1});
-    bus.clear();
+TEST_CASE("SerialBus.DropsAndCountsBytesPastTheBound") {
+    SerialBus                  bus;
+    const std::vector<uint8_t> bytes(SerialBus::max_pending_bytes + 3, 7);
 
-    EXPECT_TRUE(bus.take_for_firmware().empty());
+    bus.queue_for_firmware(bytes);
+
+    CHECK_EQ(bus.dropped_bytes(), 3U);
+    CHECK_EQ(bus.take_for_firmware(SerialBus::max_pending_bytes * 2).size(), SerialBus::max_pending_bytes);
 }
 }  // namespace
 }  // namespace micras::sim

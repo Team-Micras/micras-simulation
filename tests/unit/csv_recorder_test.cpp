@@ -1,96 +1,188 @@
-#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
+#include "micras/sim/recording/column_source.hpp"
 #include "micras/sim/recording/csv_recorder.hpp"
+#include "micras/sim/recording/csv_writer.hpp"
 #include "micras/sim/recording/ground_truth.hpp"
+#include "temp_file.hpp"
 
 namespace micras::sim {
+/**
+ * @brief Ground truth of the tiny robot: one column of each kind the probes cover.
+ */
+static GroundTruthConfig tiny_config() {
+    return {
+        .body = "robot",
+        .columns = {
+            {.name = "wheel_speed", .probe = Probe::JOINT_VELOCITY, .object = "wheel"},
+            {.name = "wheel_angle", .probe = Probe::JOINT_POSITION, .object = "wheel"},
+            {.name = "torque", .probe = Probe::ACTUATOR_FORCE, .object = "motor"},
+            {.name = "chassis_ncon", .probe = Probe::CONTACT_COUNT, .object = "chassis"},
+            {.name = "chassis_fn", .probe = Probe::CONTACT_NORMAL_FORCE, .object = "chassis"},
+            {.name = "chassis_slip", .probe = Probe::CONTACT_SLIP, .object = "chassis"},
+            {.name = "chassis_penetration", .probe = Probe::CONTACT_PENETRATION, .object = "chassis"},
+            {.name = "iterations", .probe = Probe::SOLVER_ITERATIONS, .object = ""},
+        },
+    };
+}
+
 namespace {
 /**
- * @brief Ground truth header of every run recorded so far, in order.
- *
- * @note Transcribed from baseline/v0/idle/data.csv. Changing it breaks the
- *       comparison against every run already on disk, so it is pinned here
- *       instead of being derived from the code under test.
+ * @brief A column source with fixed names and values.
  */
-const std::vector<std::string> baseline_columns{
-    "tick",
-    "sim_time",
-    "fw_loop_time",
-    "x",
-    "y",
-    "z",
-    "roll",
-    "pitch",
-    "yaw",
-    "vx_world",
-    "vy_world",
-    "vz_world",
-    "wz_body",
-    "v_forward",
-    "wheel_qvel_left",
-    "wheel_qvel_right",
-    "ctrl_left",
-    "ctrl_right",
-    "act_force_left",
-    "act_force_right",
-    "left_ncon",
-    "left_fn",
-    "left_slip",
-    "left_penetration",
-    "right_ncon",
-    "right_fn",
-    "right_slip",
-    "right_penetration",
-    "caster_ncon",
-    "ncon_total",
-    "solver_niter",
-    "warnings_total",
-    "wheel_qpos_left",
-    "wheel_qpos_right",
-    "caster_fn",
-    "base_ncon"
+class FixedColumns : public ColumnSource {
+public:
+    explicit FixedColumns(std::size_t cells_per_row) : cells_per_row{cells_per_row} { }
+
+    std::vector<std::string> names() override { return {"first", "second"}; }
+
+    void append(std::vector<CsvCell>& row) override {
+        for (std::size_t i = 0; i < this->cells_per_row; i++) {
+            row.emplace_back(static_cast<int64_t>(i));
+        }
+    }
+
+private:
+    std::size_t cells_per_row;
 };
 
-TEST(GroundTruth, ColumnsMatchTheRecordedBaseline) {
-    EXPECT_EQ(GroundTruth::columns(), baseline_columns);
-}
+/**
+ * @brief A column source that can name its columns only once it is told it can.
+ */
+class LateColumns : public FixedColumns {
+public:
+    LateColumns() : FixedColumns{2} { }
 
-TEST(CsvRecorder, ProxyColumnsMatchTheProxyStateSections) {
-    const std::vector<std::string> expected{
-        "proxy_left_command",   "proxy_right_command", "proxy_fan_speed",  "proxy_encoder_left", "proxy_encoder_right",
-        "proxy_gyro_x",         "proxy_gyro_y",        "proxy_gyro_z",     "proxy_accel_x",      "proxy_accel_y",
-        "proxy_accel_z",        "proxy_wall_adc_0",    "proxy_wall_adc_1", "proxy_wall_adc_2",   "proxy_wall_adc_3",
-        "proxy_button_pressed", "proxy_dip_0",         "proxy_dip_1",      "proxy_dip_2",        "proxy_dip_3"
-    };
+    std::vector<std::string> names() override { return {"third", "fourth"}; }
 
-    EXPECT_EQ(CsvRecorder::proxy_columns(), expected);
+    bool ready() const override { return this->started; }
 
-    const std::size_t actuators = 3;
-    const std::size_t sensors = Sensors::wheel_count + (2 * Sensors::axis_count) + Sensors::wall_sensor_count;
-    const std::size_t input = 1 + InterfaceInput::dip_switch_count;
-    EXPECT_EQ(CsvRecorder::proxy_columns().size(), actuators + sensors + input);
-}
+    void start() { this->started = true; }
 
-TEST(CsvRecorder, ProxyColumnsComeAfterEveryBaselineColumn) {
-    for (const std::string& column : CsvRecorder::proxy_columns()) {
-        EXPECT_TRUE(column.starts_with("proxy_")) << column;
-        EXPECT_EQ(std::count(baseline_columns.begin(), baseline_columns.end(), column), 0) << column;
+private:
+    bool started{false};
+};
+
+class Recording {
+protected:
+    Recording() {
+        this->world.load(MICRAS_TEST_MODEL);
+        this->world.reset();
     }
+
+    /**
+     * @brief Read back every line of the CSV.
+     */
+    std::vector<std::string> lines() const {
+        std::ifstream            file(this->csv.path());
+        std::vector<std::string> read;
+
+        for (std::string line; std::getline(file, line);) {
+            read.push_back(line);
+        }
+
+        return read;
+    }
+
+    /**
+     * @brief Read back the first line of the CSV.
+     */
+    std::string header() const {
+        std::ifstream file(this->csv.path());
+        std::string   line;
+        std::getline(file, line);
+        return line;
+    }
+
+    // NOLINTBEGIN(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
+    MujocoWorld world;
+    TempFile    csv{"recorder_test.csv"};
+    // NOLINTEND(*-non-private-member-variables-in-classes)
+};
+
+TEST_CASE_FIXTURE(Recording, "Recording.StartsEveryRowWithTheBodyBlockThenTheRobotColumns") {
+    const GroundTruth              ground_truth(this->world, tiny_config());
+    const std::vector<std::string> columns = ground_truth.columns();
+
+    REQUIRE_EQ(columns.size(), 13U + tiny_config().columns.size());
+    CHECK_EQ(columns.front(), "tick");
+    CHECK_EQ(columns.at(12), "v_forward");
+    CHECK_EQ(columns.at(13), "wheel_speed");
+    CHECK_EQ(columns.back(), "iterations");
 }
 
-TEST(CsvRecorder, TurnsPoolNamesIntoTheBaselineColumnNames) {
-    EXPECT_EQ(CsvRecorder::column_name("Grid Pose"), "grid_pose");
-    EXPECT_EQ(CsvRecorder::column_name("Desired Linear Speed"), "desired_linear_speed");
-    EXPECT_EQ(CsvRecorder::column_name("Wall Sensors 0"), "wall_sensors_0");
-    EXPECT_EQ(CsvRecorder::column_name("Linear/Angular PID"), "linear_angular_pid");
+TEST_CASE_FIXTURE(Recording, "Recording.WritesTheTickAndOneCellPerColumn") {
+    GroundTruth                ground_truth(this->world, tiny_config());
+    const std::vector<CsvCell> row = ground_truth.sample(7);
+
+    REQUIRE_EQ(row.size(), ground_truth.columns().size());
+    CHECK_EQ(std::get<uint64_t>(row.at(0)), 7U);
+    CHECK_EQ(std::get<double>(row.at(1)), doctest::Approx(this->world.data()->time).epsilon(1e-12));
 }
 
-TEST(CsvRecorder, TrimsSeparatorsAtTheEdgesOfPoolNames) {
-    EXPECT_EQ(CsvRecorder::column_name("  Spaced  "), "spaced");
-    EXPECT_EQ(CsvRecorder::column_name("Trailing!"), "trailing");
-    EXPECT_EQ(CsvRecorder::column_name("!!!"), "");
+TEST_CASE_FIXTURE(Recording, "Recording.RejectsAnObjectTheModelDoesNotHave") {
+    GroundTruthConfig config = tiny_config();
+    config.columns.push_back({.name = "ghost", .probe = Probe::JOINT_VELOCITY, .object = "ghost"});
+
+    CHECK_THROWS_AS(GroundTruth(this->world, config), std::runtime_error);
+}
+
+TEST_CASE_FIXTURE(Recording, "Recording.AppendsTheSourcesAfterTheGroundTruth") {
+    FixedColumns source(2);
+
+    {
+        CsvRecorder recorder(this->world, tiny_config(), this->csv.path());
+        recorder.add_source(source);
+        recorder.sample(0);
+    }
+
+    CHECK(this->header().ends_with(",iterations,first,second"));
+}
+
+TEST_CASE_FIXTURE(Recording, "Recording.WritesNoRowBeforeEverySourceIsReady") {
+    FixedColumns early(2);
+    LateColumns  late;
+
+    {
+        CsvRecorder recorder(this->world, tiny_config(), this->csv.path());
+        recorder.add_source(early);
+        recorder.add_source(late);
+        recorder.sample(1);
+        recorder.sample(2);
+        late.start();
+        recorder.sample(3);
+    }
+
+    const std::vector<std::string> written = this->lines();
+
+    REQUIRE_EQ(written.size(), 2U);
+    CHECK(written.at(0).starts_with("tick,"));
+    CHECK(written.at(1).starts_with("3,"));
+}
+
+TEST_CASE_FIXTURE(Recording, "Recording.RejectsASourceThatFillsTooFewCells") {
+    FixedColumns source(1);
+    CsvRecorder  recorder(this->world, tiny_config(), this->csv.path());
+    recorder.add_source(source);
+
+    CHECK_THROWS_AS(recorder.sample(0), std::logic_error);
+}
+
+TEST_CASE_FIXTURE(Recording, "Recording.RejectsTwoSourcesWritingTheSameColumn") {
+    FixedColumns first(2);
+    FixedColumns second(2);
+    CsvRecorder  recorder(this->world, tiny_config(), this->csv.path());
+    recorder.add_source(first);
+    recorder.add_source(second);
+
+    CHECK_THROWS_AS(recorder.sample(0), std::runtime_error);
 }
 }  // namespace
 }  // namespace micras::sim
