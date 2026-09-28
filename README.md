@@ -34,7 +34,8 @@ just check                                # the gate: the engine's checks, then 
 `just` with no arguments lists every recipe, the engine's and each target's. The
 build uses `CMakePresets.json`; `MICRAS_PRESET` picks between `default`
 (RelWithDebInfo), `debug` and `release`. Only `default` has a test preset, so
-`just test` and `just check` need it.
+`just test` and `just check` need it. Every preset builds with GCC 15
+(`gcc-15`/`g++-15`), since another compiler may move the last bits of a run.
 
 ## Running
 

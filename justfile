@@ -48,6 +48,7 @@ lint: build
 # Configure every optional subsystem off, so the options stay buildable.
 check-options:
     cmake -S . -B {{build_dir}}-minimal -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_C_COMPILER=gcc-15 -DCMAKE_CXX_COMPILER=g++-15 \
         -DMICRAS_VIEWER=OFF -DMICRAS_VIDEO=OFF -DMICRAS_BRIDGE=OFF -DMICRAS_TESTS=OFF > /dev/null
     cmake --build {{build_dir}}-minimal > /dev/null
 
