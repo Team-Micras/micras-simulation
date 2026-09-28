@@ -99,7 +99,7 @@ static std::string wheel_body(const RobotDescription& robot, const std::string& 
         "      <body name=\"{0}\" pos=\"0 {1:.9g} {2:.9g}\">\n"
         "        <inertial pos=\"0 0 0\" mass=\"{3:.9g}\" diaginertia=\"{4:.9g} {5:.9g} {4:.9g}\"/>\n"
         "        <joint name=\"{0}\" type=\"hinge\" axis=\"0 1 0\" armature=\"{6:.9g}\" frictionloss=\"{7:.9g}\"/>\n"
-        "        <geom name=\"{0}\" type=\"cylinder\" size=\"{2:.9g} {8:.9g}\" zaxis=\"0 1 0\" material=\"{9}_tyre\"\n"
+        "        <geom name=\"{0}\" type=\"cylinder\" size=\"{2:.9g} {8:.9g}\" zaxis=\"0 1 0\" material=\"{9}_tire\"\n"
         "              condim=\"4\" priority=\"1\" friction=\"{10:.9g} {11:.9g}\" solref=\"{12:.9g} {13:.9g}\"/>\n"
         "      </body>\n",
         name, side * wheels.track / 2, wheels.radius, wheels.mass, transverse, wheels.spin_inertia, armature,
@@ -211,7 +211,7 @@ std::string robot_mjcf(const RobotDescription& robot) {
         "    <mesh name=\"{0}_board\" vertex=\"{3}\"/>\n"
         "    <material name=\"{0}_board\" rgba=\"0.08 0.3 0.12 1\"/>\n"
         "    <material name=\"{0}_parts\" rgba=\"0.85 0.85 0.8 1\"/>\n"
-        "    <material name=\"{0}_tyre\" rgba=\"0.1 0.1 0.1 1\"/>\n"
+        "    <material name=\"{0}_tire\" rgba=\"0.1 0.1 0.1 1\"/>\n"
         "  </asset>\n"
         "  <worldbody>\n"
         "    <body name=\"{4}\" childclass=\"{0}\">\n"
