@@ -1,6 +1,5 @@
 #include <cmath>
 #include <cstdint>
-#include <filesystem>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -10,6 +9,7 @@
 
 #include "micras/sim/core/text_file.hpp"
 #include "micras/sim/recording/csv_writer.hpp"
+#include "temp_file.hpp"
 
 namespace micras::sim {
 namespace {
@@ -34,18 +34,17 @@ TEST_CASE("CsvWriter.FormatsTheSpecialValuesTheBaselineDependsOn") {
 }
 
 TEST_CASE("CsvWriter.WritesHeaderAndRows") {
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / "micras_csv_writer_test.csv";
+    const TempFile csv{"csv_writer_test.csv"};
 
     {
-        CsvWriter                      writer(path);
+        CsvWriter                      writer(csv.path());
         const std::vector<std::string> columns{"tick", "x", "count"};
         writer.write_header(columns);
         writer.write_row(std::vector<CsvCell>{uint64_t{0}, 0.5, int64_t{2}});
         writer.write_row(std::vector<CsvCell>{uint64_t{1}, std::nan(""), int64_t{0}});
     }
 
-    CHECK_EQ(read_text_file(path, "CSV"), "tick,x,count\n0,0.5,2\n1,nan,0\n");
-    std::filesystem::remove(path);
+    CHECK_EQ(read_text_file(csv.path(), "CSV"), "tick,x,count\n0,0.5,2\n1,nan,0\n");
 }
 
 TEST_CASE("CsvWriter.ThrowsWhenTheFileCannotBeOpened") {

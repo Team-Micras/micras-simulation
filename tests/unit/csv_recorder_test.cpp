@@ -1,6 +1,5 @@
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -12,6 +11,7 @@
 #include "micras/sim/recording/csv_recorder.hpp"
 #include "micras/sim/recording/csv_writer.hpp"
 #include "micras/sim/recording/ground_truth.hpp"
+#include "temp_file.hpp"
 
 namespace micras::sim {
 /**
@@ -81,7 +81,7 @@ protected:
      * @brief Read back every line of the CSV.
      */
     std::vector<std::string> lines() const {
-        std::ifstream            file(this->path);
+        std::ifstream            file(this->csv.path());
         std::vector<std::string> read;
 
         for (std::string line; std::getline(file, line);) {
@@ -95,15 +95,15 @@ protected:
      * @brief Read back the first line of the CSV.
      */
     std::string header() const {
-        std::ifstream file(this->path);
+        std::ifstream file(this->csv.path());
         std::string   line;
         std::getline(file, line);
         return line;
     }
 
     // NOLINTBEGIN(*-non-private-member-variables-in-classes): the fixture is the test's own scope.
-    MujocoWorld           world;
-    std::filesystem::path path{std::filesystem::temp_directory_path() / "micras_sim_recorder_test.csv"};
+    MujocoWorld world;
+    TempFile    csv{"recorder_test.csv"};
     // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
@@ -138,7 +138,7 @@ TEST_CASE_FIXTURE(Recording, "Recording.AppendsTheSourcesAfterTheGroundTruth") {
     FixedColumns source(2);
 
     {
-        CsvRecorder recorder(this->world, tiny_config(), this->path);
+        CsvRecorder recorder(this->world, tiny_config(), this->csv.path());
         recorder.add_source(source);
         recorder.sample(0);
     }
@@ -151,7 +151,7 @@ TEST_CASE_FIXTURE(Recording, "Recording.WritesNoRowBeforeEverySourceIsReady") {
     LateColumns  late;
 
     {
-        CsvRecorder recorder(this->world, tiny_config(), this->path);
+        CsvRecorder recorder(this->world, tiny_config(), this->csv.path());
         recorder.add_source(early);
         recorder.add_source(late);
         recorder.sample(1);
@@ -169,7 +169,7 @@ TEST_CASE_FIXTURE(Recording, "Recording.WritesNoRowBeforeEverySourceIsReady") {
 
 TEST_CASE_FIXTURE(Recording, "Recording.RejectsASourceThatFillsTooFewCells") {
     FixedColumns source(1);
-    CsvRecorder  recorder(this->world, tiny_config(), this->path);
+    CsvRecorder  recorder(this->world, tiny_config(), this->csv.path());
     recorder.add_source(source);
 
     CHECK_THROWS_AS(recorder.sample(0), std::logic_error);
@@ -178,7 +178,7 @@ TEST_CASE_FIXTURE(Recording, "Recording.RejectsASourceThatFillsTooFewCells") {
 TEST_CASE_FIXTURE(Recording, "Recording.RejectsTwoSourcesWritingTheSameColumn") {
     FixedColumns first(2);
     FixedColumns second(2);
-    CsvRecorder  recorder(this->world, tiny_config(), this->path);
+    CsvRecorder  recorder(this->world, tiny_config(), this->csv.path());
     recorder.add_source(first);
     recorder.add_source(second);
 

@@ -1,6 +1,5 @@
 #include <array>
 #include <cstddef>
-#include <filesystem>
 #include <fstream>
 #include <span>
 #include <string>
@@ -8,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include "micras/sim/recording/run_metadata.hpp"
+#include "temp_file.hpp"
 
 namespace micras::sim {
 namespace {
@@ -89,12 +89,11 @@ TEST_CASE("RunMetadata.EscapesJsonStrings") {
 }
 
 TEST_CASE("RunMetadata.HashesFilesWithSha256") {
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / "micras_sha256_test.txt";
-    std::ofstream(path) << "abc";
+    const TempFile text{"sha256_test.txt"};
+    std::ofstream(text.path()) << "abc";
 
-    CHECK_EQ(RunMetadata::sha256_of(path), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    CHECK_EQ(RunMetadata::sha256_of(text.path()), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     CHECK_EQ(RunMetadata::sha256_of("/nonexistent/file"), "");
-    std::filesystem::remove(path);
 }
 
 TEST_CASE("RunMetadata.JoinsArgumentsAfterTheProgramName") {
