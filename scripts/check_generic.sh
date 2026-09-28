@@ -1,10 +1,11 @@
 #!/bin/bash
 # check_generic.sh <source dir>
 #
-# Fails if anything outside targets/ names a specific robot. hal_host/ is the Micras HAL's host backend
-# (its canonical copy is micras-lib's), the documentation describes the Micras target, the files
-# micras-lib shares with every repository name the repositories, and this script lists the names, so
-# none of them is scanned.
+# Fails if anything outside targets/ names a specific robot: every file of the repository is scanned,
+# documentation and build files included, except the files micras-lib shares with every repository
+# (they name the repositories that carry them) and this script, which lists the names. Of the
+# Dockerfile, only the shared host stage is left out. In a git checkout the files are the tracked and
+# the untracked but not ignored ones; elsewhere, every file outside build/.
 
 set -euo pipefail
 
@@ -17,23 +18,47 @@ cd "$1"
 
 identifiers='micras::Micras|MicrasTarget|SimulationContext|ProxyState|proxy_state|robot_v2|"micras"|FSM State|Desired Linear|Desired Angular|Odometry Linear|Odometry Angular|Grid Pose|grid_pose|fsm_state|odometry_state|front wheel|MicrasFirmware|MicrasBoard|micras_firmware|targets/micras|wall_adc|dip_switch|button_config|loop_time_us\{1042|hadc[0-9]|htim[0-9]|hspi[0-9]|huart[0-9]|MX_[A-Z0-9]+_Init|lsm6dsv|as5047'
 
-skipped=(micras_warnings.cmake run_clang_tidy.sh.in "$(basename "$0")")
+shared=(
+    .clang-format
+    .clang-tidy
+    tests/.clang-tidy
+    cmake/micras_warnings.cmake
+    cmake/templates/run_clang_tidy.sh.in
+    .docker/Dockerfile
+    scripts/check_generic.sh
+)
+
+files=()
+
+if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    while IFS= read -r -d '' file; do
+        files+=("${file}")
+    done < <(git ls-files -z --cached --others --exclude-standard)
+else
+    while IFS= read -r -d '' file; do
+        files+=("${file#./}")
+    done < <(find . \( -path ./build -o -path ./.git -o -name __pycache__ \) -prune -o -type f -print0)
+fi
+
 scanned=()
-excluded=()
 
-for path in engine view bridge app tests tools cmake scripts CMakeLists.txt CMakePresets.json .github; do
-    if [[ -e "${path}" ]]; then
-        scanned+=("${path}")
+for file in "${files[@]}"; do
+    if [[ "${file}" == targets/* || ! -f "${file}" ]]; then
+        continue
     fi
-done
 
-for file in "${skipped[@]}"; do
-    excluded+=(--exclude="${file}")
+    for skipped in "${shared[@]}"; do
+        if [[ "${file}" == "${skipped}" ]]; then
+            continue 2
+        fi
+    done
+
+    scanned+=("${file}")
 done
 
 found=0
 
-if grep -rnE -I "${excluded[@]}" --exclude-dir=__pycache__ "${identifiers}" "${scanned[@]}"; then
+if [[ ${#scanned[@]} -gt 0 ]] && grep -nE -I "${identifiers}" "${scanned[@]}"; then
     found=1
 fi
 
@@ -47,4 +72,4 @@ if [[ ${found} -ne 0 ]]; then
     exit 1
 fi
 
-echo "ok   nothing outside targets/ names a robot"
+echo "ok   nothing outside targets/ names a robot (${#scanned[@]} files)"
