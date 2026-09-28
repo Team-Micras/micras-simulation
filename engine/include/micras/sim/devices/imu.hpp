@@ -26,7 +26,7 @@ namespace micras::sim {
  *       sample is that truth low pass filtered at the configured bandwidth,
  *       the gyroscope's scaled by a turn-on scale error, offset by a turn-on
  *       bias, with white noise at the datasheet density over the filter's noise
- *       bandwidth, then quantised to the configured resolution and delivered
+ *       bandwidth, then quantized to the configured resolution and delivered
  *       one sample late, as the chip's pipeline does. Samples come at the output rate times a
  *       small seeded clock error, so the firmware sometimes finds no new sample
  *       and sometimes finds one skipped, as with the real chip's own oscillator.

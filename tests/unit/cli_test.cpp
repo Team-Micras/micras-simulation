@@ -92,7 +92,7 @@ TEST_CASE("Cli.RejectsAnIncompleteCommandLine") {
     CHECK_THROWS_AS(parse({"--out", "o", "--nonsense"}), std::runtime_error);
 }
 
-TEST_CASE("Cli.RejectsValuesTheRunCouldNotHonour") {
+TEST_CASE("Cli.RejectsValuesTheRunCouldNotHonor") {
     CHECK_THROWS_AS(parse({"--out", "o", "--seconds", "0"}), std::runtime_error);
     CHECK_THROWS_AS(parse({"--out", "o", "--ticks", "0"}), std::runtime_error);
     CHECK_THROWS_AS(parse({"--out", "o", "--record-every", "0"}), std::runtime_error);

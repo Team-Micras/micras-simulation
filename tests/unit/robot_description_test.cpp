@@ -128,9 +128,9 @@ TEST_CASE("RobotDescription.RefusesAMissingSectionNamingIt") {
 }
 
 TEST_CASE("RobotDescription.RefusesAnUnknownKeyNamingIt") {
-    const std::string message = refusal_of(replaced(tiny_text(), "[battery]\n", "[battery]\ncolour = \"red\"\n"));
+    const std::string message = refusal_of(replaced(tiny_text(), "[battery]\n", "[battery]\ncolor = \"red\"\n"));
 
-    CHECK_MESSAGE(message.contains("unknown key battery.colour"), message);
+    CHECK_MESSAGE(message.contains("unknown key battery.color"), message);
 }
 
 TEST_CASE("RobotDescription.RefusesAnUnknownKeyInAnArrayOfTables") {

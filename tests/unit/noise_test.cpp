@@ -53,7 +53,7 @@ TEST_CASE("Noise.ScalesTheSameSamplesBySigma") {
     }
 }
 
-TEST_CASE("Noise.DrawsACentredGaussianOfTheRequestedSpread") {
+TEST_CASE("Noise.DrawsACenteredGaussianOfTheRequestedSpread") {
     const std::vector<double> samples = draw({.seed = 11}, "gyro", 20000, 2.0);
     double                    sum = 0.0;
     double                    squares = 0.0;

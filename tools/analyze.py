@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Analyse one simulation run directory.
+"""Analyze one simulation run directory.
 
 Reads ``<run>/data.csv`` and ``<run>/meta.json`` and writes ``report.json`` plus a
 set of PNGs next to them.
 
 This script knows the engine's columns only: the body block every row starts with
 (``x``, ``y``, ``z``, ``roll``, ``pitch``, ``yaw``, ``v_forward``, ``wz_body``) and
-the kinds of column a robot target configures, recognised by their suffix or
+the kinds of column a robot target configures, recognized by their suffix or
 prefix (``<label>_ncon``, ``<label>_fn``, ``<label>_slip``, ``<label>_penetration``,
 ``wheel_speed_<label>``, ``motor_torque_<label>``, and the ``<device>_voltage``
 columns of the devices). A contact label with a ``_slip`` column is a wheel.
@@ -626,7 +626,7 @@ def summarize(report: dict, plugin: ModuleType | None) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyse a simulation run directory")
+    parser = argparse.ArgumentParser(description="Analyze a simulation run directory")
     parser.add_argument("run", type=Path)
     parser.add_argument("--t0", type=float, default=None)
     parser.add_argument("--t1", type=float, default=None)

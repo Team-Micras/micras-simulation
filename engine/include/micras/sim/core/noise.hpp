@@ -47,7 +47,7 @@ public:
     Noise(const NoiseConfig& config, std::string_view stream);
 
     /**
-     * @brief Draw from a centred Gaussian.
+     * @brief Draw from a centered Gaussian.
      *
      * @param sigma Standard deviation.
      * @return A sample, or 0 when the world is ideal.

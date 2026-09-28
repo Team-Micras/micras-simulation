@@ -386,7 +386,7 @@ private:
     double battery_divider{3.0};
 
     /**
-     * @brief Bytes of the last command, to recognise "go" and "stop" in the raw byte stream.
+     * @brief Bytes of the last command, to recognize "go" and "stop" in the raw byte stream.
      */
     std::string command;
 

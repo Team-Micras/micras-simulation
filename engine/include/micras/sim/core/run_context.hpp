@@ -21,7 +21,7 @@ namespace micras::sim {
  * @brief Plain aggregate of what a run advances, with no logic of its own.
  *
  * @note Nothing here is a singleton. A robot target that has to reach the run
- *       from code it cannot construct, such as firmware globals initialised
+ *       from code it cannot construct, such as firmware globals initialized
  *       before main, owns one and hands it to the application.
  */
 struct RunContext {

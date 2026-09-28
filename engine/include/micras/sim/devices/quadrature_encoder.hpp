@@ -18,7 +18,7 @@ namespace micras::sim {
 /**
  * @brief Counts edges of a quadrature output, as a timer in encoder mode does.
  *
- * @note The count is the joint angle quantised to the encoder's resolution; a
+ * @note The count is the joint angle quantized to the encoder's resolution; a
  *       magnet on the wheel axle turns one to one with the wheel, so there is
  *       no backlash between them.
  */

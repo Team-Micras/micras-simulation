@@ -52,13 +52,13 @@ constexpr std::size_t switches_per_row{4};
 }  // namespace
 
 /**
- * @brief Draw a colour swatch for one lamp.
+ * @brief Draw a color swatch for one lamp.
  *
  * @param label Label shown beside it.
- * @param colour Colour to show.
+ * @param color Color to show.
  */
-static void draw_swatch(const std::string& label, const Colour& colour) {
-    const ImVec4 value(colour.red / 255.0F, colour.green / 255.0F, colour.blue / 255.0F, 1.0F);
+static void draw_swatch(const std::string& label, const Color& color) {
+    const ImVec4 value(color.red / 255.0F, color.green / 255.0F, color.blue / 255.0F, 1.0F);
     ImGui::ColorButton(label.c_str(), value, ImGuiColorEditFlags_NoTooltip, ImVec2(24, 24));
     ImGui::SameLine();
     ImGui::TextUnformatted(label.c_str());
@@ -189,7 +189,7 @@ void ControlPanel::draw_board(bool paused) {
     }
 
     for (const PanelLamp& lamp : this->spec.lamps) {
-        draw_swatch(lamp.name, lamp.colour());
+        draw_swatch(lamp.name, lamp.color());
     }
 
     if (not this->spec.readouts.empty()) {

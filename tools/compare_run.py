@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-#: meta.json fields that may differ between two runs of the same behaviour.
+#: meta.json fields that may differ between two runs of the same behavior.
 IGNORED_FIELDS = ("args", "robot_path", "maze_path", "target_dir")
 
 
@@ -50,7 +50,7 @@ def compare_csv(run: bytes, reference: bytes) -> list[str]:
 
 
 def compare_meta(run: dict, reference: dict) -> list[str]:
-    """Compare two meta.json files on every field that describes the behaviour."""
+    """Compare two meta.json files on every field that describes the behavior."""
     problems = []
     for field in sorted((run.keys() | reference.keys()) - set(IGNORED_FIELDS)):
         if run.get(field) != reference.get(field):

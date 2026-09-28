@@ -72,7 +72,7 @@ const std::array<EGLint, 17> config_attributes{
 /**
  * @brief Try to bring up a current OpenGL context on one EGL display.
  *
- * @param display Display to initialise.
+ * @param display Display to initialize.
  * @return True when the context is current and usable.
  */
 static bool make_context_current(EGLDisplay display) {

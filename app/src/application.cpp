@@ -61,7 +61,7 @@ constexpr double default_seconds{10.0};
 constexpr std::string_view default_maze{"maze1"};
 
 /**
- * @brief Gap left between the robot's back and the wall behind it at the start, in metres.
+ * @brief Gap left between the robot's back and the wall behind it at the start, in meters.
  */
 constexpr double start_gap{0.001};
 }  // namespace

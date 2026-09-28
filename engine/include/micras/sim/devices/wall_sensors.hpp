@@ -104,7 +104,7 @@ public:
     void sample(MujocoWorld& world, const Clock& clock) override;
 
     /**
-     * @brief Get the recorded columns: each sensor's lit minus dark reading, as the firmware normalises it.
+     * @brief Get the recorded columns: each sensor's lit minus dark reading, as the firmware normalizes it.
      *
      * @return Column names.
      */
@@ -127,7 +127,7 @@ private:
     };
 
     /**
-     * @brief Farthest distance a ray looks for a surface, in metres.
+     * @brief Farthest distance a ray looks for a surface, in meters.
      */
     static constexpr double cutoff{0.5};
 

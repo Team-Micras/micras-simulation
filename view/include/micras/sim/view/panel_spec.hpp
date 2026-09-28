@@ -15,9 +15,9 @@
 
 namespace micras::sim {
 /**
- * @brief A colour the panel draws.
+ * @brief A color the panel draws.
  */
-struct Colour {
+struct Color {
     uint8_t red{0};
     uint8_t green{0};
     uint8_t blue{0};
@@ -68,9 +68,9 @@ struct PanelLamp {
     std::string name;
 
     /**
-     * @brief Current colour, read every frame.
+     * @brief Current color, read every frame.
      */
-    std::function<Colour()> colour;
+    std::function<Color()> color;
 };
 
 /**

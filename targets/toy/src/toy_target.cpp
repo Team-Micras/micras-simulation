@@ -474,10 +474,10 @@ PanelSpec ToyTarget::make_panel() const {
     };
 
     for (std::size_t index = 0; index < state_name_table.size(); index++) {
-        panel.lamps.push_back({.name = state_name_table.at(index), .colour = [&known, index] {
+        panel.lamps.push_back({.name = state_name_table.at(index), .color = [&known, index] {
                                    return std::to_underlying(known.state) == index ?
-                                              Colour{.red = 60, .green = 220, .blue = 60} :
-                                              Colour{.red = 40, .green = 40, .blue = 40};
+                                              Color{.red = 60, .green = 220, .blue = 60} :
+                                              Color{.red = 40, .green = 40, .blue = 40};
                                }});
     }
 

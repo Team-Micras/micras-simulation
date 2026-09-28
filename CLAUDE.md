@@ -33,7 +33,7 @@ what is compared. Two rules:
   the hash where it was. If it moves, the refactoring is wrong.
 - **Never re-record to make a difference go away.** `sim_record_baseline` (and
   the toy's `micras_sim_toy_record_baseline`) refuses to
-  overwrite a version; a change of behaviour is a new version, with the reason in
+  overwrite a version; a change of behavior is a new version, with the reason in
   the commit.
 
 ## Layers
@@ -183,7 +183,7 @@ resetting a process.
 `hal_host/include/stm32_host.h` holds the handle types and HAL constants. The
 Cube layer the firmware includes (`main.h`, `tim.h`, `adc.h`, ...) is written by
 hand per robot in `targets/micras/cube/`, with the handles configured as
-CubeMX configures them on the board (timer clock 275 MHz, TIM4 centre-aligned at
+CubeMX configures them on the board (timer clock 275 MHz, TIM4 center-aligned at
 PSC 274 / ARR 250, and so on), because the host `Pwm` and `Timer` compute
 frequencies and duties from those registers.
 
@@ -299,32 +299,32 @@ against 54.9 mm with the sensor housings), all on purpose.
 
 Things in `robot.toml` that look arbitrary and are not:
 
-- **The tyres have no rolling friction** (condim 4, not 6). MuJoCo's convex
+- **The tires have no rolling friction** (condim 4, not 6). MuJoCo's convex
   contact separates two surfaces in proportion to how fast their friction is
   slipping, and a rolling wheel keeps a rolling-friction constraint slipping all
-  the time. With it the tyres lost the floor on 18 % of steps at 0.4 m/s and 55 %
+  the time. With it the tires lost the floor on 18 % of steps at 0.4 m/s and 55 %
   at 1.5 m/s, at every timestep tried (125, 62.5 and 31.25 us), and so did a
-  bare sphere. The same separation happens where tyres really slide, in a pivot;
-  a tyre soft enough (`contact_time_constant` 5 ms or more) absorbs it inside its
+  bare sphere. The same separation happens where tires really slide, in a pivot;
+  a tire soft enough (`contact_time_constant` 5 ms or more) absorbs it inside its
   own deflection. 8 ms is the estimate for the 1 mm silicone band. With the old
   2 ms the hopping wheels hardly scrubbed, and a pivot at 0.6 V spun at 3.2 rad/s
   instead of 1.1.
 - **The timestep is 125 us**, one firmware loop. Halving it changed neither
   the contacts nor the trace.
 - **The chassis mass is 62 g**, not 70: the firmware's 70 g and 2.9e-5 kg m^2 are
-  the whole robot, and the wheels are modelled separately.
+  the whole robot, and the wheels are modeled separately.
 - **Each wall sensor has a gain.** `tools/wall_calibration` places the robot
-  where the firmware calibrates (centred in a corridor for the side sensors,
+  where the firmware calibrates (centered in a corridor for the side sensors,
   facing a wall for the front ones) and sets each gain so that the simulated
   reading equals the robot's `reference_readings` in `target.hpp`. Without the
   gains the readings were about four times low and the localizer corrected
   against them. `--sweep` shows how the firmware's distances then follow the
   true ones.
 - **Two skids the CAD does not have.** The robot rests on the edges of its board:
-  the rear one at rest, since the centre of mass is 0.8 mm behind the axle, and
+  the rear one at rest, since the center of mass is 0.8 mm behind the axle, and
   the front one with the fan on, since the fan pulls 17.5 mm ahead of it. Two
   1 mm spheres stand in for those edges. They are frictionless because a sliding
-  frictional contact separates in MuJoCo like the tyres above; the board's own
+  frictional contact separates in MuJoCo like the tires above; the board's own
   friction would lift it off the floor.
 - **The fan pulls straight down**, not along the board's normal: its actuator's
   reference is a site fixed in the world. With the fan on, the board tilts onto
@@ -332,7 +332,7 @@ Things in `robot.toml` that look arbitrary and are not:
   the robot the friction of the board edge holds that. On the frictionless skids
   it rolled the robot 4 mm into the back wall while it waited 5 s for the fan.
 - **The fan's 3 N is the owner's figure**, at full speed on the charged pack
-  (`nominal_voltage` 12.3 V). The nose carries a third of it, so the tyres get
+  (`nominal_voltage` 12.3 V). The nose carries a third of it, so the tires get
   2 N, and they sink 0.15 mm into the floor under it. Their rolling radius is
   then 0.6 % short of 11 mm, and the firmware's odometry runs 0.6 % long with the
   fan on. The same is expected of the real band, so calibrate the wheel radius
@@ -460,9 +460,9 @@ What the firmware does that the fast modes depend on, each with its evidence in 
 firmware commit that made it:
 - **The edge tracker times a wall edge by the reading and only names it from the map.**
   An edge is the only reference along a corridor.
-- **The odometry rolls on a radius the load flattens.** With the fan the tyres carry
+- **The odometry rolls on a radius the load flattens.** With the fan the tires carry
   four times the load.
-- **Boost asks for 0.65 of the traction.** More slides the tyres sideways in the turns.
+- **Boost asks for 0.65 of the traction.** More slides the tires sideways in the turns.
 - **The wall observer keeps voting through the search turns**, so the search never
   stops in a cell to look.
 - **A range is corrected for the angle it meets the wall at.** Along a diagonal the
@@ -471,7 +471,7 @@ firmware commit that made it:
   when another is as fast for every route. The planner advances by edges, and
   `sim_turn_designs` designs the turns, which the firmware's build checks.
 - **Turns are braked and accelerated through as their curvature allows.**
-- **The tyres slide to the outside of a curve**, 4.8 mm/s per m/s^2 of lateral
+- **The tires slide to the outside of a curve**, 4.8 mm/s per m/s^2 of lateral
   acceleration. The localizer predicts it and the controller points into it.
 - **The racing line**, through the cells of the planned route, at 0.8 of the lateral
   grip and 15 mm from the walls. With risky on, the line goes through the route planned
@@ -484,19 +484,19 @@ Findings worth checking on the robot:
    the receiver's lobe is 10 degrees, so the reading falls slower than 1/d^2. The
    firmware models it (`receiver_offset`, `receiver_half_angle`). A bench sweep
    toward a wall confirms both.
-2. **The rolling radius.** 56 um less per newton on a tyre in the simulation. Driving a
+2. **The rolling radius.** 56 um less per newton on a tire in the simulation. Driving a
    known distance with the fan on and off measures the real one.
 3. **The fan tips the robot onto its nose.** It pulls 17.5 mm ahead of the axle,
-   and a thin-gap flow estimate puts its centre of suction at 14 to 16 mm. So a
+   and a thin-gap flow estimate puts its center of suction at 14 to 16 mm. So a
    third of the 3 N rests on the front edge of the board, which also drags. Scales
    under the wheels and under the nose, with the fan running, measure the share.
 4. **A wall start is seen early.** Toward the start of a wall a diagonal sensor also
    lights the wall's end face, by the wall thickness times the slope of the beam.
 5. **Past 120 mm the readings come out long**, because part of the beam lands on the
    floor. The localizer stops at 120 mm and the wall observer at 130 mm.
-6. **The mass, inertia and tyre friction are estimates**, and so is the fan's
+6. **The mass, inertia and tire friction are estimates**, and so is the fan's
    position. `robot-report` lists what differs from the firmware's belief.
-7. **The lateral compliance of the tyres.** `robot.hpp` has the simulation's 4.8 mm/s per
+7. **The lateral compliance of the tires.** `robot.hpp` has the simulation's 4.8 mm/s per
    m/s^2. A circle of known radius driven at a few speeds with the fan on measures the real
    one, and the racing line depends on it.
 
@@ -507,7 +507,7 @@ Findings worth checking on the robot:
   FSM, the maze map and the flash all carry state.
 - **The firmware's hardware tests are not built.** The design supports
   them, since each is a program with its own `main` over the same HAL, but
-  `test_imu` spins forever when the IMU is not initialised and two tests were
+  `test_imu` spins forever when the IMU is not initialized and two tests were
   deleted upstream; they are out of scope for now.
 - **No minimum wall clearance in the baselines.** The event log has collisions,
   but nothing measures the distance to the nearest wall yet.

@@ -113,7 +113,7 @@ struct RunMetadata {
     /**
      * @brief Frames dropped because a connected monitor did not keep up.
      *
-     * @note Not behaviour: frames leave after the tick and never reach the firmware.
+     * @note Not behavior: frames leave after the tick and never reach the firmware.
      */
     uint64_t bridge_dropped_frames{0};
 

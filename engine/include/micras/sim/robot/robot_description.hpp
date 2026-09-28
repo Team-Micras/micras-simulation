@@ -15,7 +15,7 @@
 
 namespace micras::sim {
 /**
- * @brief A point or a direction in the robot frame, in metres.
+ * @brief A point or a direction in the robot frame, in meters.
  */
 using Vector3 = std::array<double, 3>;
 
@@ -209,7 +209,7 @@ struct IntegrationDescription {
  *
  * @note Frames follow the firmware's robot model: x forward, y left, z up, the
  *       origin on the floor under the midpoint of the wheel axle. Every length is
- *       in metres, every angle in radians. Each value in the file is a number, an
+ *       in meters, every angle in radians. Each value in the file is a number, an
  *       array, or a table { value = ..., source = "..." } naming where it came
  *       from: a datasheet, the CAD, the firmware, the owner, or an estimate.
  */

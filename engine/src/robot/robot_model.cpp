@@ -80,12 +80,12 @@ static std::string chassis_geoms(const RobotDescription& robot, const RobotModel
  * @param side +1 for the left wheel, -1 for the right one.
  * @return MJCF of the wheel.
  *
- * @note The tyre has sliding and torsional friction but no rolling friction
+ * @note The tire has sliding and torsional friction but no rolling friction
  *       (condim 4, not 6). MuJoCo's convex contact separates two surfaces in
  *       proportion to how fast their friction is slipping, and a rolling wheel
- *       keeps a rolling-friction constraint slipping all the time, so the tyre
- *       would hop. The same separation during a pivot, where the tyres really
- *       do scrub, is absorbed by a soft enough tyre, which is part of why
+ *       keeps a rolling-friction constraint slipping all the time, so the tire
+ *       would hop. The same separation during a pivot, where the tires really
+ *       do scrub, is absorbed by a soft enough tire, which is part of why
  *       contact_time_constant is what it is.
  */
 static std::string wheel_body(const RobotDescription& robot, const std::string& name, double side) {

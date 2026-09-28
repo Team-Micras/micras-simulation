@@ -153,7 +153,7 @@ static bool apply_video_option(const std::string& argument, const ValueReader& v
 }
 
 /**
- * @brief Reject an option combination the run could not honour.
+ * @brief Reject an option combination the run could not honor.
  *
  * @param options Options as parsed.
  */

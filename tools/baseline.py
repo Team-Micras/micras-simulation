@@ -17,7 +17,7 @@ A baseline is one ``summary.json`` per scenario:
 
 The tolerances are written into the summary when it is recorded, so a reviewer
 sees them next to the values. ``record`` refuses to overwrite a summary: a new
-behaviour is a new baseline version, never a re-recording that makes a
+behavior is a new baseline version, never a re-recording that makes a
 difference go away.
 
 The robot's plugin is found as ``analyze.py`` finds it: ``--plugin``, then

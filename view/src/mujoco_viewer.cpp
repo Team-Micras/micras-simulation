@@ -52,7 +52,7 @@ namespace {
 /**
  * @brief Count how many GLFW users are still up.
  *
- * @note Unsynchronised because viewers are only ever built and destroyed on the
+ * @note Unsynchronized because viewers are only ever built and destroyed on the
  *       simulation thread, which is also the only thread GLFW may be called
  *       from.
  */
@@ -74,7 +74,7 @@ std::unique_ptr<MujocoViewer> MujocoViewer::create(
     });
 
     if (glfw_users == 0 and glfwInit() == GLFW_FALSE) {
-        error = glfw_error.empty() ? "could not initialise GLFW; is a display available?" : glfw_error;
+        error = glfw_error.empty() ? "could not initialize GLFW; is a display available?" : glfw_error;
         return nullptr;
     }
 
