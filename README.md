@@ -127,7 +127,7 @@ The Micras scenarios:
 | `explore_stop_turn` | an exploration stopped halfway through a search turn, which it brakes along |
 | `explore_stop_spin` | an exploration stopped as it turns around in place at a dead end |
 | `explore_stop_save` | an exploration stopped while it saves the map at the goal: the stop waits for the save |
-| `explore_stop_twice` | an exploration stopped on a straight at 1 m/s and stopped again during the brake: the motors are cut and it coasts |
+| `explore_stop_twice` | an exploration stopped on a straight at 1 m/s and stopped again 100 ms into the brake: the brake is dropped and the motors are shorted until it is at rest |
 | `explore_stop_press` | an exploration stopped on a straight at 1 m/s with a press of the button during the brake, which is forgotten |
 | `calibrate_stop` | the calibration of the wall sensors, stopped while it measures the side sensors |
 | `gyroscope_stop` | the calibration of the gyroscope, stopped halfway through its turn at 12 rad/s |
@@ -143,10 +143,12 @@ The Micras scenarios:
 
 A stop over the radio brakes a robot that drives its motors to a standstill in
 BRAKE before it is idle, and the Micras analysis reports how far, how much it
-turned and how long it took from the stop to rest. The stop scenarios are checked
-runs; the `solve_stop` ones are recorded one row a millisecond (`--record-every 8`),
-which keeps their 90 s small. `targets/micras/baselines/README.md` lists what each
-baseline version recorded.
+turned and how long it took from the stop to rest. A second stop during the
+brake trusts neither the path nor the pose: the firmware shorts the motors
+through the bridge, with the drivers on, until the robot has settled. The stop
+scenarios are checked runs; the `solve_stop` ones are recorded one row a
+millisecond (`--record-every 8`), which keeps their 90 s small.
+`targets/micras/baselines/README.md` lists what each baseline version recorded.
 
 ```bash
 ./build/host-release/targets/micras/micras_sim --scenario targets/micras/scenarios/explore_solve.toml \

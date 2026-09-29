@@ -1,6 +1,6 @@
 # An exploration stopped over the radio on a straight at its top speed, 1 m/s, and stopped again a
-# tenth of a second into the brake, at half that speed: the second stop does not wait for the brake,
-# it turns the motors off at once and the robot coasts to rest, about 0.25 m and a second later.
+# tenth of a second into the brake, at half that speed: the second stop drops the brake and shorts
+# the motors, which bring the robot to rest in a straight line without the path or the pose.
 robot = "micras"
 arena = "maze1"
 seconds = 12
