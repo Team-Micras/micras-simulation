@@ -127,11 +127,15 @@ The Micras scenarios:
 | `explore_stop_turn` | an exploration stopped halfway through a search turn, which it brakes along |
 | `explore_stop_spin` | an exploration stopped as it turns around in place at a dead end |
 | `explore_stop_save` | an exploration stopped while it saves the map at the goal: the stop waits for the save |
+| `explore_stop_twice` | an exploration stopped on a straight at 1 m/s and stopped again during the brake: the motors are cut and it coasts |
+| `explore_stop_press` | an exploration stopped on a straight at 1 m/s with a press of the button during the brake, which is forgotten |
 | `calibrate_stop` | the calibration of the wall sensors, stopped while it measures the side sensors |
 | `gyroscope_stop` | the calibration of the gyroscope, stopped halfway through its turn at 12 rad/s |
 | `identify_stop` | the identification of the drive train, stopped as it drives forward at 1.5 m/s |
 | `solve_unmapped` | a fastest run with no map: stopped while it plans, then left in ERROR and taken out of it |
 | `solve_stop` | the whole contest, stopped in the fastest run on a straight at 3 m/s |
+| `solve_stop_turn` | the same, stopped halfway through a turn at 2.6 m/s, braked along it and on along the route |
+| `solve_stop_line` | the whole contest on the racing line, stopped as the line bends at 3 m/s |
 | `explore_solve` | the whole contest: explore, come back, then a long press for the fastest run, with the fan switch on |
 | `explore_solve_all` | the same with every switch of the fast run on: fan, racing line, boost and risky turns |
 | `solve` | the fastest run alone, from a map a previous run saved: pass its `--flash` |
@@ -140,8 +144,9 @@ The Micras scenarios:
 A stop over the radio brakes a robot that drives its motors to a standstill in
 BRAKE before it is idle, and the Micras analysis reports how far, how much it
 turned and how long it took from the stop to rest. The stop scenarios are checked
-runs; `solve_stop` is recorded one row a millisecond (`--record-every 8`), which
-keeps its 90 s small.
+runs; the `solve_stop` ones are recorded one row a millisecond (`--record-every 8`),
+which keeps their 90 s small. `targets/micras/baselines/README.md` lists what each
+baseline version recorded.
 
 ```bash
 ./build/host-release/targets/micras/micras_sim --scenario targets/micras/scenarios/explore_solve.toml \

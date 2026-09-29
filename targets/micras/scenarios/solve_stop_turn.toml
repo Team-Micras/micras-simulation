@@ -1,0 +1,45 @@
+# The whole contest of explore_solve, stopped over the radio in the fastest run halfway through a turn
+# driven at 2.6 m/s with the fan: the turn is driven at the speed its bending allows, so the robot
+# brakes along it as the bending eases, to the end of the turn, and goes on braking along the route.
+# The time is absolute and only lands in that turn because the run is reproducible; the stop speed
+# of the baseline shows that it still does. A row every millisecond keeps the 90 s of the run small.
+robot = "micras"
+arena = "maze1"
+seconds = 100
+seed = 1
+
+# Where the firmware expects to be placed (constants.hpp start_offset): its origin
+# about 40 mm in front of the face of the back wall, the board clear of it.
+[start]
+x = 0.09
+y = 0.0463
+yaw_deg = 90.0
+
+[[events]]
+at = 0.1
+set = "dip_fan"
+value = true
+
+[[events]]
+at = 0.5
+press = "button"
+for = 0.25
+
+[[events]]
+at = 5.0
+when = "state"
+equals = "IDLE"
+press = "button"
+for = 1.0
+
+[[events]]
+at = 89.58
+when = "state"
+equals = "RUN"
+send = "stop"
+
+[stop]
+when = "state"
+equals = "IDLE"
+after = 90.7
+abort = "ERROR"

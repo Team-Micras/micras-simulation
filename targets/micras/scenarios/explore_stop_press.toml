@@ -1,0 +1,32 @@
+# An exploration stopped over the radio on a straight at its top speed, 1 m/s, with a short press of
+# the button while the robot brakes: the press is forgotten when the brake ends, so the robot stays
+# idle instead of starting another exploration.
+robot = "micras"
+arena = "maze1"
+seconds = 12
+seed = 1
+
+# Where the firmware expects to be placed (constants.hpp start_offset): its origin
+# about 40 mm in front of the face of the back wall, the board clear of it.
+[start]
+x = 0.09
+y = 0.0463
+yaw_deg = 90.0
+
+[[events]]
+at = 0.5
+send = "explore"
+
+[[events]]
+at = 8.81
+send = "stop"
+
+[[events]]
+at = 8.83
+press = "button"
+for = 0.1
+
+[stop]
+when = "state"
+equals = ["IDLE", "ERROR"]
+after = 10.0
