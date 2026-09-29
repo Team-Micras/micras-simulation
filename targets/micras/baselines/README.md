@@ -1,0 +1,16 @@
+# Micras baselines
+
+Each version holds one `summary.json` per checked run (`CLAUDE.md` says what a summary is and why a
+version is never recorded again). `MICRAS_SIM_BASELINE` in `targets/micras/CMakeLists.txt` names the
+version the gate compares with; the others stay as they were recorded.
+
+| Version | Firmware | Runs | What changed |
+|---|---|---|---|
+| v1 | `4deedba` | idle, explore | the navigation of the firmware after the fourth review of #54 |
+| v2 | `4dac6e2` | idle, explore | the firmware's own SPI chip proxies over the chip models |
+| v3 | `af5f629` | idle, explore, explore_stop | the second version of the link protocol, and an exploration stopped over the radio |
+| v4 | `92ddffa` | v3 and every stop scenario | a stop brakes a moving robot to rest in BRAKE before it is idle |
+| v5 | `8ae3bbd` | v4, explore_stop_twice, explore_stop_press, solve_stop_turn, solve_stop_line | the review of the brake: a braked curve runs right to its end with the sharpest bending of each step, the gyroscope calibration holds the angle it braked to until the robot is at rest, a second stop during the brake cuts the motors, a press of the button during the brake is forgotten, and the link clock is read right after a save |
+
+v4 was recorded with `92ddffa` while the submodule had moved on to `5ee37e2`, whose link clock
+changes no run; v5 is recorded with the firmware the submodule points at.
