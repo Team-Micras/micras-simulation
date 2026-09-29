@@ -1,0 +1,449 @@
+# An exploration stopped over the radio on a straight at its top speed, 1 m/s, and stopped again
+# 50 ms into the brake, still at 0.76 m/s: the wheels are ramped to rest well before the wall at the
+# end of the straight, which a robot left to coast from there hits. A stop every 10 ms after that
+# only confirms the wheel brake: it neither restarts the ramp nor clears the time the robot has
+# been at rest, so the robot is idle as soon as after a single second stop.
+robot = "micras"
+arena = "maze1"
+seconds = 12
+seed = 1
+
+# Where the firmware expects to be placed (constants.hpp start_offset): its origin
+# about 40 mm in front of the face of the back wall, the board clear of it.
+[start]
+x = 0.09
+y = 0.0463
+yaw_deg = 90.0
+
+[[events]]
+at = 0.5
+send = "explore"
+
+[[events]]
+at = 8.81
+send = "stop"
+
+[[events]]
+at = 8.86
+send = "stop"
+
+[[events]]
+at = 8.87
+send = "stop"
+
+[[events]]
+at = 8.88
+send = "stop"
+
+[[events]]
+at = 8.89
+send = "stop"
+
+[[events]]
+at = 8.90
+send = "stop"
+
+[[events]]
+at = 8.91
+send = "stop"
+
+[[events]]
+at = 8.92
+send = "stop"
+
+[[events]]
+at = 8.93
+send = "stop"
+
+[[events]]
+at = 8.94
+send = "stop"
+
+[[events]]
+at = 8.95
+send = "stop"
+
+[[events]]
+at = 8.96
+send = "stop"
+
+[[events]]
+at = 8.97
+send = "stop"
+
+[[events]]
+at = 8.98
+send = "stop"
+
+[[events]]
+at = 8.99
+send = "stop"
+
+[[events]]
+at = 9.00
+send = "stop"
+
+[[events]]
+at = 9.01
+send = "stop"
+
+[[events]]
+at = 9.02
+send = "stop"
+
+[[events]]
+at = 9.03
+send = "stop"
+
+[[events]]
+at = 9.04
+send = "stop"
+
+[[events]]
+at = 9.05
+send = "stop"
+
+[[events]]
+at = 9.06
+send = "stop"
+
+[[events]]
+at = 9.07
+send = "stop"
+
+[[events]]
+at = 9.08
+send = "stop"
+
+[[events]]
+at = 9.09
+send = "stop"
+
+[[events]]
+at = 9.10
+send = "stop"
+
+[[events]]
+at = 9.11
+send = "stop"
+
+[[events]]
+at = 9.12
+send = "stop"
+
+[[events]]
+at = 9.13
+send = "stop"
+
+[[events]]
+at = 9.14
+send = "stop"
+
+[[events]]
+at = 9.15
+send = "stop"
+
+[[events]]
+at = 9.16
+send = "stop"
+
+[[events]]
+at = 9.17
+send = "stop"
+
+[[events]]
+at = 9.18
+send = "stop"
+
+[[events]]
+at = 9.19
+send = "stop"
+
+[[events]]
+at = 9.20
+send = "stop"
+
+[[events]]
+at = 9.21
+send = "stop"
+
+[[events]]
+at = 9.22
+send = "stop"
+
+[[events]]
+at = 9.23
+send = "stop"
+
+[[events]]
+at = 9.24
+send = "stop"
+
+[[events]]
+at = 9.25
+send = "stop"
+
+[[events]]
+at = 9.26
+send = "stop"
+
+[[events]]
+at = 9.27
+send = "stop"
+
+[[events]]
+at = 9.28
+send = "stop"
+
+[[events]]
+at = 9.29
+send = "stop"
+
+[[events]]
+at = 9.30
+send = "stop"
+
+[[events]]
+at = 9.31
+send = "stop"
+
+[[events]]
+at = 9.32
+send = "stop"
+
+[[events]]
+at = 9.33
+send = "stop"
+
+[[events]]
+at = 9.34
+send = "stop"
+
+[[events]]
+at = 9.35
+send = "stop"
+
+[[events]]
+at = 9.36
+send = "stop"
+
+[[events]]
+at = 9.37
+send = "stop"
+
+[[events]]
+at = 9.38
+send = "stop"
+
+[[events]]
+at = 9.39
+send = "stop"
+
+[[events]]
+at = 9.40
+send = "stop"
+
+[[events]]
+at = 9.41
+send = "stop"
+
+[[events]]
+at = 9.42
+send = "stop"
+
+[[events]]
+at = 9.43
+send = "stop"
+
+[[events]]
+at = 9.44
+send = "stop"
+
+[[events]]
+at = 9.45
+send = "stop"
+
+[[events]]
+at = 9.46
+send = "stop"
+
+[[events]]
+at = 9.47
+send = "stop"
+
+[[events]]
+at = 9.48
+send = "stop"
+
+[[events]]
+at = 9.49
+send = "stop"
+
+[[events]]
+at = 9.50
+send = "stop"
+
+[[events]]
+at = 9.51
+send = "stop"
+
+[[events]]
+at = 9.52
+send = "stop"
+
+[[events]]
+at = 9.53
+send = "stop"
+
+[[events]]
+at = 9.54
+send = "stop"
+
+[[events]]
+at = 9.55
+send = "stop"
+
+[[events]]
+at = 9.56
+send = "stop"
+
+[[events]]
+at = 9.57
+send = "stop"
+
+[[events]]
+at = 9.58
+send = "stop"
+
+[[events]]
+at = 9.59
+send = "stop"
+
+[[events]]
+at = 9.60
+send = "stop"
+
+[[events]]
+at = 9.61
+send = "stop"
+
+[[events]]
+at = 9.62
+send = "stop"
+
+[[events]]
+at = 9.63
+send = "stop"
+
+[[events]]
+at = 9.64
+send = "stop"
+
+[[events]]
+at = 9.65
+send = "stop"
+
+[[events]]
+at = 9.66
+send = "stop"
+
+[[events]]
+at = 9.67
+send = "stop"
+
+[[events]]
+at = 9.68
+send = "stop"
+
+[[events]]
+at = 9.69
+send = "stop"
+
+[[events]]
+at = 9.70
+send = "stop"
+
+[[events]]
+at = 9.71
+send = "stop"
+
+[[events]]
+at = 9.72
+send = "stop"
+
+[[events]]
+at = 9.73
+send = "stop"
+
+[[events]]
+at = 9.74
+send = "stop"
+
+[[events]]
+at = 9.75
+send = "stop"
+
+[[events]]
+at = 9.76
+send = "stop"
+
+[[events]]
+at = 9.77
+send = "stop"
+
+[[events]]
+at = 9.78
+send = "stop"
+
+[[events]]
+at = 9.79
+send = "stop"
+
+[[events]]
+at = 9.80
+send = "stop"
+
+[[events]]
+at = 9.81
+send = "stop"
+
+[[events]]
+at = 9.82
+send = "stop"
+
+[[events]]
+at = 9.83
+send = "stop"
+
+[[events]]
+at = 9.84
+send = "stop"
+
+[[events]]
+at = 9.85
+send = "stop"
+
+[[events]]
+at = 9.86
+send = "stop"
+
+[[events]]
+at = 9.87
+send = "stop"
+
+[[events]]
+at = 9.88
+send = "stop"
+
+[[events]]
+at = 9.89
+send = "stop"
+
+[[events]]
+at = 9.90
+send = "stop"
+
+[stop]
+when = "state"
+equals = ["IDLE", "ERROR"]
+after = 10.8

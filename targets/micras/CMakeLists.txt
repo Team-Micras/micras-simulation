@@ -161,8 +161,9 @@ if(PROJECT_IS_TOP_LEVEL)
     set(MICRAS_SIM_BASELINE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/baselines/${MICRAS_SIM_BASELINE}")
     set(MICRAS_SIM_STOP_RUNS
         explore_stop explore_stop_straight explore_stop_turn explore_stop_spin explore_stop_save explore_stop_twice
-        explore_stop_twice_early explore_stop_press calibrate_stop gyroscope_stop identify_stop solve_unmapped
-        solve_stop solve_stop_twice solve_stop_turn solve_stop_line
+        explore_stop_twice_early explore_stop_twice_repeated explore_stop_press calibrate_stop gyroscope_stop
+        identify_stop identify_stop_twice solve_unmapped solve_stop solve_stop_twice solve_stop_turn solve_stop_line
+        solve_stop_line_twice
     )
     set(MICRAS_SIM_CHECKED_RUNS idle explore ${MICRAS_SIM_STOP_RUNS})
     set(MICRAS_SIM_EXPLORE_SECONDS 30)
