@@ -127,15 +127,15 @@ The Micras scenarios:
 | `explore_stop_turn` | an exploration stopped halfway through a search turn, which it brakes along |
 | `explore_stop_spin` | an exploration stopped as it turns around in place at a dead end |
 | `explore_stop_save` | an exploration stopped while it saves the map at the goal: the stop waits for the save |
-| `explore_stop_twice` | an exploration stopped on a straight at 1 m/s and stopped again 100 ms into the brake: the brake is dropped and the motors are shorted until it is at rest |
-| `explore_stop_twice_early` | the same, stopped again 50 ms into the brake, at 0.76 m/s: the shorted motors stop it before the wall a coasting robot hits |
+| `explore_stop_twice` | an exploration stopped on a straight at 1 m/s and stopped again 100 ms into the brake: the brake is dropped and the wheels are ramped to rest, then the motors are shorted until it has settled |
+| `explore_stop_twice_early` | the same, stopped again 50 ms into the brake, at 0.76 m/s: the wheels stop it well before the wall a coasting robot hits |
 | `explore_stop_press` | an exploration stopped on a straight at 1 m/s with a press of the button during the brake, which is forgotten |
 | `calibrate_stop` | the calibration of the wall sensors, stopped while it measures the side sensors |
 | `gyroscope_stop` | the calibration of the gyroscope, stopped halfway through its turn at 12 rad/s |
 | `identify_stop` | the identification of the drive train, stopped as it drives forward at 1.5 m/s |
 | `solve_unmapped` | a fastest run with no map: stopped while it plans, then left in ERROR and taken out of it |
 | `solve_stop` | the whole contest, stopped in the fastest run on a straight at 3 m/s |
-| `solve_stop_twice` | the same, stopped again 50 ms into the brake: the motors are shorted, clear of the walls |
+| `solve_stop_twice` | the same, stopped again 50 ms into the brake: the wheels are ramped to rest about as short as the brake along the route, clear of the walls |
 | `solve_stop_turn` | the same, stopped halfway through a turn at 2.6 m/s, braked along it and on along the route |
 | `solve_stop_line` | the whole contest on the racing line, stopped as the line bends at 3 m/s |
 | `explore_solve` | the whole contest: explore, come back, then a long press for the fastest run, with the fan switch on |
@@ -146,11 +146,13 @@ The Micras scenarios:
 A stop over the radio brakes a robot that drives its motors to a standstill in
 BRAKE before it is idle, and the Micras analysis reports how far, how much it
 turned and how long it took from the stop to rest. A second stop during the
-brake trusts neither the path nor the pose: the firmware shorts the motors
-through the bridge, with the drivers on, until the robot has settled. The stop
-scenarios are checked runs; the `solve_stop` ones are recorded one row a
-millisecond (`--record-every 8`), which keeps their 90 s small.
-`targets/micras/baselines/README.md` lists what each baseline version recorded.
+brake trusts neither the path nor the pose: the firmware ramps the speeds the
+wheels and the gyroscope measure down to rest through the loop on the speeds
+alone, then shorts the motors through the bridge, with the drivers on, until the
+robot has settled. The stop scenarios are checked runs; the `solve_stop` ones
+are recorded one row a millisecond (`--record-every 8`), which keeps their 90 s
+small. `targets/micras/baselines/README.md` lists what each baseline version
+recorded.
 
 ```bash
 ./build/host-release/targets/micras/micras_sim --scenario targets/micras/scenarios/explore_solve.toml \

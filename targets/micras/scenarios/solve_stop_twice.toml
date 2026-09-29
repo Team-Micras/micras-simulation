@@ -1,8 +1,9 @@
 # The whole contest of explore_solve, stopped over the radio in the fastest run on a straight at its
 # top speed, 3 m/s with the fan, and stopped again 50 ms into the brake: the second stop drops the
-# brake along the route and shorts the motors, which bring the robot to rest clear of the walls. The
-# time is absolute and only lands on that straight because the run is reproducible; the stop speed
-# of the baseline shows that it still does. A row every millisecond keeps the 90 s of the run small.
+# brake along the route and ramps the wheels to rest, about as short as that brake and clear of the
+# walls. The time is absolute and only lands on that straight because the run is reproducible; the
+# stop speed of the baseline shows that it still does. A row every millisecond keeps the 90 s of the
+# run small.
 robot = "micras"
 arena = "maze1"
 seconds = 100

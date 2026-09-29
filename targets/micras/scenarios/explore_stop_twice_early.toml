@@ -1,6 +1,6 @@
 # An exploration stopped over the radio on a straight at its top speed, 1 m/s, and stopped again
-# 50 ms into the brake, still at 0.76 m/s: the shorted motors bring the robot to rest before the
-# wall at the end of the straight, which a robot left to coast from there hits.
+# 50 ms into the brake, still at 0.76 m/s: the wheels are ramped to rest well before the wall at the
+# end of the straight, which a robot left to coast from there hits.
 robot = "micras"
 arena = "maze1"
 seconds = 12
