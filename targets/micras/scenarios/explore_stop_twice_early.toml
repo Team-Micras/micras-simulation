@@ -1,0 +1,31 @@
+# An exploration stopped over the radio on a straight at its top speed, 1 m/s, and stopped again
+# 50 ms into the brake, still at 0.76 m/s: the shorted motors bring the robot to rest before the
+# wall at the end of the straight, which a robot left to coast from there hits.
+robot = "micras"
+arena = "maze1"
+seconds = 12
+seed = 1
+
+# Where the firmware expects to be placed (constants.hpp start_offset): its origin
+# about 40 mm in front of the face of the back wall, the board clear of it.
+[start]
+x = 0.09
+y = 0.0463
+yaw_deg = 90.0
+
+[[events]]
+at = 0.5
+send = "explore"
+
+[[events]]
+at = 8.81
+send = "stop"
+
+[[events]]
+at = 8.86
+send = "stop"
+
+[stop]
+when = "state"
+equals = ["IDLE", "ERROR"]
+after = 10.8
