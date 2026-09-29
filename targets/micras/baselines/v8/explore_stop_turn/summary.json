@@ -1,0 +1,66 @@
+{
+  "target": "micras",
+  "scenario": "explore_stop_turn.toml",
+  "args": "--scenario explore_stop_turn.toml --out explore_stop_turn",
+  "firmware_sha": "792ccbccf72557ce1d0ceff1136ef05c06fc8aa8",
+  "mujoco_version": "3.14.0",
+  "compiler": "GNU 15.2.0",
+  "data_sha256": "ea291615d96eb5777983120429fe630614cea94fcc453258b2fb286a863d264d",
+  "states": [
+    [
+      0.040125,
+      "INIT"
+    ],
+    [
+      0.04025,
+      "IDLE"
+    ],
+    [
+      0.501,
+      "WAIT_FOR_RUN"
+    ],
+    [
+      3.50213,
+      "RUN"
+    ],
+    [
+      7.091,
+      "BRAKE"
+    ],
+    [
+      7.44175,
+      "IDLE"
+    ]
+  ],
+  "values": {
+    "ticks": 64800,
+    "warnings_total": 0,
+    "collisions": 0,
+    "goal_time": null,
+    "stopped_at": 8.1,
+    "unbound_ports": 0,
+    "running_time": 3.588749999998011,
+    "max_pose_error": 0.002521979987962763,
+    "rms_across_error": 0.0005266812385772842,
+    "stop_speed": 0.6263032494793744,
+    "stopping_distance": 0.11802607212312205,
+    "stopping_angle": 0.86533713,
+    "stopping_time": 0.31912499999999966
+  },
+  "tolerances": {
+    "state_time": 0.25,
+    "ticks": null,
+    "warnings_total": null,
+    "collisions": 2,
+    "goal_time": 1.0,
+    "stopped_at": 1.0,
+    "unbound_ports": null,
+    "running_time": 1.0,
+    "max_pose_error": 0.02,
+    "rms_across_error": 0.003,
+    "stop_speed": 0.05,
+    "stopping_distance": 0.01,
+    "stopping_angle": 0.1,
+    "stopping_time": 0.1
+  }
+}
