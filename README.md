@@ -244,6 +244,11 @@ bytes both ways, with no framing of its own: micras-monitor speaks the
 firmware's protocol to it exactly as it would over the air. The link is as fast
 as the radio's baud rate, not faster.
 
+One monitor holds the link at a time, as one peer pairs with the radio: a monitor
+that connects takes it, and the one that held it is closed with code 4001 and the
+reason `another monitor took the link`, which micras-monitor shows instead of
+reconnecting.
+
 ## Robot tools
 
 ```bash

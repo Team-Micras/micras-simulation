@@ -17,7 +17,6 @@
     #include <mutex>
     #include <thread>
 
-    #include <ixwebsocket/IXConnectionState.h>
     #include <ixwebsocket/IXWebSocket.h>
     #include <ixwebsocket/IXWebSocketMessage.h>
     #include <ixwebsocket/IXWebSocketMessageType.h>
@@ -36,11 +35,44 @@ struct WebSocketServer::Impl {
      */
     void send_loop();
 
+    /**
+     * @brief Give the radio to a client that just connected.
+     *
+     * @param client The client.
+     * @return The client that held it before, null when none did.
+     */
+    const ix::WebSocket* take_radio(const ix::WebSocket& client);
+
+    /**
+     * @brief Free the radio when the client that holds it leaves.
+     *
+     * @param client The client that left.
+     */
+    void unpair(const ix::WebSocket& client);
+
+    /**
+     * @brief Get whether a client holds the radio.
+     *
+     * @param client The client.
+     * @return True when it does.
+     */
+    bool holds_radio(const ix::WebSocket& client);
+
+    /**
+     * @brief Give the radio to a client that connects and close the one that
+     *        held it, free it when its holder leaves, and hand on the binary
+     *        frames of its holder.
+     *
+     * @param client The client the message is about.
+     * @param message What happened.
+     */
+    void on_message(ix::WebSocket& client, const ix::WebSocketMessage& message);
+
     std::unique_ptr<ix::WebSocketServer> server;
     BinaryHandler                        on_binary;
 
     /**
-     * @brief Guards the queue, the drop counter and the stop flag.
+     * @brief Guards the queue, the drop counter, the stop flag and the peer.
      */
     std::mutex mutex;
 
@@ -65,6 +97,11 @@ struct WebSocketServer::Impl {
     bool stopping{false};
 
     /**
+     * @brief The client that holds the radio, null while none does.
+     */
+    const ix::WebSocket* peer{nullptr};
+
+    /**
      * @brief Drains the queue into the clients.
      */
     std::thread sender;
@@ -72,7 +109,8 @@ struct WebSocketServer::Impl {
 
 void WebSocketServer::Impl::send_loop() {
     while (true) {
-        std::string frame;
+        std::string          frame;
+        const ix::WebSocket* receiver{};
 
         {
             std::unique_lock lock(this->mutex);
@@ -84,12 +122,63 @@ void WebSocketServer::Impl::send_loop() {
 
             frame = std::move(this->frames.front());
             this->frames.pop_front();
+            receiver = this->peer;
         }
 
         for (const auto& client : this->server->getClients()) {
-            client->sendBinary(frame);
+            if (client.get() == receiver) {
+                client->sendBinary(frame);
+            }
         }
     }
+}
+
+const ix::WebSocket* WebSocketServer::Impl::take_radio(const ix::WebSocket& client) {
+    const std::scoped_lock lock(this->mutex);
+    return std::exchange(this->peer, &client);
+}
+
+void WebSocketServer::Impl::unpair(const ix::WebSocket& client) {
+    const std::scoped_lock lock(this->mutex);
+
+    if (this->peer == &client) {
+        this->peer = nullptr;
+    }
+}
+
+bool WebSocketServer::Impl::holds_radio(const ix::WebSocket& client) {
+    const std::scoped_lock lock(this->mutex);
+    return this->peer == &client;
+}
+
+void WebSocketServer::Impl::on_message(ix::WebSocket& client, const ix::WebSocketMessage& message) {
+    if (message.type == ix::WebSocketMessageType::Open) {
+        const ix::WebSocket* previous = this->take_radio(client);
+
+        for (const auto& other : this->server->getClients()) {
+            if (previous != nullptr and other.get() == previous) {
+                other->close(taken_over_close_code, std::string{taken_over_reason});
+            }
+        }
+
+        return;
+    }
+
+    if (message.type == ix::WebSocketMessageType::Close) {
+        this->unpair(client);
+        return;
+    }
+
+    if (message.type != ix::WebSocketMessageType::Message or not message.binary or not this->on_binary or
+        not this->holds_radio(client)) {
+        return;
+    }
+
+    const std::span<const uint8_t> bytes(
+        reinterpret_cast<const uint8_t*>(message.str.data()),  // NOLINT(*-reinterpret-cast): byte view.
+        message.str.size()
+    );
+    this->on_binary(bytes);
 }
 
 WebSocketServer::WebSocketServer() : impl{std::make_unique<Impl>()} { }
@@ -107,18 +196,8 @@ bool WebSocketServer::start(int port, std::string& error) {
     this->impl->server->disablePerMessageDeflate();
 
     this->impl->server->setOnClientMessageCallback(
-        [this](const std::shared_ptr<ix::ConnectionState>&, ix::WebSocket&, const ix::WebSocketMessagePtr& message) {
-            if (message->type != ix::WebSocketMessageType::Message or not message->binary) {
-                return;
-            }
-
-            if (this->impl->on_binary) {
-                const std::span<const uint8_t> bytes(
-                    reinterpret_cast<const uint8_t*>(message->str.data()),  // NOLINT(*-reinterpret-cast): byte view.
-                    message->str.size()
-                );
-                this->impl->on_binary(bytes);
-            }
+        [this](const auto& /*state*/, ix::WebSocket& client, const ix::WebSocketMessagePtr& message) {
+            this->impl->on_message(client, *message);
         }
     );
 
@@ -145,6 +224,7 @@ void WebSocketServer::stop() {
         const std::scoped_lock lock(this->impl->mutex);
         this->impl->stopping = true;
         this->impl->frames.clear();
+        this->impl->peer = nullptr;
     }
 
     this->impl->queued.notify_all();

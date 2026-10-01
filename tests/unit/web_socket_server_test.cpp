@@ -8,11 +8,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <future>
+#include <mutex>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <netinet/in.h>
+#include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -183,6 +186,100 @@ static std::vector<uint8_t> receive_binary(const Socket& socket) {
 }
 
 namespace {
+/**
+ * @brief What a close frame said.
+ */
+struct Closing {
+    uint16_t    code{};
+    std::string reason;
+};
+}  // namespace
+
+/**
+ * @brief Read the close frame the server sent.
+ *
+ * @param socket Connected socket.
+ * @return Its code and reason, a code of 0 when the next frame was not a close
+ *         frame with one or none came within 10 s.
+ */
+static Closing receive_close(const Socket& socket) {
+    const int patience_ms = 10'000;
+    pollfd    ready{.fd = socket.get(), .events = POLLIN, .revents = 0};
+
+    if (poll(&ready, 1, patience_ms) != 1) {
+        return {};
+    }
+
+    std::array<uint8_t, 4> head{};
+
+    if (recv(socket.get(), head.data(), head.size(), MSG_WAITALL) != 4 or head.at(0) != 0x88 or head.at(1) < 2 or
+        head.at(1) >= 126) {
+        return {};
+    }
+
+    std::string reason(head.at(1) - 2U, '\0');
+
+    if (recv(socket.get(), reason.data(), reason.size(), MSG_WAITALL) != static_cast<ssize_t>(reason.size())) {
+        return {};
+    }
+
+    return {.code = static_cast<uint16_t>((head.at(2) << 8U) | head.at(3)), .reason = reason};
+}
+
+namespace {
+/**
+ * @brief The frames a server handed back, collected from its threads.
+ */
+class Inbox {
+public:
+    /**
+     * @brief Get the handler that collects into this inbox.
+     *
+     * @return The handler.
+     */
+    WebSocketServer::BinaryHandler handler() {
+        return [this](std::span<const uint8_t> bytes) {
+            const std::scoped_lock lock(this->mutex);
+            this->frames.emplace_back(bytes.begin(), bytes.end());
+        };
+    }
+
+    /**
+     * @brief Wait until a frame arrived, for a few seconds at most.
+     *
+     * @param frame The frame to wait for.
+     * @return True when it arrived.
+     */
+    bool wait_for(const std::vector<uint8_t>& frame) {
+        const auto deadline = steady_clock::now() + seconds(10);
+
+        while (steady_clock::now() < deadline) {
+            if (this->contains(frame)) {
+                return true;
+            }
+
+            std::this_thread::sleep_for(milliseconds(1));
+        }
+
+        return false;
+    }
+
+    /**
+     * @brief Get whether a frame arrived.
+     *
+     * @param frame The frame.
+     * @return True when it did.
+     */
+    bool contains(const std::vector<uint8_t>& frame) {
+        const std::scoped_lock lock(this->mutex);
+        return std::ranges::find(this->frames, frame) != this->frames.end();
+    }
+
+private:
+    std::mutex                        mutex;
+    std::vector<std::vector<uint8_t>> frames;
+};
+
 TEST_CASE("MonitorBridge.CarriesRawBytesBothWays") {
     RunContext context;
     load_tiny_world(context.world, context.clock);
@@ -245,6 +342,39 @@ TEST_CASE("WebSocketServer.AClientThatStopsReadingNeverStallsTheCaller") {
 
     auto stopping = std::async(std::launch::async, [&server] { server.stop(); });
     CHECK_EQ(stopping.wait_for(seconds(10)), std::future_status::ready);
+}
+
+TEST_CASE("WebSocketServer.TheNewestClientTakesTheRadio") {
+    WebSocketServer server;
+    Inbox           inbox;
+    std::string     error;
+    const uint16_t  port = free_port();
+    server.set_on_binary(inbox.handler());
+    REQUIRE_MESSAGE(server.start(port, error), error);
+
+    const Socket               first;
+    const std::vector<uint8_t> from_first{0x01};
+    REQUIRE(connect_and_stall(first, port));
+    REQUIRE(send_binary(first, from_first));
+    REQUIRE(inbox.wait_for(from_first));
+
+    const Socket               second;
+    const std::vector<uint8_t> from_second{0x02};
+    REQUIRE(connect_and_stall(second, port));
+
+    const Closing closing = receive_close(first);
+    CHECK_EQ(closing.code, WebSocketServer::taken_over_close_code);
+    CHECK_EQ(closing.reason, WebSocketServer::taken_over_reason);
+
+    const std::vector<uint8_t> late{0x03};
+    send_binary(first, late);
+    REQUIRE(send_binary(second, from_second));
+    REQUIRE(inbox.wait_for(from_second));
+
+    const std::vector<uint8_t> telemetry{0xAA, 0x55};
+    server.broadcast(telemetry);
+    CHECK_EQ(receive_binary(second), telemetry);
+    CHECK_FALSE(inbox.contains(late));
 }
 
 TEST_CASE("WebSocketServer.RefusesAPortSomebodyElseHolds") {

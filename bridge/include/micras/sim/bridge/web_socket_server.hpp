@@ -12,10 +12,16 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 
 namespace micras::sim {
 /**
- * @brief Serves binary frames to whoever connects, and hands back what they send.
+ * @brief Serves binary frames to one client at a time, and hands back what it sends.
+ *
+ * @note One client holds the radio, as a radio pairs with one peer: two
+ *       monitors on one robot would each configure it and each read the
+ *       answers to the other. The newest client takes it, and the one that
+ *       held it is closed with taken_over_close_code and taken_over_reason.
  *
  * @note A facade on purpose: it keeps IXWebSocket out of every header, and lets
  *       -DMICRAS_SIM_BRIDGE=OFF build a stub in its place. Callbacks arrive on the
@@ -24,7 +30,7 @@ namespace micras::sim {
 class WebSocketServer {
 public:
     /**
-     * @brief Called with every binary frame a client sends.
+     * @brief Called with every binary frame the client that holds the radio sends.
      */
     using BinaryHandler = std::function<void(std::span<const uint8_t>)>;
 
@@ -62,7 +68,7 @@ public:
     void stop();
 
     /**
-     * @brief Queue one binary frame for every connected client.
+     * @brief Queue one binary frame for the client that holds the radio.
      *
      * @note Never blocks on a client. The frame goes into a bounded queue that a
      *       sender thread drains, because the library writes synchronously and
@@ -84,6 +90,19 @@ public:
      * @brief Largest number of frames allowed to wait for the sender thread.
      */
     static constexpr std::size_t max_queued_frames{256};
+
+    /**
+     * @brief The close code a client gets when a newer one takes the radio.
+     *
+     * @note In the range RFC 6455 leaves to applications; micras-monitor stops
+     *       reconnecting when it gets it.
+     */
+    static constexpr uint16_t taken_over_close_code{4001};
+
+    /**
+     * @brief The close reason that goes with taken_over_close_code.
+     */
+    static constexpr std::string_view taken_over_reason{"another monitor took the link"};
 
 private:
     struct Impl;
