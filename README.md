@@ -245,9 +245,10 @@ firmware's protocol to it exactly as it would over the air. The link is as fast
 as the radio's baud rate, not faster.
 
 One monitor holds the link at a time, as one peer pairs with the radio: a monitor
-that connects takes it, and the one that held it is closed with code 4001 and the
-reason `another monitor took the link`, which micras-monitor shows instead of
-reconnecting.
+takes it with the first bytes it sends, and the one that held it is closed with
+code 4001 and the reason `another monitor took the link`, which micras-monitor
+shows instead of reconnecting. A client that connects and sends nothing, such as
+a probe or an idle tab, takes nothing.
 
 ## Robot tools
 

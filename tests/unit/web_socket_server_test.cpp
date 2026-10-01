@@ -9,9 +9,11 @@
 #include <cstdint>
 #include <future>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <netinet/in.h>
@@ -185,6 +187,39 @@ static std::vector<uint8_t> receive_binary(const Socket& socket) {
     return payload;
 }
 
+/**
+ * @brief Wait until a server has a number of clients, for a few seconds at most.
+ *
+ * @param server The server.
+ * @param count How many clients to wait for.
+ * @return True once it has them.
+ */
+static bool clients_become(const WebSocketServer& server, std::size_t count) {
+    const auto deadline = steady_clock::now() + seconds(10);
+
+    while (server.connected_clients() != count) {
+        if (steady_clock::now() > deadline) {
+            return false;
+        }
+
+        std::this_thread::sleep_for(milliseconds(1));
+    }
+
+    return true;
+}
+
+/**
+ * @brief Get whether anything arrives on a socket within a while.
+ *
+ * @param socket Connected socket.
+ * @param patience How long to wait.
+ * @return True when bytes arrived.
+ */
+static bool readable_within(const Socket& socket, milliseconds patience) {
+    pollfd ready{.fd = socket.get(), .events = POLLIN, .revents = 0};
+    return poll(&ready, 1, static_cast<int>(patience.count())) == 1;
+}
+
 namespace {
 /**
  * @brief What a close frame said.
@@ -344,7 +379,7 @@ TEST_CASE("WebSocketServer.AClientThatStopsReadingNeverStallsTheCaller") {
     CHECK_EQ(stopping.wait_for(seconds(10)), std::future_status::ready);
 }
 
-TEST_CASE("WebSocketServer.TheNewestClientTakesTheRadio") {
+TEST_CASE("WebSocketServer.TheClientThatSendsTakesTheRadio") {
     WebSocketServer server;
     Inbox           inbox;
     std::string     error;
@@ -352,29 +387,72 @@ TEST_CASE("WebSocketServer.TheNewestClientTakesTheRadio") {
     server.set_on_binary(inbox.handler());
     REQUIRE_MESSAGE(server.start(port, error), error);
 
-    const Socket               first;
+    std::optional<Socket>      first{std::in_place};
     const std::vector<uint8_t> from_first{0x01};
-    REQUIRE(connect_and_stall(first, port));
-    REQUIRE(send_binary(first, from_first));
+    REQUIRE(connect_and_stall(*first, port));
+    REQUIRE(send_binary(*first, from_first));
     REQUIRE(inbox.wait_for(from_first));
 
-    const Socket               second;
-    const std::vector<uint8_t> from_second{0x02};
-    REQUIRE(connect_and_stall(second, port));
+    std::optional<Socket> second{std::in_place};
+    REQUIRE(connect_and_stall(*second, port));
+    REQUIRE(clients_become(server, 2));
 
-    const Closing closing = receive_close(first);
+    const std::vector<uint8_t> from_second{0x02};
+    REQUIRE(send_binary(*second, from_second));
+
+    const Closing closing = receive_close(*first);
     CHECK_EQ(closing.code, WebSocketServer::taken_over_close_code);
     CHECK_EQ(closing.reason, WebSocketServer::taken_over_reason);
+    REQUIRE(inbox.wait_for(from_second));
 
     const std::vector<uint8_t> late{0x03};
-    send_binary(first, late);
-    REQUIRE(send_binary(second, from_second));
-    REQUIRE(inbox.wait_for(from_second));
+    send_binary(*first, late);
+    first.reset();
+    REQUIRE(clients_become(server, 1));
+
+    const std::vector<uint8_t> again{0x04};
+    REQUIRE(send_binary(*second, again));
+    REQUIRE(inbox.wait_for(again));
+    CHECK_FALSE(inbox.contains(late));
 
     const std::vector<uint8_t> telemetry{0xAA, 0x55};
     server.broadcast(telemetry);
-    CHECK_EQ(receive_binary(second), telemetry);
-    CHECK_FALSE(inbox.contains(late));
+    CHECK_EQ(receive_binary(*second), telemetry);
+
+    second.reset();
+    CHECK(clients_become(server, 0));
+}
+
+TEST_CASE("WebSocketServer.AClientThatSaysNothingTakesNothing") {
+    WebSocketServer server;
+    Inbox           inbox;
+    std::string     error;
+    const uint16_t  port = free_port();
+    server.set_on_binary(inbox.handler());
+    REQUIRE_MESSAGE(server.start(port, error), error);
+
+    {
+        const Socket               holder;
+        const std::vector<uint8_t> from_holder{0x01};
+        REQUIRE(connect_and_stall(holder, port));
+        REQUIRE(send_binary(holder, from_holder));
+        REQUIRE(inbox.wait_for(from_holder));
+
+        const Socket idle;
+        REQUIRE(connect_and_stall(idle, port));
+        REQUIRE(clients_become(server, 2));
+
+        const std::vector<uint8_t> telemetry{0xAA, 0x55};
+        server.broadcast(telemetry);
+        CHECK_EQ(receive_binary(holder), telemetry);
+        CHECK_FALSE(readable_within(idle, milliseconds(200)));
+
+        const std::vector<uint8_t> again{0x02};
+        REQUIRE(send_binary(holder, again));
+        CHECK(inbox.wait_for(again));
+    }
+
+    CHECK(clients_become(server, 0));
 }
 
 TEST_CASE("WebSocketServer.RefusesAPortSomebodyElseHolds") {

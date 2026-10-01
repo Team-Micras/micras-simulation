@@ -20,8 +20,10 @@ namespace micras::sim {
  *
  * @note One client holds the radio, as a radio pairs with one peer: two
  *       monitors on one robot would each configure it and each read the
- *       answers to the other. The newest client takes it, and the one that
- *       held it is closed with taken_over_close_code and taken_over_reason.
+ *       answers to the other. A client takes it with its first binary frame,
+ *       so one that connects and says nothing never does, and the one that
+ *       held it is closed with taken_over_close_code and taken_over_reason;
+ *       what that one still sends before it is gone is ignored.
  *
  * @note A facade on purpose: it keeps IXWebSocket out of every header, and lets
  *       -DMICRAS_SIM_BRIDGE=OFF build a stub in its place. Callbacks arrive on the
@@ -87,12 +89,19 @@ public:
     uint64_t dropped_frames() const;
 
     /**
+     * @brief Get how many clients are connected, whether they hold the radio or not.
+     *
+     * @return Number of clients.
+     */
+    std::size_t connected_clients() const;
+
+    /**
      * @brief Largest number of frames allowed to wait for the sender thread.
      */
     static constexpr std::size_t max_queued_frames{256};
 
     /**
-     * @brief The close code a client gets when a newer one takes the radio.
+     * @brief The close code a client gets when a newer one takes the radio by sending.
      *
      * @note In the range RFC 6455 leaves to applications; micras-monitor stops
      *       reconnecting when it gets it.
