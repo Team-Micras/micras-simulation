@@ -388,6 +388,18 @@ frame in `on_after_tick`, through a bounded queue and a sender thread, so a
 client that stops reading loses frames (`bridge_dropped_frames`) instead of
 stalling the run. A port already taken is a warning, not a failure.
 
+A listening bridge also paces the run to real time (`RealTimePacer`), since a
+monitor budgets its link in wall time and a free run in IDLE produces about 3x
+what the link carries. `on_start` anchors simulated time to the steady clock;
+`on_before_tick` sleeps when simulated time is more than `ahead_slack` (1 ms)
+ahead, and re-anchors to the present when it is more than `behind_slack` (5 ms)
+behind. It never catches up beyond that: time lost while moving slower than real
+time would otherwise be paid back as a burst faster than real time in IDLE, which
+is what overflows the link. A lag within `behind_slack` is recovered, so jitter
+does not pull the rate below 1x; a burst is bounded by the two slacks together.
+Only the wall clock waits, so simulated time and the recording do not change.
+`--monitor` therefore also caps the viewer's speed at 1x.
+
 Note what the gate proves: the bridge check compares a bridged run **with nobody
 connected** against a plain one. A run a client talks to is marked `interactive`
 and is not reproducible, by definition.

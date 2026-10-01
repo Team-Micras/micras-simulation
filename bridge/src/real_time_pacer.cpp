@@ -38,9 +38,9 @@ void RealTimePacer::pace(uint64_t simulated_us) {
     const auto wall_now = this->wall.now();
     const auto target = this->anchor_wall + std::chrono::microseconds(simulated_us - this->anchor_us);
 
-    if (target - wall_now > slack) {
+    if (target - wall_now > ahead_slack) {
         this->wall.sleep_until(target);
-    } else if (wall_now - target > slack) {
+    } else if (wall_now - target > behind_slack) {
         this->anchor_at(simulated_us, wall_now);
     }
 }

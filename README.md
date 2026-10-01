@@ -243,8 +243,9 @@ The bridge puts the firmware's radio on `ws://localhost:8080` and carries raw
 bytes both ways, with no framing of its own: micras-monitor speaks the
 firmware's protocol to it exactly as it would over the air. The link is as fast
 as the radio's baud rate, not faster, and the run is held to real time as the
-robot is: a monitor budgets its link in wall time. A run that falls behind is not
-made to catch up later. Only the wall clock waits, so the recording is the same.
+robot is: a monitor budgets its link in wall time. A run that falls more than 5 ms
+behind is not made to catch up later. Only the wall clock waits, so the recording
+is the same.
 
 One monitor holds the link at a time, as one peer pairs with the radio: a monitor
 takes it with the first bytes it sends, and the one that held it is closed with

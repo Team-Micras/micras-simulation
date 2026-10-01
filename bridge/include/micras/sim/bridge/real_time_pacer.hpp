@@ -55,16 +55,26 @@ IWallClock& steady_wall_clock();
  *       waits: simulated time, and so every recorded sample, is the same paced
  *       or not.
  *
- * @note A run that falls behind is not made to catch up: the pacer moves its
- *       anchor to the present instead, so time lost in a slow stretch is never
- *       paid back by running faster than real time later.
+ * @note A run that falls behind by more than behind_slack is not made to catch
+ *       up: the pacer moves its anchor to the present instead, so time lost in a
+ *       slow stretch is never paid back beyond the slack by running faster than
+ *       real time later. A shorter lag, such as a spike in the work of one tick
+ *       or a sleep that overran, is recovered, which keeps the rate at real time
+ *       under jitter. The trade-off is the burst: the run may outpace the wall
+ *       clock by at most behind_slack plus ahead_slack, the lag it recovers and
+ *       the lead it is allowed.
  */
 class RealTimePacer {
 public:
     /**
-     * @brief How far simulated time may drift from the wall clock before the pacer acts.
+     * @brief How far simulated time may run ahead of the wall clock before the pacer waits.
      */
-    static constexpr std::chrono::microseconds slack{1000};
+    static constexpr std::chrono::microseconds ahead_slack{1000};
+
+    /**
+     * @brief How far simulated time may fall behind the wall clock and still be recovered.
+     */
+    static constexpr std::chrono::microseconds behind_slack{5000};
 
     /**
      * @brief Pace against a wall clock.

@@ -371,10 +371,32 @@ TEST_CASE("MonitorBridge.HoldsTheRunToTheWallClock") {
     simulation.add_listener(bridge);
     simulation.run(1000);
 
-    const auto lag = microseconds(context.clock.now_us() - context.clock.us_per_tick()) - (wall.now() - start);
+    const auto lead = microseconds(context.clock.now_us() - context.clock.us_per_tick()) - (wall.now() - start);
     CHECK_GT(wall.sleep_count(), 0);
-    CHECK_LE(lag, RealTimePacer::slack);
-    CHECK_GE(lag, microseconds(0));
+    CHECK_LE(lead, RealTimePacer::ahead_slack);
+    CHECK_GE(lead, microseconds(0));
+}
+
+TEST_CASE("MonitorBridge.AnchorsTheWallClockWhereTheRunStarts") {
+    RunContext context;
+    load_tiny_world(context.world, context.clock);
+    FirmwareThread firmware{[](FirmwareThread& thread) {
+        while (thread.yield_tick()) { }
+    }};
+    Simulation     simulation(context, firmware);
+    FakeWallClock  wall;
+
+    std::string   error;
+    MonitorBridge bridge(context.serial, free_port(), error, wall);
+    REQUIRE_MESSAGE(bridge.is_open(), error);
+    simulation.add_listener(bridge);
+
+    wall.advance(milliseconds(3));
+    const auto start = wall.now();
+    simulation.run(2);
+
+    CHECK_EQ(wall.sleep_count(), 1);
+    CHECK_EQ(wall.now() - start, microseconds(context.clock.us_per_tick()));
 }
 
 TEST_CASE("MonitorBridge.NeverPacesARunWhenItIsNotListening") {
