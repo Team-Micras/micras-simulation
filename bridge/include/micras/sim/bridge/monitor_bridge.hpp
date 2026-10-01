@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "micras/sim/bridge/real_time_pacer.hpp"
 #include "micras/sim/bridge/web_socket_server.hpp"
 #include "micras/sim/core/serial_bus.hpp"
 #include "micras/sim/core/simulation.hpp"
@@ -24,6 +25,11 @@ namespace micras::sim {
  * @note Bytes only: the bridge frames nothing. What a monitor sends is collected
  *       on a server thread and queued for the firmware on the simulation thread,
  *       before the tick. The firmware's output leaves as one frame per tick.
+ *
+ * @note A listening bridge holds the run to real time, as the robot lives in
+ *       it: a monitor budgets its link in wall time, and a run left free would
+ *       produce faster than the link carries. Only the wall clock waits, so
+ *       simulated time and every recording stay what they are without it.
  */
 class MonitorBridge : public ISerialListener, public IRunListener {
 public:
@@ -33,8 +39,9 @@ public:
      * @param serial Bus the firmware reads from and writes to.
      * @param port TCP port to listen on.
      * @param error Filled with a human readable reason when the port cannot be taken.
+     * @param wall Clock the run is paced against; it must outlive the bridge.
      */
-    MonitorBridge(SerialBus& serial, int port, std::string& error);
+    MonitorBridge(SerialBus& serial, int port, std::string& error, IWallClock& wall = steady_wall_clock());
 
     MonitorBridge(const MonitorBridge&) = delete;
     MonitorBridge(MonitorBridge&&) = delete;
@@ -78,7 +85,14 @@ public:
     void on_firmware_bytes(std::span<const uint8_t> bytes) override;
 
     /**
-     * @brief Queue what the monitors sent for the firmware.
+     * @brief Anchor the run's simulated time to the wall clock.
+     *
+     * @param simulation Run about to start.
+     */
+    void on_start(const Simulation& simulation) override;
+
+    /**
+     * @brief Hold the run back to the wall clock, then queue what the monitors sent for the firmware.
      *
      * @param simulation Run about to advance.
      * @return Always RunControl::RUN; a monitor never stops a run.
@@ -109,6 +123,11 @@ private:
      * @brief Whether bytes from a monitor were handed over.
      */
     bool received{false};
+
+    /**
+     * @brief Keeps simulated time from running ahead of the wall clock.
+     */
+    RealTimePacer pacer;
 
     /**
      * @brief Bytes the firmware wrote during the current tick.

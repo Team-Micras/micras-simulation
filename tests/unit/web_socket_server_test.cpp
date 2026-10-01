@@ -25,6 +25,7 @@
 #include <doctest/doctest.h>
 
 #include "micras/sim/bridge/monitor_bridge.hpp"
+#include "micras/sim/bridge/real_time_pacer.hpp"
 #include "micras/sim/bridge/web_socket_server.hpp"
 #include "micras/sim/core/firmware_thread.hpp"
 #include "micras/sim/core/run_context.hpp"
@@ -33,6 +34,7 @@
 
 namespace micras::sim {
 namespace {
+using std::chrono::microseconds;
 using std::chrono::milliseconds;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
@@ -351,6 +353,49 @@ TEST_CASE("MonitorBridge.CarriesRawBytesBothWays") {
     bridge.on_after_tick(simulation);
 
     CHECK_EQ(receive_binary(client), telemetry);
+}
+
+TEST_CASE("MonitorBridge.HoldsTheRunToTheWallClock") {
+    RunContext context;
+    load_tiny_world(context.world, context.clock);
+    FirmwareThread firmware{[](FirmwareThread& thread) {
+        while (thread.yield_tick()) { }
+    }};
+    Simulation     simulation(context, firmware);
+    FakeWallClock  wall;
+    const auto     start = wall.now();
+
+    std::string   error;
+    MonitorBridge bridge(context.serial, free_port(), error, wall);
+    REQUIRE_MESSAGE(bridge.is_open(), error);
+    simulation.add_listener(bridge);
+    simulation.run(1000);
+
+    const auto lag = microseconds(context.clock.now_us() - context.clock.us_per_tick()) - (wall.now() - start);
+    CHECK_GT(wall.sleep_count(), 0);
+    CHECK_LE(lag, RealTimePacer::slack);
+    CHECK_GE(lag, microseconds(0));
+}
+
+TEST_CASE("MonitorBridge.NeverPacesARunWhenItIsNotListening") {
+    RunContext context;
+    load_tiny_world(context.world, context.clock);
+    FirmwareThread firmware{[](FirmwareThread& thread) {
+        while (thread.yield_tick()) { }
+    }};
+    Simulation     simulation(context, firmware);
+    FakeWallClock  wall;
+
+    const Socket   holder;
+    const uint16_t port = hold_free_port(holder);
+    std::string    error;
+    MonitorBridge  bridge(context.serial, port, error, wall);
+    REQUIRE_FALSE(bridge.is_open());
+    simulation.add_listener(bridge);
+    simulation.run(1000);
+
+    CHECK_EQ(context.clock.tick_count(), 1000U);
+    CHECK_EQ(wall.sleep_count(), 0);
 }
 
 TEST_CASE("WebSocketServer.AClientThatStopsReadingNeverStallsTheCaller") {

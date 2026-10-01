@@ -2,12 +2,14 @@
  * @file
  *
  * @brief What several of the engine's tests share: the tiny robot's world, bytes collected from the
- * firmware, and variables set by hand.
+ * firmware, variables set by hand, and a wall clock that only moves when told.
  */
 
 #ifndef MICRAS_SIM_TESTS_SUPPORT_HPP
 #define MICRAS_SIM_TESTS_SUPPORT_HPP
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -16,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "micras/sim/bridge/real_time_pacer.hpp"
 #include "micras/sim/core/clock.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
 #include "micras/sim/core/serial_bus.hpp"
@@ -88,6 +91,54 @@ private:
      * @brief Values by name.
      */
     std::map<std::string, double> values;
+};
+
+/**
+ * @brief Wall clock that only moves when the test advances it, or when something sleeps on it.
+ */
+class FakeWallClock : public IWallClock {
+public:
+    /**
+     * @brief Get the fake time.
+     *
+     * @return The time now.
+     */
+    std::chrono::steady_clock::time_point now() const override { return this->current; }
+
+    /**
+     * @brief Jump to the deadline at once, and count the sleep.
+     *
+     * @param deadline Time to wake up at.
+     */
+    void sleep_until(std::chrono::steady_clock::time_point deadline) override {
+        this->current = std::max(this->current, deadline);
+        this->sleeps++;
+    }
+
+    /**
+     * @brief Let wall time pass, as a run's own work would.
+     *
+     * @param duration Time to pass.
+     */
+    void advance(std::chrono::steady_clock::duration duration) { this->current += duration; }
+
+    /**
+     * @brief Get how many times something slept.
+     *
+     * @return Number of sleeps.
+     */
+    int sleep_count() const { return this->sleeps; }
+
+private:
+    /**
+     * @brief The fake time.
+     */
+    std::chrono::steady_clock::time_point current;
+
+    /**
+     * @brief Number of sleeps.
+     */
+    int sleeps{0};
 };
 }  // namespace micras::sim
 

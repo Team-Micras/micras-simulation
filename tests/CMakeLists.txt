@@ -12,6 +12,7 @@ add_executable(micras_sim_tests
     unit/firmware_thread_test.cpp
     unit/maze_test.cpp
     unit/noise_test.cpp
+    unit/real_time_pacer_test.cpp
     unit/robot_description_test.cpp
     unit/run_metadata_test.cpp
     unit/scenario_test.cpp

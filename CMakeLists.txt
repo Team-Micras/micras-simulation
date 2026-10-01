@@ -110,6 +110,7 @@ endif()
 
 add_library(micras_sim_bridge STATIC
     bridge/src/monitor_bridge.cpp
+    bridge/src/real_time_pacer.cpp
     bridge/src/web_socket_server.cpp
 )
 add_library(micras::sim_bridge ALIAS micras_sim_bridge)

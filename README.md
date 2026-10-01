@@ -68,7 +68,7 @@ another compiler may move the last bits of a run.
 | `--viewer-camera <name>\|free` | starting camera |
 | `--viewer-fps <int>` | redraws per simulated second (default 30) |
 | `--viewer-size WxH` | window size, default 1200x900 |
-| `--monitor` | open the micras-monitor bridge |
+| `--monitor` | open the micras-monitor bridge, and pace the run to real time |
 | `--monitor-port <int>` | port it listens on (default 8080) |
 | `--video <out.mp4>` | record an offscreen mp4 of the run |
 | `--video-fps <int>` | frame rate, default 30 |
@@ -242,7 +242,9 @@ cmake --build --preset host-release --target sim_serve
 The bridge puts the firmware's radio on `ws://localhost:8080` and carries raw
 bytes both ways, with no framing of its own: micras-monitor speaks the
 firmware's protocol to it exactly as it would over the air. The link is as fast
-as the radio's baud rate, not faster.
+as the radio's baud rate, not faster, and the run is held to real time as the
+robot is: a monitor budgets its link in wall time. A run that falls behind is not
+made to catch up later. Only the wall clock waits, so the recording is the same.
 
 One monitor holds the link at a time, as one peer pairs with the radio: a monitor
 takes it with the first bytes it sends, and the one that held it is closed with
