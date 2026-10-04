@@ -3,7 +3,7 @@
 #
 # Runs each named scenario and compares its summary with <baseline dir>/<scenario> (tools/baseline.py),
 # byte for byte when <exact> is ON, then checks the health of every run (tools/check_run.py). record
-# writes the summaries instead, and refuses to overwrite a version.
+# writes the summaries instead.
 
 set -euo pipefail
 

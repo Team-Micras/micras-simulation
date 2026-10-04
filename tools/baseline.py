@@ -16,9 +16,8 @@ A baseline is one ``summary.json`` per scenario:
   returning ``{name: (value, tolerance)}``.
 
 The tolerances are written into the summary when it is recorded, so a reviewer
-sees them next to the values. ``record`` refuses to overwrite a summary: a new
-behavior is a new baseline version, never a re-recording that makes a
-difference go away.
+sees them next to the values. ``record`` replaces the summary, and git keeps the
+ones it replaced.
 
 The robot's plugin is found as ``analyze.py`` finds it: ``--plugin``, then
 ``$MICRAS_SIM_PLUGIN``, then the target's folder that ``meta.json`` names.
@@ -159,7 +158,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("action", choices=("record", "compare"))
     parser.add_argument("run", type=Path)
-    parser.add_argument("baseline", type=Path, help="the scenario's folder in a baseline version")
+    parser.add_argument("baseline", type=Path, help="the scenario's folder in the baseline")
     parser.add_argument("--exact", action="store_true", help="also fail when the bytes differ")
     parser.add_argument(
         "--plugin", type=Path, default=None, help="analysis plugin to use instead of the target's (also $MICRAS_SIM_PLUGIN)"
@@ -170,10 +169,6 @@ def main() -> int:
     path = arguments.baseline / "summary.json"
 
     if arguments.action == "record":
-        if path.exists():
-            print(f"FAIL {path} already exists; record a new baseline version instead")
-            return 1
-
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(summary, indent=2) + "\n")
         print(f"ok   recorded {path}")

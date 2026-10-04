@@ -213,10 +213,9 @@ change nothing, and compares the toy's runs with its baseline
 (`micras_sim_toy_check`). The window runs under `xvfb-run`, or on the display;
 `MICRAS_SKIP_VIEWER=1` skips it, even where `xvfb-run` or a display exists.
 
-Baselines live in `targets/<robot>/baselines/`; `CLAUDE.md` explains what they
-hold and the rules around them. `micras_sim_toy_record_baseline` records the toy's
-version `MICRAS_SIM_TOY_BASELINE` names and refuses to overwrite one: bump it
-instead, and nothing is ever lost. With `-DMICRAS_SIM_EXACT=ON` a baseline
+Each robot's baseline lives in `targets/<robot>/baseline/`; `CLAUDE.md` explains
+what it holds and the rules around it. `micras_sim_toy_record_baseline` records
+the toy's over the previous one, which git keeps. With `-DMICRAS_SIM_EXACT=ON` a baseline
 comparison also fails when a checked run's `data.csv` is not byte identical to the
 recorded one: the check for a change that must not move a byte, such as a
 refactoring. A project that adds the simulator reads the same option for its own

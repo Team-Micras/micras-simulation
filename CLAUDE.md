@@ -21,8 +21,8 @@ scenario twice, headless and with a window, with a video, and with a bridge nobo
 connects to, and compares each run with the plain one as bytes
 (`scripts/check_invariance.sh`, `tools/compare_run.py`).
 
-Baselines are summaries, not recordings. Each version under
-`targets/<robot>/baselines/` holds one `summary.json` per checked run: the hash of
+Baselines are summaries, not recordings. A robot's single baseline,
+`targets/<robot>/baseline/`, holds one `summary.json` per checked run: the hash of
 `data.csv`, the state timeline, and a handful of numbers with their tolerances
 (`tools/baseline.py`).
 On the machine that recorded it the hash matches; on another it will not, because
@@ -31,10 +31,10 @@ what is compared. Two rules:
 
 - **A refactoring must not move a byte.** On one machine, a refactoring leaves
   the hash where it was. If it moves, the refactoring is wrong.
-- **Never re-record to make a difference go away.** The toy's
-  `micras_sim_toy_record_baseline`, like a robot project's own recording target,
-  refuses to overwrite a version; a change of behavior is a new version, with the
-  reason in the commit.
+- **Never re-record to make a difference go away.** A change of behavior is
+  recorded over the baseline (`micras_sim_toy_record_baseline`, or a robot
+  project's own recording target), with the reason in the commit; git keeps the
+  earlier ones.
 
 ## Layers
 
