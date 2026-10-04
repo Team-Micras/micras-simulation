@@ -282,12 +282,12 @@ panel has the button, a lamp per state and the pack voltage; its scenarios are
 
 ## CI
 
-`.github/workflows/ci.yaml` runs on every push and pull request, in the image of
-`.docker/Dockerfile` (Ubuntu 26.04 with GCC 15, clang 22, CMake and Python; its
-host stage is the one micras-lib and the firmware use too): the `host-ci` build,
-CTest, `micras_sim_format_check`, `micras_sim_lint` and `micras_sim_check`. The
-baselines are compared within their tolerances there: a hash belongs to the
-machine that recorded it.
+`.github/workflows/ci.yaml` runs on every push and on pull requests from forks,
+in the image of `.docker/Dockerfile` (Ubuntu 26.04 with GCC 15, clang 22, CMake
+and Python; its host stage is the one micras-lib and the firmware use too): the
+`host-ci` build, CTest, `micras_sim_format_check`, `micras_sim_lint` and
+`micras_sim_check`. The baselines are compared within their tolerances there: a
+hash belongs to the machine that recorded it.
 
 ## Layout
 
