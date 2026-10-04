@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <mujoco/mujoco.h>
 
@@ -94,9 +95,36 @@ public:
     /**
      * @brief Advance the physics by a number of steps.
      *
+     * @note Before each step, every sliding friction added to the world pushes
+     *       on its geom's body through mjData::qfrc_applied, which the world
+     *       owns: nothing else may write it.
+     *
      * @param steps Number of mj_step calls.
      */
     void step(int steps);
+
+    /**
+     * @brief Give a frictionless geom a sliding friction, applied as a force
+     *        instead of through MuJoCo's contact.
+     *
+     * @note MuJoCo's convex contact separates two surfaces in proportion to how
+     *       fast their friction is slipping, so a geom that slides all the time,
+     *       as a skid does, would lift what it carries off the floor. This
+     *       friction pushes at each contact of the geom against the sliding
+     *       velocity there, with the coefficient times the contact's normal
+     *       force of the last step. Below sticking_speed it falls linearly to
+     *       zero, which keeps it stable and stands in for static friction.
+     *       Building or loading another model forgets every friction added.
+     *
+     * @param geom Name of the geom, which should have condim 1.
+     * @param coefficient Coefficient of sliding friction.
+     */
+    void add_sliding_friction(const std::string& geom, double coefficient);
+
+    /**
+     * @brief Sliding speed under which a sliding friction falls linearly to zero, in m/s.
+     */
+    static constexpr double sticking_speed{0.005};
 
     /**
      * @brief Resolve a named MuJoCo object, throwing if it does not exist.
@@ -189,6 +217,20 @@ public:
 
 private:
     /**
+     * @brief A geom whose friction the world applies as a force.
+     */
+    struct SlidingFriction {
+        int    geom;
+        int    body;
+        double coefficient;
+    };
+
+    /**
+     * @brief Write the force of every sliding friction into mjData::qfrc_applied.
+     */
+    void apply_sliding_friction();
+
+    /**
      * @brief Throw if no model is loaded.
      */
     void require_loaded() const;
@@ -212,6 +254,11 @@ private:
      * @brief MJCF of the last composed model.
      */
     std::string composed;
+
+    /**
+     * @brief Geoms whose friction the world applies.
+     */
+    std::vector<SlidingFriction> sliding_frictions;
 };
 }  // namespace micras::sim
 

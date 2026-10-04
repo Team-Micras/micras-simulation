@@ -2,6 +2,7 @@
  * @file
  */
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -41,6 +42,50 @@ static std::size_t require_index(int index, std::size_t size, const char* what) 
     }
 
     return static_cast<std::size_t>(index);
+}
+
+static std::array<mjtNum, 3>
+    point_velocity(const mjModel* model, const mjData* data, int geom, const std::array<mjtNum, 3>& point) {
+    std::array<mjtNum, 6> velocity{};
+    mj_objectVelocity(model, data, mjOBJ_GEOM, geom, velocity.data(), 0);
+
+    const std::span<const mjtNum> centers(data->geom_xpos, 3 * static_cast<std::size_t>(model->ngeom));
+    const std::size_t             base = 3 * static_cast<std::size_t>(geom);
+    const std::array<mjtNum, 3>   arm{
+        point.at(0) - at(centers, base), point.at(1) - at(centers, base + 1), point.at(2) - at(centers, base + 2)
+    };
+
+    return {
+        velocity.at(3) + (velocity.at(1) * arm.at(2)) - (velocity.at(2) * arm.at(1)),
+        velocity.at(4) + (velocity.at(2) * arm.at(0)) - (velocity.at(0) * arm.at(2)),
+        velocity.at(5) + (velocity.at(0) * arm.at(1)) - (velocity.at(1) * arm.at(0)),
+    };
+}
+
+static std::array<mjtNum, 3> sliding_velocity(
+    const mjModel* model, const mjData* data, const mjContact& contact, int geom, int other,
+    std::array<mjtNum, 3>& point
+) {
+    const std::span<const mjtNum, 3> position(contact.pos);
+    const std::span<const mjtNum, 9> frame(contact.frame);
+    std::ranges::copy(position, point.begin());
+
+    const std::array<mjtNum, 3> own = point_velocity(model, data, geom, point);
+    const std::array<mjtNum, 3> theirs = point_velocity(model, data, other, point);
+
+    std::array<mjtNum, 3> sliding{};
+    mjtNum                along = 0.0;
+
+    for (std::size_t axis = 0; axis < 3; axis++) {
+        sliding.at(axis) = own.at(axis) - theirs.at(axis);
+        along += sliding.at(axis) * at(frame, axis);
+    }
+
+    for (std::size_t axis = 0; axis < 3; axis++) {
+        sliding.at(axis) -= along * at(frame, axis);
+    }
+
+    return sliding;
 }
 
 MujocoWorld::~MujocoWorld() {
@@ -155,7 +200,71 @@ void MujocoWorld::step(int steps) {
     this->require_loaded();
 
     for (int i = 0; i < steps; i++) {
+        this->apply_sliding_friction();
         mj_step(this->model_handle, this->data_handle);
+    }
+}
+
+void MujocoWorld::add_sliding_friction(const std::string& geom, double coefficient) {
+    const int                  id = this->require_id(mjOBJ_GEOM, geom);
+    const std::span<const int> geom_body(
+        this->model_handle->geom_bodyid, static_cast<std::size_t>(this->model_handle->ngeom)
+    );
+
+    this->sliding_frictions.push_back(
+        {.geom = id, .body = at(geom_body, static_cast<std::size_t>(id)), .coefficient = coefficient}
+    );
+}
+
+void MujocoWorld::apply_sliding_friction() {
+    if (this->sliding_frictions.empty()) {
+        return;
+    }
+
+    const mjModel* model = this->model_handle;
+    mjData*        data = this->data_handle;
+
+    const std::span<mjtNum>          applied(data->qfrc_applied, static_cast<std::size_t>(model->nv));
+    const std::span<const mjContact> contacts(data->contact, static_cast<std::size_t>(data->ncon));
+    const std::span<const int>       geom_body(model->geom_bodyid, static_cast<std::size_t>(model->ngeom));
+
+    std::ranges::fill(applied, 0.0);
+
+    for (const SlidingFriction& friction : this->sliding_frictions) {
+        for (std::size_t i = 0; i < contacts.size(); i++) {
+            const mjContact& contact = at(contacts, i);
+
+            if (contact.geom1 != friction.geom and contact.geom2 != friction.geom) {
+                continue;
+            }
+
+            std::array<mjtNum, 6> force{};
+            mj_contactForce(model, data, static_cast<int>(i), force.data());
+
+            if (force.at(0) <= 0.0) {
+                continue;
+            }
+
+            const int                   other = contact.geom1 == friction.geom ? contact.geom2 : contact.geom1;
+            std::array<mjtNum, 3>       where{};
+            const std::array<mjtNum, 3> sliding = sliding_velocity(model, data, contact, friction.geom, other, where);
+            const mjtNum                speed = std::hypot(sliding.at(0), sliding.at(1), sliding.at(2));
+            const mjtNum                scale = -friction.coefficient * force.at(0) / std::max(speed, sticking_speed);
+            std::array<mjtNum, 3>       push{scale * sliding.at(0), scale * sliding.at(1), scale * sliding.at(2)};
+            std::array<mjtNum, 3>       torque{};
+
+            mj_applyFT(model, data, push.data(), torque.data(), where.data(), friction.body, applied.data());
+
+            const int other_body = at(geom_body, static_cast<std::size_t>(other));
+
+            if (other_body != 0) {
+                for (mjtNum& component : push) {
+                    component = -component;
+                }
+
+                mj_applyFT(model, data, push.data(), torque.data(), where.data(), other_body, applied.data());
+            }
+        }
     }
 }
 
@@ -245,6 +354,8 @@ void MujocoWorld::require_loaded() const {
 }
 
 void MujocoWorld::unload() {
+    this->sliding_frictions.clear();
+
     if (this->data_handle != nullptr) {
         mj_deleteData(this->data_handle);
         this->data_handle = nullptr;

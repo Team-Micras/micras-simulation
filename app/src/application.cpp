@@ -177,6 +177,13 @@ static RunContext& prepare(
         robot_mjcf(robot), RobotModelNames::of(robot).body, maze.mjcf(config), Maze::body_name,
         scenario.start.value_or(start_of(maze, config, robot))
     );
+
+    for (const SkidPart& skid : robot.chassis.skids) {
+        if (skid.friction > 0.0) {
+            context.world.add_sliding_friction(skid.name, skid.friction);
+        }
+    }
+
     context.clock = Clock::from_model(context.world.timestep(), target.loop_time_us());
     context.world.reset();
     context.noise = {.seed = options.seed.value_or(scenario.seed.value_or(1)), .ideal = options.ideal};

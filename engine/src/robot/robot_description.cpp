@@ -321,7 +321,10 @@ static ChassisDescription read_chassis(Section section) {
 
     for (Section part : section.sections("skids")) {
         chassis.skids.push_back(
-            {.name = part.text("name"), .center = part.vector3("center"), .radius = part.number("radius")}
+            {.name = part.text("name"),
+             .center = part.vector3("center"),
+             .radius = part.number("radius"),
+             .friction = part.number("friction")}
         );
         part.finish();
     }

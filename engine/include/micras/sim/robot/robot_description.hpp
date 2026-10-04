@@ -39,18 +39,20 @@ struct CylinderPart {
 };
 
 /**
- * @brief A frictionless sphere under the chassis that carries it on the floor.
+ * @brief A sphere under the chassis that carries it on the floor.
  *
- * @note A contact point of the simulation, not a part of the robot: a real
- *       chassis that rests on the edge of its board slides on it, and a mesh
- *       edge on a plane is a poor contact in MuJoCo. A skid with no friction
- *       (condim 1) only ever pushes up, so it holds the board off the floor
- *       without braking the robot or lifting itself as a slipping contact does.
+ * @note It stands in for what the chassis rests on, a glide or the edge of its
+ *       board, since a mesh edge on a plane is a poor contact in MuJoCo. Its
+ *       contact has no friction (condim 1), so it only ever pushes up and
+ *       never lifts itself as a slipping contact does; its friction, the
+ *       coefficient of whatever slides on the floor there, is applied by the
+ *       world as a force (MujocoWorld::add_sliding_friction).
  */
 struct SkidPart {
     std::string name;
     Vector3     center{};
     double      radius{};
+    double      friction{};
 };
 
 /**
