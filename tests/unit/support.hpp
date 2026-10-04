@@ -1,0 +1,94 @@
+/**
+ * @file
+ *
+ * @brief What several of the engine's tests share: the tiny robot's world, bytes collected from the
+ * firmware, and variables set by hand.
+ */
+
+#ifndef MICRAS_SIM_TESTS_SUPPORT_HPP
+#define MICRAS_SIM_TESTS_SUPPORT_HPP
+
+#include <cmath>
+#include <cstdint>
+#include <map>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "micras/sim/core/clock.hpp"
+#include "micras/sim/core/mujoco_world.hpp"
+#include "micras/sim/core/serial_bus.hpp"
+#include "micras/sim/core/variable_source.hpp"
+
+namespace micras::sim {
+/**
+ * @brief Load the tiny robot, with a clock of two steps per 1042 us tick, and reset it.
+ *
+ * @param world World to load it into.
+ * @param clock Clock to configure.
+ */
+inline void load_tiny_world(MujocoWorld& world, Clock& clock) {
+    world.load(MICRAS_TEST_MODEL);
+    clock = Clock::from_model(world.timestep(), 1042);
+    world.reset();
+}
+
+/**
+ * @brief Listener that keeps every byte the firmware sent.
+ */
+class ByteCollector : public ISerialListener {
+public:
+    /**
+     * @brief Keep the bytes.
+     *
+     * @param bytes Bytes leaving the firmware.
+     */
+    void on_firmware_bytes(std::span<const uint8_t> bytes) override {
+        this->received.insert(this->received.end(), bytes.begin(), bytes.end());
+    }
+
+    // NOLINTNEXTLINE(*-non-private-member-variables-in-classes): the test reads what arrived.
+    std::vector<uint8_t> received;
+};
+
+/**
+ * @brief Variables the test sets, NaN for any name it has not set.
+ */
+class MapVariables : public VariableSource {
+public:
+    /**
+     * @brief Start with some values.
+     *
+     * @param values Values by name.
+     */
+    explicit MapVariables(std::map<std::string, double> values = {}) : values{std::move(values)} { }
+
+    /**
+     * @brief Get a variable.
+     *
+     * @param name Name of the variable.
+     * @return Its value, or NaN when it was never set.
+     */
+    double value_of(const std::string& name) const override {
+        const auto found = this->values.find(name);
+        return found == this->values.end() ? std::nan("") : found->second;
+    }
+
+    /**
+     * @brief Set a variable.
+     *
+     * @param name Name of the variable.
+     * @param value Its new value.
+     */
+    void set(const std::string& name, double value) { this->values[name] = value; }
+
+private:
+    /**
+     * @brief Values by name.
+     */
+    std::map<std::string, double> values;
+};
+}  // namespace micras::sim
+
+#endif  // MICRAS_SIM_TESTS_SUPPORT_HPP

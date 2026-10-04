@@ -1,34 +1,43 @@
 #!/usr/bin/env python3
-"""Analyse one micras_simulation run directory.
+"""Analyze one simulation run directory.
 
-Reads ``<run>/data.csv`` (and ``<run>/meta.json`` when present) and writes
-``report.json`` plus a set of PNGs next to them.
+Reads ``<run>/data.csv`` and ``<run>/meta.json`` and writes ``report.json`` plus a
+set of PNGs next to them.
 
-Conventions taken from the harness:
+This script knows the engine's columns only: the body block every row starts with
+(``x``, ``y``, ``z``, ``roll``, ``pitch``, ``yaw``, ``v_forward``, ``wz_body``) and
+the kinds of column a robot target configures, recognized by their suffix or
+prefix (``<label>_ncon``, ``<label>_fn``, ``<label>_slip``, ``<label>_penetration``,
+``wheel_speed_<label>``, ``motor_torque_<label>``, and the ``<device>_voltage``
+columns of the devices). A contact label with a ``_slip`` column is a wheel.
 
-* The model's forward axis is **+y in body frame** (``models/robot_legacy.xml``
-  puts the lidars and the caster at positive y).
-* ``yaw`` is produced by ``src/sim/recorder.cpp::to_euler`` as
-  ``atan2(2(wz + xy), 1 - 2(y^2 + z^2))``, i.e. a ZYX yaw about the world +z
-  axis, zero when the body +y axis points along the world +y axis.
-  The body forward direction in world coordinates is therefore
-  ``(-sin(yaw), cos(yaw))`` and the ground-truth forward speed is
-  ``-vx_world*sin(yaw) + vy_world*cos(yaw)``. Current harnesses write that
-  projection out as the ``v_forward`` column and this script prefers it;
-  older runs whose CSV only has ``vx``/``vy`` are still handled.
-* ``*_penetration`` columns use NaN as the "geom had no contact this tick"
-  sentinel, so they are excluded from the non-finite sample count.
-* Wheel radius is 0.011 m (``models/robot_legacy.xml``, ``class="wheel"``).
+What a robot means by its own columns comes from its plugin, the first of: the
+module named by ``--plugin``, the one named by ``$MICRAS_SIM_PLUGIN``,
+``<target_dir>/tools/analysis.py`` for the target folder ``meta.json`` names, and
+``targets/<target>/tools/analysis.py`` of this repository. A plugin may define any of:
 
-Only numpy and matplotlib are used; pandas is not available on this machine.
+* ``run_start(run)``: the time the robot starts its task, marked on every plot,
+* ``report(run, report)``: extra report sections, merged into the report,
+* ``speed_traces(run)``: ``(label, values, "linear" | "angular")`` for the speed plot,
+* ``trajectory_overlays(run)``: ``(label, x, y)`` drawn over the trajectory,
+* ``plots(run, report, directory)``: extra figures,
+* ``summarize(report)``: extra summary lines.
+
+``*_penetration`` columns use NaN as the "geom had no contact this tick" sentinel,
+so they are excluded from the non-finite sample count.
+
+Only numpy and matplotlib are used.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import importlib.util
 import json
+import os
 from pathlib import Path
+from types import ModuleType
 
 import matplotlib
 
@@ -38,17 +47,10 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.collections import LineCollection  # noqa: E402
 
-WHEEL_RADIUS = 0.011
 CELL_SIZE = 0.18
-#: Indices of the four centre cells of the 16x16 maze, in both axes.
-GOAL_CELLS = (7, 8)
-#: Id of Micras::State::RUN in the firmware FSM.
-RUN_STATE_ID = 3
-SATURATION = 100.0
 FLAT_Z_TOLERANCE = 1e-4
-DECEL_DROP = 0.05
-DECEL_WINDOW_S = 0.05
 MAX_INTERVALS = 20
+REPOSITORY = Path(__file__).resolve().parent.parent
 
 
 def load_csv(path: Path) -> tuple[dict[str, np.ndarray], dict]:
@@ -89,7 +91,7 @@ def load_csv(path: Path) -> tuple[dict[str, np.ndarray], dict]:
 
 
 class Run:
-    """Convenience accessor tolerating columns an older harness did not write."""
+    """Convenience accessor tolerating columns a robot does not write."""
 
     def __init__(self, directory: Path, t0: float | None, t1: float | None):
         self.directory = directory
@@ -119,6 +121,14 @@ class Run:
 
         return np.full(self.time.shape, np.nan)
 
+    def labels(self, suffix: str) -> list[str]:
+        """Labels of every ``<label><suffix>`` column, in header order."""
+        return [name[: -len(suffix)] for name in self.columns if name.endswith(suffix)]
+
+    def prefixed(self, prefix: str) -> list[str]:
+        """Every column starting with a prefix, in header order."""
+        return [name for name in self.columns if name.startswith(prefix)]
+
     @property
     def dt(self) -> float:
         if self.time.size < 2:
@@ -127,28 +137,52 @@ class Run:
         return float(np.median(np.diff(self.time)))
 
 
-#: Columns whose NaN entries are a deliberate "no contact" sentinel, not a defect.
-SENTINEL_NAN_COLUMNS = ("left_penetration", "right_penetration")
+def plugin_path(run: Run, override: Path | None) -> Path | None:
+    """Find the robot's analysis plugin: --plugin, $MICRAS_SIM_PLUGIN, the target's folder, this repository."""
+    if override is not None:
+        return override
+
+    environment = os.environ.get("MICRAS_SIM_PLUGIN")
+
+    if environment:
+        return Path(environment)
+
+    candidates = []
+    target_dir = run.meta.get("target_dir")
+    target = run.meta.get("target")
+
+    if target_dir:
+        candidates.append(Path(target_dir) / "tools" / "analysis.py")
+
+    if target:
+        candidates.append(REPOSITORY / "targets" / target / "tools" / "analysis.py")
+
+    return next((candidate for candidate in candidates if candidate.exists()), None)
 
 
-def forward_speed(run: Run) -> np.ndarray:
-    """Ground-truth forward speed: world linear velocity projected on the body +y axis.
+def load_plugin(run: Run, override: Path | None) -> ModuleType | None:
+    """Load the robot's analysis plugin, if it has one."""
+    path = plugin_path(run, override)
 
-    Prefers the ``v_forward`` column the harness now writes; falls back to
-    recomputing it from the world velocity columns for older runs.
-    """
-    if "v_forward" in run.columns:
-        return run.columns["v_forward"]
+    if path is None:
+        return None
 
-    yaw = run.get("yaw")
-    vx = run.get("vx_world") if "vx_world" in run.columns else run.get("vx")
-    vy = run.get("vy_world") if "vy_world" in run.columns else run.get("vy")
-    return -vx * np.sin(yaw) + vy * np.cos(yaw)
+    if not path.exists():
+        raise SystemExit(f"no analysis plugin at {path}")
+
+    spec = importlib.util.spec_from_file_location(f"analysis_{path.parent.parent.name}", path)
+
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load the analysis plugin {path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def yaw_rate(run: Run) -> np.ndarray:
-    """Ground-truth yaw rate, from the body angular velocity column."""
-    return run.get("wz_body") if "wz_body" in run.columns else run.get("wz")
+def hook(plugin: ModuleType | None, name: str):
+    """A plugin function, or None when there is no plugin or it lacks that hook."""
+    return getattr(plugin, name, None) if plugin is not None else None
 
 
 def zero_intervals(values: np.ndarray, time: np.ndarray, minimum: int = 2) -> list[list[float]]:
@@ -172,12 +206,12 @@ def zero_intervals(values: np.ndarray, time: np.ndarray, minimum: int = 2) -> li
 
 
 def finite_stats(run: Run) -> dict:
-    """Count non-finite samples over every column."""
+    """Count non-finite samples over every column but the penetration sentinels."""
     count = 0
     first_time = None
 
     for name, values in run.columns.items():
-        if name in SENTINEL_NAN_COLUMNS:
+        if name.endswith("_penetration"):
             continue
 
         bad = ~np.isfinite(values)
@@ -192,23 +226,38 @@ def finite_stats(run: Run) -> dict:
     return {"nonfinite_samples": count, "first_nonfinite_time": first_time}
 
 
-def wheel_report(run: Run, side: str) -> dict:
-    ncon = run.get(f"{side}_ncon")
-    slip = run.get(f"{side}_slip")
-    penetration = run.get(f"{side}_penetration")
+def wheel_report(run: Run, label: str) -> dict:
+    """Airborne time, slip and penetration of one wheel; no penetration when it never touched anything."""
+    ncon = run.get(f"{label}_ncon")
+    slip = run.get(f"{label}_slip")
+    penetration = run.get(f"{label}_penetration")
 
     return {
         "airborne_fraction": float(np.mean(ncon == 0)) if ncon.size else None,
         "airborne_intervals": zero_intervals(ncon, run.time),
         "max_abs_slip": float(np.nanmax(np.abs(slip))) if slip.size else None,
-        # All NaN means the wheel never touched anything in the window.
         "min_penetration": (
             float(np.nanmin(penetration)) if penetration.size and np.isfinite(penetration).any() else None
         ),
     }
 
 
+def contact_fractions(run: Run, wheels: list[str]) -> dict:
+    """Fraction of ticks each non-wheel geom touched anything."""
+    fractions = {}
+
+    for label in run.labels("_ncon"):
+        if label in wheels:
+            continue
+
+        ncon = run.get(f"{label}_ncon")
+        fractions[label] = float(np.mean(ncon > 0)) if ncon.size and np.isfinite(ncon).any() else None
+
+    return fractions
+
+
 def z_report(run: Run) -> dict:
+    """Height of the body, and the first time after which it stays within 100 um of its final value."""
     z = run.get("z")
 
     if z.size == 0:
@@ -217,8 +266,6 @@ def z_report(run: Run) -> dict:
     final = float(z[-1])
     within = np.abs(z - final) < FLAT_Z_TOLERANCE
     settle = None
-
-    # First time after which the height never leaves the 100 um band again.
     outside = np.nonzero(~within)[0]
     index = 0 if outside.size == 0 else int(outside[-1]) + 1
 
@@ -228,241 +275,143 @@ def z_report(run: Run) -> dict:
     return {"min": float(np.min(z)), "max": float(np.max(z)), "final": final, "settle_time": settle}
 
 
-def odometry_report(run: Run, run_start: float | None) -> dict:
-    desired = run.get("desired_linear_speed")
-    window = np.isfinite(desired) & (desired != 0)
-    truth = forward_speed(run)
-    measured = run.get("odometry_linear_velocity")
-    valid = window & np.isfinite(truth) & np.isfinite(measured)
-
-    if not valid.any():
-        return {"samples": 0, "rms_error": None, "max_error": None, "run_start_time": run_start}
-
-    error = measured[valid] - truth[valid]
-    return {
-        "samples": int(valid.sum()),
-        "rms_error": float(np.sqrt(np.mean(error**2))),
-        "max_error": float(np.max(np.abs(error))),
-        "run_start_time": run_start,
-    }
-
-
 def cell_index(values: np.ndarray) -> np.ndarray:
     """Maze cell index of a world coordinate, same origin as the topdown plot."""
     with np.errstate(invalid="ignore"):
         return np.floor(values / CELL_SIZE)
 
 
-def run_mask(run: Run, run_start: float | None) -> np.ndarray:
-    """Ticks the firmware spent in the RUN state.
+def resolve_maze(run: Run) -> Path:
+    """Find the ASCII maze the run drove in, or fail.
 
-    Uses the ``fsm_state`` column when the firmware exports it and falls back to
-    "everything from the first non-zero speed setpoint on" for older runs.
+    ``meta.json`` names it as ``maze_path``. A relative path is tried against the
+    current directory and the directory the ``runs/`` tree sits in.
     """
-    if "fsm_state" in run.columns:
-        return run.columns["fsm_state"] == RUN_STATE_ID
+    roots = [Path.cwd(), run.directory.resolve().parent.parent]
+    named = run.meta.get("maze_path") or ""
+    candidates: list[Path] = [root / named for root in roots] if named else []
 
-    if run_start is None:
-        return np.zeros(run.time.shape, dtype=bool)
+    maze_path = next((candidate for candidate in candidates if candidate.exists()), None)
 
-    return run.time >= run_start
+    if maze_path is None:
+        tried = ", ".join(str(candidate) for candidate in candidates) or "nothing: meta.json names no maze"
+        raise SystemExit(f"cannot find the maze of {run.directory}; tried {tried}")
+
+    return maze_path
 
 
-def maze_report(run: Run, run_start: float | None) -> dict:
-    """Ground-truth and believed maze cell, and whether the goal was reached."""
+def maze_goal_cells(maze_path: Path) -> list[tuple[int, int]]:
+    """Read the goal cells, marked ``G``, from the ASCII maze, bottom-up like the walls."""
+    inverted = maze_path.read_text().splitlines()[::-1]
+    cells = []
+
+    for index, line in enumerate(inverted):
+        if index % 2 == 0:
+            continue
+
+        for column, start in enumerate(range(0, len(line), 4)):
+            if line[start + 1 : start + 4].strip() == "G":
+                cells.append((column, index // 2))
+
+    return cells
+
+
+def maze_segments(maze_path: Path) -> list[tuple[float, float, float, float]]:
+    """Parse the ASCII maze into world-frame wall segments.
+
+    Lines are read bottom-up, as ``Maze::parse`` reads them, alternating rows of
+    posts, which hold the horizontal walls, and rows of cells, which hold the
+    vertical ones: a post sits at ``(col, row) * 0.18``, a horizontal wall spans
+    one cell in x at ``y = row * 0.18`` and a vertical wall spans one cell in y at
+    ``x = col * 0.18``.
+    """
+    inverted = maze_path.read_text().splitlines()[::-1]
+    segments = []
+
+    for index, line in enumerate(inverted):
+        row = index // 2
+
+        if index % 2 == 0:
+            for column, start in enumerate(range(0, len(line), 4)):
+                if line[start + 1 : start + 4] == "---":
+                    y = row * CELL_SIZE
+                    segments.append((column * CELL_SIZE, y, (column + 1) * CELL_SIZE, y))
+        else:
+            for column, start in enumerate(range(0, len(line), 4)):
+                if start < len(line) and line[start] == "|":
+                    x = column * CELL_SIZE
+                    segments.append((x, row * CELL_SIZE, x, (row + 1) * CELL_SIZE))
+
+    return segments
+
+
+def maze_report(run: Run, maze_path: Path) -> dict:
+    """True maze cell of the robot, and whether it reached a goal cell."""
+    goal_cells = maze_goal_cells(maze_path)
     true_x = cell_index(run.get("x"))
     true_y = cell_index(run.get("y"))
-    in_goal = np.isin(true_x, GOAL_CELLS) & np.isin(true_y, GOAL_CELLS)
+    in_goal = np.zeros(true_x.shape, dtype=bool)
+
+    for goal_x, goal_y in goal_cells:
+        in_goal |= (true_x == goal_x) & (true_y == goal_y)
+
     reached = np.nonzero(in_goal)[0]
 
-    report = {
-        "goal_cells": [[x, y] for x in GOAL_CELLS for y in GOAL_CELLS],
+    return {
+        "goal_cells": [[x, y] for x, y in goal_cells],
         "goal_reached": bool(reached.size),
         "goal_time": float(run.time[reached[0]]) if reached.size else None,
         "final_true_cell": (
             [int(true_x[-1]), int(true_y[-1])] if run.time.size and np.isfinite(true_x[-1]) else None
         ),
-        "final_grid_cell": None,
-        "cell_mismatch_fraction": None,
-        "first_mismatch_time": None,
-    }
-
-    if "grid_pose_x" not in run.columns or "grid_pose_y" not in run.columns:
-        return report
-
-    grid_x = run.columns["grid_pose_x"]
-    grid_y = run.columns["grid_pose_y"]
-
-    if run.time.size and np.isfinite(grid_x[-1]) and np.isfinite(grid_y[-1]):
-        report["final_grid_cell"] = [int(grid_x[-1]), int(grid_y[-1])]
-
-    window = run_mask(run, run_start) & np.isfinite(grid_x) & np.isfinite(grid_y) & np.isfinite(true_x)
-
-    if not window.any():
-        return report
-
-    mismatch = window & ((grid_x != true_x) | (grid_y != true_y))
-    report["cell_mismatch_fraction"] = float(mismatch.sum() / window.sum())
-    first = np.nonzero(mismatch)[0]
-
-    if first.size:
-        report["first_mismatch_time"] = float(run.time[first[0]])
-
-    return report
-
-
-def turn_starts(run: Run) -> np.ndarray:
-    """Indices where the angular speed setpoint leaves zero."""
-    desired = run.get("desired_angular_speed")
-
-    if desired.size < 2:
-        return np.zeros(0, dtype=int)
-
-    moving = np.isfinite(desired) & (desired != 0)
-    return np.nonzero(moving[1:] & ~moving[:-1])[0] + 1
-
-
-def odometry_pose_report(run: Run) -> dict:
-    """Distance between the odometry-estimated position and the ground truth."""
-    if "odometry_state_x" not in run.columns or "odometry_state_y" not in run.columns:
-        return {"samples": 0, "max": None, "max_time": None, "final": None, "at_turn_starts": []}
-
-    error = np.hypot(run.columns["odometry_state_x"] - run.get("x"), run.columns["odometry_state_y"] - run.get("y"))
-    valid = np.isfinite(error)
-
-    if not valid.any():
-        return {"samples": 0, "max": None, "max_time": None, "final": None, "at_turn_starts": []}
-
-    peak = int(np.nanargmax(np.where(valid, error, -np.inf)))
-
-    return {
-        "samples": int(valid.sum()),
-        "max": float(error[peak]),
-        "max_time": float(run.time[peak]),
-        "final": float(error[valid][-1]),
-        "at_turn_starts": [
-            {"time": float(run.time[index]), "error": float(error[index])}
-            for index in turn_starts(run)[:MAX_INTERVALS]
-            if np.isfinite(error[index])
-        ],
     }
 
 
-def fsm_timeline(run: Run) -> list[dict]:
-    """Transitions of the firmware state machine, empty when not exported."""
-    if "fsm_state" not in run.columns or run.time.size == 0:
-        return []
-
-    state = run.columns["fsm_state"]
-    changed = np.concatenate([[True], state[1:] != state[:-1]])
-
-    return [
-        {"time": float(run.time[index]), "state": int(state[index])}
-        for index in np.nonzero(changed)[0]
-        if np.isfinite(state[index])
-    ]
-
-
-def deceleration_events(run: Run) -> list[dict]:
-    """Drops of more than 0.05 m/s within 50 ms while the setpoint is not falling."""
-    truth = forward_speed(run)
-    desired = run.get("desired_linear_speed")
-    dt = run.dt
-
-    if dt <= 0 or truth.size < 3:
-        return []
-
-    span = max(1, int(round(DECEL_WINDOW_S / dt)))
-
-    if truth.size <= span:
-        return []
-
-    head = np.arange(truth.size - span)
-    tail = head + span
-    drop = truth[head] - truth[tail]
-    moving = (desired[head] != 0) & (desired[tail] != 0)
-    not_decreasing = desired[tail] >= desired[head]
-    hit = np.nonzero((drop > DECEL_DROP) & moving & not_decreasing)[0]
-
-    events: list[dict] = []
-
-    for index in hit:
-        start, end = int(index), int(index) + span
-
-        if events and start <= events[-1]["_end"]:
-            events[-1]["_end"] = max(events[-1]["_end"], end)
-            events[-1]["_drop"] = max(events[-1]["_drop"], float(drop[index]))
-            continue
-
-        events.append({"_start": start, "_end": end, "_drop": float(drop[index])})
-
-    report = []
-
-    for event in events[:MAX_INTERVALS]:
-        lo, hi = event["_start"], event["_end"] + 1
-        pitch = np.abs(run.get("pitch")[lo:hi])
-        report.append(
-            {
-                "start": float(run.time[lo]),
-                "end": float(run.time[min(hi, run.time.size) - 1]),
-                "speed_drop": event["_drop"],
-                "min_left_ncon": float(np.min(run.get("left_ncon")[lo:hi])),
-                "min_right_ncon": float(np.min(run.get("right_ncon")[lo:hi])),
-                "max_slip": float(
-                    np.nanmax(np.concatenate([run.get("left_slip")[lo:hi], run.get("right_slip")[lo:hi]]))
-                ),
-                "max_abs_pitch_deg": float(np.degrees(np.nanmax(pitch))) if pitch.size else None,
-            }
-        )
-
-    return report
-
-
-def build_report(run: Run) -> dict:
-    desired = run.get("desired_linear_speed")
-    nonzero = np.nonzero(np.isfinite(desired) & (desired != 0))[0]
-    run_start = float(run.time[nonzero[0]]) if nonzero.size else None
-
-    ctrl_left = run.get("ctrl_left")
-    ctrl_right = run.get("ctrl_right")
-    base_ncon = run.get("base_ncon")
-    warnings = run.get("warnings_total")
+def build_report(run: Run, maze_path: Path, plugin: ModuleType | None) -> dict:
     pitch = run.get("pitch")
     roll = run.get("roll")
+    wheels = run.labels("_slip")
+    start = hook(plugin, "run_start")
 
-    return {
+    report = {
         "run": str(run.directory),
-        "model": run.meta.get("model_path"),
+        "target": run.meta.get("target"),
+        "robot": run.meta.get("robot_path"),
+        "scenario": run.meta.get("scenario_path"),
         "args": run.meta.get("args"),
         "ticks": int(run.time.size),
         "duration": float(run.time[-1] - run.time[0]) if run.time.size else 0.0,
         "dt": run.dt,
-        "warnings_total": float(np.nanmax(warnings)) if warnings.size and np.isfinite(warnings).any() else 0.0,
+        "run_start_time": start(run) if start else None,
+        "warnings_total": float(run.meta.get("warnings_total", 0)),
+        "events": run.meta.get("events", []),
+        "collisions": [event["time"] for event in run.meta.get("events", []) if event.get("kind") == "collision"],
         "nonfinite": finite_stats(run),
-        "left_wheel": wheel_report(run, "left"),
-        "right_wheel": wheel_report(run, "right"),
-        "base_contact_fraction": (
-            float(np.mean(base_ncon > 0)) if base_ncon.size and np.isfinite(base_ncon).any() else None
-        ),
+        "wheels": {label: wheel_report(run, label) for label in wheels},
+        "contact_fractions": contact_fractions(run, wheels),
         "z": z_report(run),
         "max_abs_pitch_deg": float(np.degrees(np.nanmax(np.abs(pitch)))) if pitch.size else None,
         "max_abs_roll_deg": float(np.degrees(np.nanmax(np.abs(roll)))) if roll.size else None,
-        "ctrl_saturation_fraction": {
-            "left": float(np.mean(np.abs(ctrl_left) >= SATURATION)) if ctrl_left.size else None,
-            "right": float(np.mean(np.abs(ctrl_right) >= SATURATION)) if ctrl_right.size else None,
-        },
-        "odometry": odometry_report(run, run_start),
-        "odometry_pose_error": odometry_pose_report(run),
-        "maze": maze_report(run, run_start),
-        "fsm_state": fsm_timeline(run),
+        "maze_path": str(maze_path),
+        "maze": maze_report(run, maze_path),
         "crash": run.crash,
-        "deceleration_events": deceleration_events(run),
     }
+
+    extra = hook(plugin, "report")
+
+    if extra:
+        for key, value in extra(run, report).items():
+            if isinstance(value, dict) and isinstance(report.get(key), dict):
+                report[key].update(value)
+            else:
+                report[key] = value
+
+    return report
 
 
 def mark_run_start(axis, run_start: float | None) -> None:
     if run_start is not None:
-        axis.axvline(run_start, color="k", linestyle="--", linewidth=0.8, label="RUN start")
+        axis.axvline(run_start, color="k", linestyle="--", linewidth=0.8, label="task start")
 
 
 def save(figure, path: Path) -> None:
@@ -471,22 +420,21 @@ def save(figure, path: Path) -> None:
     plt.close(figure)
 
 
-def plot_speeds(run: Run, run_start: float | None, path: Path) -> None:
+def plot_speeds(run: Run, run_start: float | None, plugin: ModuleType | None, path: Path) -> None:
     figure, axis = plt.subplots(figsize=(10, 5))
-    axis.plot(run.time, run.get("desired_linear_speed"), label="desired_linear_speed")
-    axis.plot(run.time, run.get("odometry_linear_velocity"), label="odometry_linear_velocity")
-    axis.plot(run.time, forward_speed(run), label="ground-truth forward speed")
+    twin = axis.twinx()
+    traces = hook(plugin, "speed_traces")
+
+    for label, values, kind in traces(run) if traces else []:
+        target = axis if kind == "linear" else twin
+        target.plot(run.time, values, label=label, alpha=1.0 if kind == "linear" else 0.5)
+
+    axis.plot(run.time, run.get("v_forward"), label="v_forward (ground truth)")
+    twin.plot(run.time, run.get("wz_body"), color="tab:brown", alpha=0.5, label="wz_body (ground truth)")
     axis.set_xlabel("time [s]")
     axis.set_ylabel("linear speed [m/s]")
-    mark_run_start(axis, run_start)
-
-    twin = axis.twinx()
-    twin.plot(run.time, run.get("desired_angular_speed"), color="tab:red", alpha=0.5, label="desired_angular_speed")
-    twin.plot(
-        run.time, run.get("odometry_angular_velocity"), color="tab:purple", alpha=0.5, label="odometry_angular_velocity"
-    )
-    twin.plot(run.time, yaw_rate(run), color="tab:brown", alpha=0.5, label="wz_body (ground truth)")
     twin.set_ylabel("angular speed [rad/s]")
+    mark_run_start(axis, run_start)
 
     handles, labels = axis.get_legend_handles_labels()
     extra = twin.get_legend_handles_labels()
@@ -497,14 +445,14 @@ def plot_speeds(run: Run, run_start: float | None, path: Path) -> None:
 def plot_contacts(run: Run, run_start: float | None, path: Path) -> None:
     figure, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
 
-    for name in ("left_ncon", "right_ncon", "caster_ncon", "base_ncon"):
-        axes[0].step(run.time, run.get(name), where="post", label=name, linewidth=0.8)
+    for label in run.labels("_ncon"):
+        axes[0].step(run.time, run.get(f"{label}_ncon"), where="post", label=f"{label}_ncon", linewidth=0.8)
 
     axes[0].set_ylabel("contact count")
     axes[0].legend(fontsize=7)
 
-    for name in ("left_fn", "right_fn", "caster_fn"):
-        axes[1].plot(run.time, run.get(name), label=name, linewidth=0.8)
+    for label in run.labels("_fn"):
+        axes[1].plot(run.time, run.get(f"{label}_fn"), label=f"{label}_fn", linewidth=0.8)
 
     axes[1].set_ylabel("normal force [N]")
     axes[1].set_xlabel("time [s]")
@@ -534,25 +482,21 @@ def plot_attitude(run: Run, run_start: float | None, path: Path) -> None:
     save(figure, path)
 
 
-def plot_control(run: Run, run_start: float | None, path: Path) -> None:
-    figure, axes = plt.subplots(3, 1, sharex=True, figsize=(10, 8))
-    axes[0].plot(run.time, run.get("linear_pid_response"), label="linear_pid_response")
-    axes[0].plot(run.time, run.get("angular_pid_response"), label="angular_pid_response")
-    axes[0].set_ylabel("PID response")
+def plot_actuators(run: Run, run_start: float | None, path: Path) -> None:
+    figure, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
+
+    for name in [name for name in run.columns if name.endswith("_voltage")]:
+        axes[0].plot(run.time, run.get(name), label=name)
+
+    axes[0].set_ylabel("voltage [V]")
     axes[0].legend(fontsize=7)
 
-    axes[1].plot(run.time, run.get("left_feed_forward_response"), label="left_feed_forward_response")
-    axes[1].plot(run.time, run.get("right_feed_forward_response"), label="right_feed_forward_response")
-    axes[1].plot(run.time, run.get("ctrl_left"), label="ctrl_left")
-    axes[1].plot(run.time, run.get("ctrl_right"), label="ctrl_right")
-    axes[1].set_ylabel("command [%]")
-    axes[1].legend(fontsize=7)
+    for name in run.prefixed("motor_torque_"):
+        axes[1].plot(run.time, run.get(name), label=name)
 
-    axes[2].plot(run.time, run.get("act_force_left"), label="act_force_left")
-    axes[2].plot(run.time, run.get("act_force_right"), label="act_force_right")
-    axes[2].set_ylabel("actuator force [N m]")
-    axes[2].set_xlabel("time [s]")
-    axes[2].legend(fontsize=7)
+    axes[1].set_ylabel("motor torque [N m]")
+    axes[1].set_xlabel("time [s]")
+    axes[1].legend(fontsize=7)
 
     for axis in axes:
         mark_run_start(axis, run_start)
@@ -562,14 +506,16 @@ def plot_control(run: Run, run_start: float | None, path: Path) -> None:
 
 def plot_wheels(run: Run, run_start: float | None, path: Path) -> None:
     figure, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
-    axes[0].plot(run.time, run.get("wheel_qvel_left") * WHEEL_RADIUS, label="left wheel surface speed")
-    axes[0].plot(run.time, run.get("wheel_qvel_right") * WHEEL_RADIUS, label="right wheel surface speed")
-    axes[0].plot(run.time, forward_speed(run), label="ground-truth forward speed", linewidth=0.8)
-    axes[0].set_ylabel("speed [m/s]")
+
+    for name in run.prefixed("wheel_speed_"):
+        axes[0].plot(run.time, run.get(name), label=name)
+
+    axes[0].set_ylabel("wheel speed [rad/s]")
     axes[0].legend(fontsize=7)
 
-    axes[1].plot(run.time, run.get("left_slip"), label="left_slip")
-    axes[1].plot(run.time, run.get("right_slip"), label="right_slip")
+    for label in run.labels("_slip"):
+        axes[1].plot(run.time, run.get(f"{label}_slip"), label=f"{label}_slip")
+
     axes[1].set_ylabel("slip speed [m/s]")
     axes[1].set_xlabel("time [s]")
     axes[1].legend(fontsize=7)
@@ -580,64 +526,23 @@ def plot_wheels(run: Run, run_start: float | None, path: Path) -> None:
     save(figure, path)
 
 
-def maze_segments(maze_path: Path) -> list[tuple[float, float, float, float]]:
-    """Parse the ASCII maze into world-frame wall segments.
-
-    Matches ``models/gen_maze.py``: lines are read bottom-up, a post sits at
-    ``(col, row) * 0.18``, a horizontal wall spans one cell in x at ``y = row * 0.18``
-    and a vertical wall spans one cell in y at ``x = col * 0.18``.
-    """
-    lines = [line.rstrip("\n") for line in maze_path.read_text().splitlines()]
-    inverted = lines[::-1]
-    segments = []
-
-    for index, line in enumerate(inverted):
-        row = index // 2
-
-        if index % 2 == 0:  # post row: horizontal walls
-            for column, start in enumerate(range(0, len(line), 4)):
-                if line[start + 1 : start + 4] == "---":
-                    y = row * CELL_SIZE
-                    segments.append((column * CELL_SIZE, y, (column + 1) * CELL_SIZE, y))
-        else:  # cell row: vertical walls
-            for column, start in enumerate(range(0, len(line), 4)):
-                if start < len(line) and line[start] == "|":
-                    x = column * CELL_SIZE
-                    segments.append((x, row * CELL_SIZE, x, (row + 1) * CELL_SIZE))
-
-    return segments
-
-
-def plot_topdown(run: Run, path: Path) -> None:
+def plot_topdown(run: Run, maze_path: Path, plugin: ModuleType | None, path: Path) -> None:
     figure, axis = plt.subplots(figsize=(7, 7))
 
-    model = run.meta.get("model_path")
+    for x0, y0, x1, y1 in maze_segments(maze_path):
+        axis.plot([x0, x1], [y0, y1], color="0.4", linewidth=1.5)
 
-    if model:
-        # meta.json stores the model path as it was typed on the command line,
-        # so try it relative to the current directory and to the run's parent.
-        candidates = [
-            Path(model).parent / "maze.txt",
-            (run.directory.resolve().parent.parent / Path(model).parent / "maze.txt"),
-        ]
-        maze_path = next((candidate for candidate in candidates if candidate.exists()), None)
-
-        if maze_path is not None:
-            for x0, y0, x1, y1 in maze_segments(maze_path):
-                axis.plot([x0, x1], [y0, y1], color="0.4", linewidth=1.5)
-
-    for cell_x in GOAL_CELLS:
-        for cell_y in GOAL_CELLS:
-            axis.add_patch(
-                plt.Rectangle(
-                    (cell_x * CELL_SIZE, cell_y * CELL_SIZE),
-                    CELL_SIZE,
-                    CELL_SIZE,
-                    color="tab:green",
-                    alpha=0.15,
-                    zorder=0,
-                )
+    for cell_x, cell_y in maze_goal_cells(maze_path):
+        axis.add_patch(
+            plt.Rectangle(
+                (cell_x * CELL_SIZE, cell_y * CELL_SIZE),
+                CELL_SIZE,
+                CELL_SIZE,
+                color="tab:green",
+                alpha=0.15,
+                zorder=0,
             )
+        )
 
     x = run.get("x")
     y = run.get("y")
@@ -652,15 +557,13 @@ def plot_topdown(run: Run, path: Path) -> None:
     elif run.time.size:
         axis.plot(x, y, color="tab:blue", linewidth=1.0)
 
-    if "odometry_state_x" in run.columns and "odometry_state_y" in run.columns:
-        axis.plot(
-            run.columns["odometry_state_x"],
-            run.columns["odometry_state_y"],
-            color="tab:red",
-            linestyle="--",
-            linewidth=1.0,
-            label="odometry estimate",
-        )
+    overlays = hook(plugin, "trajectory_overlays")
+
+    styles = [("tab:red", "--"), ("tab:orange", ":"), ("tab:purple", "-.")]
+
+    for index, (label, overlay_x, overlay_y) in enumerate(overlays(run) if overlays else []):
+        color, linestyle = styles[index % len(styles)]
+        axis.plot(overlay_x, overlay_y, color=color, linestyle=linestyle, linewidth=1.0, label=label)
 
     if run.time.size:
         axis.plot(x[0], y[0], "go", markersize=6, label="start")
@@ -678,23 +581,24 @@ def fmt(value, digits: int = 3) -> str:
     return "n/a" if value is None else f"{value:.{digits}f}"
 
 
-def summarize(report: dict) -> None:
+def summarize(report: dict, plugin: ModuleType | None) -> None:
     print(f"run          {report['run']}")
     print(f"ticks        {report['ticks']}  duration {report['duration']:.3f} s  dt {report['dt'] * 1e3:.4f} ms")
     print(f"warnings     {report['warnings_total']:.0f}  non-finite samples {report['nonfinite']['nonfinite_samples']}")
-    odometry = report["odometry"]
-    start = odometry["run_start_time"]
-    print(f"RUN start    {'never' if start is None else f'{start:.3f} s'}")
+    start = report["run_start_time"]
+    print(f"task start   {'never' if start is None else f'{start:.3f} s'}")
+    collisions = report["collisions"]
+    print(f"collisions   {len(collisions)}  " + " ".join(f"{time:.3f}s" for time in collisions[:10]))
 
-    print(f"odometry     rms {fmt(odometry['rms_error'], 4)} m/s  max {fmt(odometry['max_error'], 4)} m/s")
-
-    for side in ("left_wheel", "right_wheel"):
-        wheel = report[side]
+    for label, wheel in report["wheels"].items():
         print(
-            f"{side:12} airborne {fmt(wheel['airborne_fraction'])}  "
+            f"{label + ' wheel':12} airborne {fmt(wheel['airborne_fraction'])}  "
             f"intervals {len(wheel['airborne_intervals'])}  "
             f"max|slip| {fmt(wheel['max_abs_slip'], 4)}  min penetration {fmt(wheel['min_penetration'], 6)}"
         )
+
+    for label, fraction in report["contact_fractions"].items():
+        print(f"{label + ' contact':12} fraction {fmt(fraction)}")
 
     z = report["z"]
     print(
@@ -702,30 +606,10 @@ def summarize(report: dict) -> None:
         f"final {fmt(z['final'], 5)}  settled {z['settle_time']}"
     )
     print(f"attitude     max|pitch| {fmt(report['max_abs_pitch_deg'])} deg  max|roll| {fmt(report['max_abs_roll_deg'])} deg")
-    saturation = report["ctrl_saturation_fraction"]
-    print(f"saturation   left {fmt(saturation['left'])}  right {fmt(saturation['right'])}")
-    print(f"base contact fraction {report['base_contact_fraction']}")
-    print(f"deceleration events   {len(report['deceleration_events'])}")
 
     maze = report["maze"]
     goal = "never" if maze["goal_time"] is None else f"{maze['goal_time']:.3f} s"
-    print(
-        f"goal         reached {maze['goal_reached']} at {goal}  "
-        f"true cell {maze['final_true_cell']}  grid cell {maze['final_grid_cell']}"
-    )
-    mismatch = "n/a" if maze["first_mismatch_time"] is None else f"{maze['first_mismatch_time']:.3f} s"
-    print(f"cell mismatch fraction {fmt(maze['cell_mismatch_fraction'])}  first at {mismatch}")
-
-    pose = report["odometry_pose_error"]
-    print(
-        f"odom pose    max {fmt(pose['max'], 4)} m at {fmt(pose['max_time'])} s  "
-        f"final {fmt(pose['final'], 4)} m  turn samples {len(pose['at_turn_starts'])}"
-    )
-
-    timeline = report["fsm_state"]
-
-    if timeline:
-        print("fsm          " + "  ".join(f"{entry['time']:.3f}s->{entry['state']}" for entry in timeline))
+    print(f"goal         reached {maze['goal_reached']} at {goal}  true cell {maze['final_true_cell']}")
 
     crash = report["crash"]
 
@@ -735,27 +619,40 @@ def summarize(report: dict) -> None:
             f"last complete tick {crash['last_complete_tick']} at {crash['last_complete_time']} s"
         )
 
+    extra = hook(plugin, "summarize")
+
+    if extra:
+        extra(report)
+
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyse a micras_simulation run directory")
+    parser = argparse.ArgumentParser(description="Analyze a simulation run directory")
     parser.add_argument("run", type=Path)
     parser.add_argument("--t0", type=float, default=None)
     parser.add_argument("--t1", type=float, default=None)
+    parser.add_argument("--plugin", type=Path, default=None, help="analysis plugin to use instead of the target's (also $MICRAS_SIM_PLUGIN)")
     arguments = parser.parse_args()
 
     run = Run(arguments.run, arguments.t0, arguments.t1)
-    report = build_report(run)
+    plugin = load_plugin(run, arguments.plugin)
+    maze_path = resolve_maze(run)
+    report = build_report(run, maze_path, plugin)
     (arguments.run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
 
-    run_start = report["odometry"]["run_start_time"]
-    plot_speeds(run, run_start, arguments.run / "speeds.png")
+    run_start = report["run_start_time"]
+    plot_speeds(run, run_start, plugin, arguments.run / "speeds.png")
     plot_contacts(run, run_start, arguments.run / "contacts.png")
     plot_attitude(run, run_start, arguments.run / "attitude.png")
-    plot_control(run, run_start, arguments.run / "control.png")
+    plot_actuators(run, run_start, arguments.run / "actuators.png")
     plot_wheels(run, run_start, arguments.run / "wheels.png")
-    plot_topdown(run, arguments.run / "topdown.png")
+    plot_topdown(run, maze_path, plugin, arguments.run / "topdown.png")
 
-    summarize(report)
+    extra_plots = hook(plugin, "plots")
+
+    if extra_plots:
+        extra_plots(run, report, arguments.run)
+
+    summarize(report, plugin)
 
 
 if __name__ == "__main__":

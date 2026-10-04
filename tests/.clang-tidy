@@ -1,6 +1,6 @@
 ---
-# The GoogleTest macros expand into try/catch blocks, so the cognitive
-# complexity of a TEST body measures the macro rather than the test.
+# The test macros expand into branches that count against the cognitive complexity of every test
+# case, whatever the test itself does
 InheritParentConfig: true
 Checks:
   -readability-function-cognitive-complexity,

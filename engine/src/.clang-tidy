@@ -1,0 +1,9 @@
+---
+# toml++ declares what it provides in headers of its own implementation, reached through toml.hpp,
+# which is the one a user of the library includes. Its table's operator[] is a lookup that yields an
+# empty view for a missing key, like a map's, so it is not an unchecked access.
+InheritParentConfig: true
+CheckOptions:
+  misc-include-cleaner.IgnoreHeaders: 'toml\+\+/.*'
+  cppcoreguidelines-pro-bounds-avoid-unchecked-container-access.ExcludeClasses: '::std::map;::std::unordered_map;::std::flat_map;::toml::table;::toml::node_view'
+...

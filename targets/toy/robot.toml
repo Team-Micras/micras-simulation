@@ -1,0 +1,113 @@
+# The toy target's robot: the engine tests' tiny robot (tests/models/tiny_robot.toml),
+# a made-up two-wheeled robot with every key the schema requires, with its own name,
+# a timestep of 125 us that divides the toy's 1 ms loop, and a second wall sensor
+# looking ahead, since the wall sensors fire in two groups.
+
+schema = 1
+name = "toy"
+
+[integration]
+timestep = { value = 0.000125, source = "divides the 1 ms loop into eight steps" }
+
+[chassis]
+mass = { value = 0.05, source = "made up" }
+center_of_mass = [0.0, 0.0, 0.01]
+inertia = [1.0e-5, 1.5e-5, 2.0e-5]
+outline = [[0.04, 0.02], [-0.03, 0.02], [-0.03, -0.02], [0.04, -0.02]]
+board_bottom = 0.002
+board_top = 0.003
+friction = 0.3
+
+[[chassis.boxes]]
+name = "cargo"
+min = [-0.02, -0.015, 0.003]
+max = [0.02, 0.015, 0.02]
+
+[[chassis.cylinders]]
+name = "mast"
+base = [0.0, 0.0, 0.02]
+radius = 0.005
+height = 0.01
+
+[wheels]
+radius = 0.011
+width = 0.004
+track = 0.05
+mass = 0.004
+spin_inertia = 2.0e-7
+friction = 1.0
+torsional_friction = 0.0005
+contact_time_constant = 0.008
+contact_damping_ratio = 1.0
+
+[drive]
+winding_resistance = { value = 10.0, source = "made up" }
+bridge_resistance = 0.5
+torque_constant = 0.003
+speed_constant = 0.003
+no_load_current = 0.007
+rotor_inertia = 4.0e-9
+gear_ratio = 5.0
+gear_efficiency = 0.9
+supply_voltage = 6.0
+
+[encoders]
+counts_per_revolution = { value = 4096, source = "made up" }
+
+[imu]
+position = [0.0, 0.0, 0.004]
+chip_x = [1.0, 0.0, 0.0]
+chip_y = [0.0, 1.0, 0.0]
+gyro_noise_density = 5.0e-5
+gyro_bias = 0.005
+gyro_scale_error = 0.001
+gyro_resolution = 0.0025
+accel_noise_density = 6.0e-4
+accel_bias = 0.04
+accel_resolution = 0.0024
+bandwidth = 250.0
+output_rate = 1000.0
+clock_error = 0.005
+
+[fan]
+position = [0.0, 0.0, 0.003]
+max_downforce = 0.1
+nominal_voltage = 7.4
+time_constant = 0.1
+
+[battery]
+cells = 2
+cell_voltage = 3.7
+
+[link]
+baud_rate = 9600
+
+[wall_sensors]
+emitter_half_angle_deg = 5.0
+emitter_intensity = 1.0
+receiver_half_angle_deg = 10.0
+receiver_responsivity = 4.0e-4
+load_resistance = 1000.0
+saturation_voltage = 3.0
+adc_reference = 3.3
+adc_max_counts = 4095.0
+adc_noise_counts = 2.0
+settle_fraction = 0.95
+ambient_irradiance = 0.01
+rays = 4
+
+[[wall_sensors.sensors]]
+name = "eye"
+emitter = [0.04, 0.0, 0.01]
+receiver = [0.04, 0.005, 0.01]
+yaw_deg = { value = 90.0, source = "made up, to check the conversion" }
+group = 0
+gain = 1.0
+
+[[wall_sensors.sensors]]
+name = "front"
+emitter = [0.04, -0.005, 0.01]
+receiver = [0.04, 0.0, 0.01]
+yaw_deg = 0.0
+group = 1
+gain = 1.0
