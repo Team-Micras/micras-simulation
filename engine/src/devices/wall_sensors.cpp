@@ -233,7 +233,7 @@ void WallSensors::sample_scheduled(MujocoWorld& world) {
         this->config.write(schedule->position * sensors + receiver, counts);
     }
 
-    if (schedule->position + 1 != schedule->length) {
+    if (not schedule->last) {
         return;
     }
 
@@ -260,7 +260,13 @@ void WallSensors::sample_scheduled(MujocoWorld& world) {
 }
 
 void WallSensors::sample(MujocoWorld& world, const Clock& clock) {
-    if (clock.tick_count() % this->config.scan_ticks != 0) {
+    if (this->config.scan_period_us > 0.0) {
+        if (static_cast<double>(clock.now_us()) < this->next_scan_us) {
+            return;
+        }
+
+        this->next_scan_us += this->config.scan_period_us;
+    } else if (clock.tick_count() % this->config.scan_ticks != 0) {
         return;
     }
 

@@ -45,13 +45,14 @@ public:
     /**
      * @brief The emitters one scan lights, when the firmware schedules them itself.
      *
-     * @note The position is where the scan goes in the sequence the firmware converts, which is
-     * finished after its last position.
+     * @note The position is where the scan goes in the buffer the firmware converts into, of the
+     * given length, and last marks a scan after which the firmware reads what was converted.
      */
     struct Schedule {
         std::size_t       position;
         std::size_t       length;
         std::vector<bool> lit;
+        bool              last;
     };
 
     /**
@@ -104,6 +105,14 @@ public:
          * no scan is taken.
          */
         std::function<std::optional<Schedule>()> schedule;
+
+        /**
+         * @brief Time between scans, in microseconds, when it is not a whole number of ticks.
+         *
+         * @note Zero takes scan_ticks instead. Otherwise each scan is taken at the first tick at or
+         * after its time, so a scan is late by less than a tick but the scans keep their rate.
+         */
+        double scan_period_us{0.0};
     };
 
     /**
@@ -184,6 +193,11 @@ private:
      * -2 at any other.
      */
     std::vector<int> lone;
+
+    /**
+     * @brief Time of the next scan, in microseconds, when the scans are timed by scan_period_us.
+     */
+    double next_scan_us{0.0};
 
     Config                 config;
     Noise                  noise;
