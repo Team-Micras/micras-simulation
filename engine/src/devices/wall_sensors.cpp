@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <numbers>
+#include <optional>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -188,8 +189,83 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
     return total;
 }
 
+uint32_t WallSensors::convert(std::size_t receiver, double signal) {
+    const WallSensorsDescription& optics = this->config.description;
+    const double                  current = optics.receiver_responsivity * optics.sensors.at(receiver).gain *
+                                            (optics.settle_fraction * signal + optics.ambient_irradiance);
+    const double                  voltage = std::min(current * optics.load_resistance, optics.saturation_voltage);
+    const double                  reading =
+        voltage / optics.adc_reference * optics.adc_max_counts + this->noise.gaussian(optics.adc_noise_counts);
+    return static_cast<uint32_t>(std::clamp(std::round(reading), 0.0, optics.adc_max_counts));
+}
+
+void WallSensors::sample_scheduled(MujocoWorld& world) {
+    const std::optional<Schedule> schedule = this->config.schedule();
+
+    if (not schedule.has_value()) {
+        return;
+    }
+
+    const WallSensorsDescription& optics = this->config.description;
+    const std::size_t             sensors = optics.sensors.size();
+
+    if (this->counts.size() != schedule->length * sensors) {
+        this->counts.assign(schedule->length * sensors, 0);
+        this->lone.assign(schedule->length, -2);
+    }
+
+    const auto lit = static_cast<std::size_t>(std::ranges::count(schedule->lit, true));
+    const auto first = static_cast<std::size_t>(std::ranges::find(schedule->lit, true) - schedule->lit.begin());
+
+    this->lone.at(schedule->position) = lit == 0 ? -1 : (lit == 1 ? static_cast<int>(first) : -2);
+
+    for (std::size_t receiver = 0; receiver < sensors; receiver++) {
+        double signal = 0.0;
+
+        for (std::size_t emitter = 0; emitter < sensors; emitter++) {
+            if (schedule->lit.at(emitter)) {
+                signal += this->irradiance(world, emitter, receiver);
+            }
+        }
+
+        const uint32_t counts = this->convert(receiver, signal);
+        this->counts.at(schedule->position * sensors + receiver) = counts;
+        this->config.write(schedule->position * sensors + receiver, counts);
+    }
+
+    if (schedule->position + 1 != schedule->length) {
+        return;
+    }
+
+    for (std::size_t sensor = 0; sensor < sensors; sensor++) {
+        double dark = 0.0;
+        double darks = 0.0;
+        double own = 0.0;
+
+        for (std::size_t position = 0; position < schedule->length; position++) {
+            const auto counts = static_cast<double>(this->counts.at(position * sensors + sensor));
+
+            if (this->lone.at(position) == -1) {
+                dark += counts;
+                darks += 1.0;
+            } else if (this->lone.at(position) == static_cast<int>(sensor)) {
+                own = counts;
+            }
+        }
+
+        this->intensities.at(sensor) = darks > 0.0 ? (own - dark / darks) / optics.adc_max_counts : 0.0;
+    }
+
+    this->config.finish_sequence();
+}
+
 void WallSensors::sample(MujocoWorld& world, const Clock& clock) {
     if (clock.tick_count() % this->config.scan_ticks != 0) {
+        return;
+    }
+
+    if (this->config.schedule) {
+        this->sample_scheduled(world);
         return;
     }
 
@@ -207,12 +283,7 @@ void WallSensors::sample(MujocoWorld& world, const Clock& clock) {
             }
         }
 
-        const double current = optics.receiver_responsivity * optics.sensors.at(receiver).gain *
-                               (optics.settle_fraction * signal + optics.ambient_irradiance);
-        const double voltage = std::min(current * optics.load_resistance, optics.saturation_voltage);
-        const double reading =
-            voltage / optics.adc_reference * optics.adc_max_counts + this->noise.gaussian(optics.adc_noise_counts);
-        const auto counts = static_cast<uint32_t>(std::clamp(std::round(reading), 0.0, optics.adc_max_counts));
+        const uint32_t counts = this->convert(receiver, signal);
 
         this->counts.at(scan * sensors + receiver) = counts;
         this->config.write(scan * sensors + receiver, counts);

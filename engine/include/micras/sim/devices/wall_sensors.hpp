@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,18 @@ namespace micras::sim {
  */
 class WallSensors : public Device {
 public:
+    /**
+     * @brief The emitters one scan lights, when the firmware schedules them itself.
+     *
+     * @note The position is where the scan goes in the sequence the firmware converts, which is
+     * finished after its last position.
+     */
+    struct Schedule {
+        std::size_t       position;
+        std::size_t       length;
+        std::vector<bool> lit;
+    };
+
     /**
      * @brief The sensors and where their conversions go.
      */
@@ -82,6 +95,15 @@ public:
          * @note The rays pass through the geoms of MujocoWorld::unseen_group.
          */
         std::function<double(int)> reflectance;
+
+        /**
+         * @brief The emitters each scan lights, when the firmware schedules them one at a time.
+         *
+         * @note Called once per scan, in place of the two groups of the description, of which the
+         * duty of the emitters then says nothing. Nothing means the emitters are not running, and
+         * no scan is taken.
+         */
+        std::function<std::optional<Schedule>()> schedule;
     };
 
     /**
@@ -140,6 +162,28 @@ private:
      * @return Irradiance in W/m^2.
      */
     double irradiance(MujocoWorld& world, std::size_t emitter, std::size_t receiver);
+
+    /**
+     * @brief Convert the light that falls on a receiver into counts of the converter.
+     *
+     * @param receiver Index of the receiving sensor.
+     * @param signal Irradiance from the emitters that are lit, in W/m^2.
+     * @return Counts of the converter.
+     */
+    uint32_t convert(std::size_t receiver, double signal);
+
+    /**
+     * @brief Take the scan the schedule of the firmware asks for.
+     *
+     * @param world The world.
+     */
+    void sample_scheduled(MujocoWorld& world);
+
+    /**
+     * @brief Emitter lit alone at each position of the scheduled sequence, -1 at a dark position and
+     * -2 at any other.
+     */
+    std::vector<int> lone;
 
     Config                 config;
     Noise                  noise;
