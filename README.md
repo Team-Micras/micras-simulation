@@ -59,7 +59,7 @@ another compiler may move the last bits of a run.
 |---|---|
 | `--out <dir>` | required, output directory, created if missing |
 | `--scenario <toml>` | the scenario to play; without one the robot is switched on and left alone |
-| `--maze <name>\|<txt>` | the arena: a maze of `engine/arenas/maze/mazes/` by name, or a file (default `maze1`) |
+| `--maze <name>\|<txt>` | the arena: a maze of `engine/arenas/maze/mazes/` by name, or a file (default `maze1`); a `.toml` of the same name beside it gives the maze's measured dimensions and surfaces (`MazeConfig`'s keys, each a number or `{ value, source }`), the competition rules otherwise |
 | `--seconds <float>` | simulated seconds, overriding the scenario's |
 | `--ticks <int>` | exact tick count, overrides `--seconds` |
 | `--seed <int>` | seed of every noise stream (default the scenario's, else 1) |

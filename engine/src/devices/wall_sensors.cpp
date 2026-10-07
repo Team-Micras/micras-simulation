@@ -171,18 +171,23 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
 
         double emission = 0.0;
         double incidence = 0.0;
+        double arrival = 0.0;
 
         for (std::size_t axis = 0; axis < 3; axis++) {
             emission += this->normals.at(3 * ray + axis) * to_receiver.at(axis) / length;
             incidence -= at(receiver_frame, 3 * axis) * to_receiver.at(axis) / length;
+            arrival -= this->normals.at(3 * ray + axis) * this->directions.at(3 * ray + axis);
         }
 
         if (emission <= 0.0 or incidence <= 0.0) {
             continue;
         }
 
+        const int    geom = this->geoms.at(ray);
+        const double exponent = this->config.minnaert(geom);
+        const double scattering = std::pow(std::max(arrival, 0.0) * emission, exponent - 1.0);
         const double off_axis = std::acos(std::min(1.0, incidence));
-        total += this->config.reflectance(this->geoms.at(ray)) * this->rays.at(ray).flux * emission * incidence *
+        total += this->config.reflectance(geom) * scattering * this->rays.at(ray).flux * emission * incidence *
                  lobe(off_axis, optics.receiver_half_angle) / (std::numbers::pi * length * length);
     }
 
@@ -192,9 +197,9 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
 uint32_t WallSensors::convert(std::size_t receiver, double signal) {
     const WallSensorsDescription& optics = this->config.description;
     const double                  current = optics.receiver_responsivity * optics.sensors.at(receiver).gain *
-                                            (optics.settle_fraction * signal + optics.ambient_irradiance);
-    const double                  voltage = std::min(current * optics.load_resistance, optics.saturation_voltage);
-    const double                  reading =
+                           (optics.settle_fraction * signal + optics.ambient_irradiance);
+    const double voltage = std::min(current * optics.load_resistance, optics.saturation_voltage);
+    const double reading =
         voltage / optics.adc_reference * optics.adc_max_counts + this->noise.gaussian(optics.adc_noise_counts);
     return static_cast<uint32_t>(std::clamp(std::round(reading), 0.0, optics.adc_max_counts));
 }

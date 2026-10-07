@@ -3,15 +3,19 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include <toml++/toml.hpp>
 
 #include "micras/sim/arenas/maze.hpp"
 #include "micras/sim/core/mujoco_world.hpp"
@@ -137,6 +141,71 @@ bool Maze::west_wall(std::size_t column, std::size_t row) const {
 
 double Maze::reflectance(std::string_view geom_name, const MazeConfig& config) {
     return geom_name.ends_with("floor") ? config.floor_reflectance : config.wall_reflectance;
+}
+
+double Maze::minnaert(std::string_view geom_name, const MazeConfig& config) {
+    return geom_name.ends_with("floor") ? 1.0 : config.wall_minnaert;
+}
+
+MazeConfig MazeConfig::load_beside(const std::filesystem::path& drawing) {
+    std::filesystem::path path = drawing;
+    path.replace_extension(".toml");
+    MazeConfig config;
+
+    if (not std::filesystem::exists(path)) {
+        return config;
+    }
+
+    const std::string origin = path.string();
+    toml::table       table;
+
+    try {
+        table = toml::parse(read_text_file(path, "maze surfaces"), origin);
+    } catch (const toml::parse_error& error) {
+        throw std::runtime_error(std::format("{}: {}", origin, error.description()));
+    }
+
+    const std::array<std::pair<std::string_view, double*>, 6> fields{{
+        {"cell_size", &config.cell_size},
+        {"wall_thickness", &config.wall_thickness},
+        {"wall_height", &config.wall_height},
+        {"wall_reflectance", &config.wall_reflectance},
+        {"floor_reflectance", &config.floor_reflectance},
+        {"wall_minnaert", &config.wall_minnaert},
+    }};
+
+    for (const auto& [key, node] : table) {
+        const auto* const field =
+            std::ranges::find_if(fields, [&key](const auto& entry) { return entry.first == key.str(); });
+
+        if (field == fields.end()) {
+            throw std::runtime_error(std::format("{}: unknown key {}", origin, key.str()));
+        }
+
+        const toml::node* value = &node;
+
+        if (const toml::table* sourced = node.as_table(); sourced != nullptr) {
+            value = sourced->get("value");
+
+            if (value == nullptr or sourced->get_as<std::string>("source") == nullptr or sourced->size() != 2) {
+                throw std::runtime_error(
+                    std::format(
+                        "{}: {} must be a number or a {{ value = ..., source = \"...\" }} table", origin, key.str()
+                    )
+                );
+            }
+        }
+
+        const std::optional<double> number = value->value<double>();
+
+        if (not number.has_value()) {
+            throw std::runtime_error(std::format("{}: {} must be a number", origin, key.str()));
+        }
+
+        *field->second = *number;
+    }
+
+    return config;
 }
 
 bool Maze::is_marked(std::size_t column, std::size_t row) const {

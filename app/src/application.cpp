@@ -342,10 +342,16 @@ static Wiring wire(Target& target, FirmwareThread& firmware, const RobotDescript
     RunContext&     context = target.context();
     const WorldInfo world{
         .robot = &robot,
-        .reflectance = [&context, config](int geom) {
-            const char* name = mj_id2name(context.world.model(), mjOBJ_GEOM, geom);
-            return Maze::reflectance(name == nullptr ? "" : name, config);
-        },
+        .reflectance =
+            [&context, config](int geom) {
+                const char* name = mj_id2name(context.world.model(), mjOBJ_GEOM, geom);
+                return Maze::reflectance(name == nullptr ? "" : name, config);
+            },
+        .minnaert =
+            [&context, config](int geom) {
+                const char* name = mj_id2name(context.world.model(), mjOBJ_GEOM, geom);
+                return Maze::minnaert(name == nullptr ? "" : name, config);
+            },
     };
 
     return target.wire(firmware, world);
@@ -381,6 +387,7 @@ Application::Application(const CliOptions& options, Target& target) :
     scenario{read_scenario(options, target, this->scenario_path)},
     robot{RobotDescription::load(target.robot_file())},
     maze_path{resolve_maze(maze_name(options, this->scenario))},
+    maze_config{MazeConfig::load_beside(this->maze_path)},
     context{prepare(this->robot, this->maze_path, this->maze_config, options, this->scenario, target)},
     ticks{ticks_of(options, this->scenario, this->context)},
     firmware{target.program()},

@@ -32,8 +32,10 @@ namespace micras::sim {
  *
  * @note Light model: each emitter is a cone of rays whose intensity falls off as
  *       2^-(angle / half angle)^2 around its axis, down to 2.5 half angles. Each
- *       ray that hits the arena reflects as a Lambertian spot of the surface's
- *       reflectance; the receiver collects it by the inverse square of its
+ *       ray that hits the arena reflects as a spot of the surface's reflectance,
+ *       by Minnaert's law: Lambertian, times the product of the cosines of the
+ *       ray's incidence and of the spot's emission angle raised to the surface's
+ *       exponent less one. The receiver collects it by the inverse square of its
  *       distance, the cosine of the spot's emission angle and the receiver's own
  *       angular response. The photocurrent is the responsivity times that
  *       irradiance, plus ambient light, and becomes a voltage across the load
@@ -96,6 +98,11 @@ public:
          * @note The rays pass through the geoms of MujocoWorld::unseen_group.
          */
         std::function<double(int)> reflectance;
+
+        /**
+         * @brief Minnaert exponent of an arena geom, by id: one for a matte surface.
+         */
+        std::function<double(int)> minnaert;
 
         /**
          * @brief The emitters each scan lights, when the firmware schedules them one at a time.
