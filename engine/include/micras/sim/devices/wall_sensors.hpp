@@ -23,12 +23,15 @@ namespace micras::sim {
 /**
  * @brief The ADC conversions of a set of wall sensors, lit and dark.
  *
- * @note The emitters fire in groups: every scan period one group is lit and every
- *       receiver is converted, the lit group's own receivers reading their
- *       emitter and the others reading whatever the lit group throws their way,
- *       which is the cross-talk. There are two groups, so the other group's scan
- *       is each sensor's dark reading. The sequence the firmware sees is one scan
- *       per group, in group order, and completes after the second one.
+ * @note Without a schedule the emitters fire in groups: every scan period one
+ *       group is lit and every receiver is converted, the lit group's own
+ *       receivers reading their emitter and the others reading whatever the lit
+ *       group throws their way, which is the cross-talk. There are two groups,
+ *       so the other group's scan is each sensor's dark reading. The sequence the
+ *       firmware sees is one scan per group, in group order, and completes after
+ *       the second one. With Config::schedule the firmware chooses which emitters
+ *       each scan lights and where its conversions go, and a sensor's intensity
+ *       is its reading with its emitter lit alone less the mean of the dark scans.
  *
  * @note Light model: each emitter is a cone of rays whose intensity falls off as
  *       2^-(angle / half angle)^2 around its axis, down to 2.5 half angles. Each
