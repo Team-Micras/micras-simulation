@@ -197,9 +197,9 @@ double WallSensors::irradiance(MujocoWorld& world, std::size_t emitter, std::siz
 uint32_t WallSensors::convert(std::size_t receiver, double signal) {
     const WallSensorsDescription& optics = this->config.description;
     const double                  current = optics.receiver_responsivity * optics.sensors.at(receiver).gain *
-                           (optics.settle_fraction * signal + optics.ambient_irradiance);
-    const double voltage = std::min(current * optics.load_resistance, optics.saturation_voltage);
-    const double reading =
+                                            (optics.settle_fraction * signal + optics.ambient_irradiance);
+    const double                  voltage = std::min(current * optics.load_resistance, optics.saturation_voltage);
+    const double                  reading =
         voltage / optics.adc_reference * optics.adc_max_counts + this->noise.gaussian(optics.adc_noise_counts);
     return static_cast<uint32_t>(std::clamp(std::round(reading), 0.0, optics.adc_max_counts));
 }
@@ -222,7 +222,15 @@ void WallSensors::sample_scheduled(MujocoWorld& world) {
     const auto lit = static_cast<std::size_t>(std::ranges::count(schedule->lit, true));
     const auto first = static_cast<std::size_t>(std::ranges::find(schedule->lit, true) - schedule->lit.begin());
 
-    this->lone.at(schedule->position) = lit == 0 ? -1 : (lit == 1 ? static_cast<int>(first) : -2);
+    int lone = -2;
+
+    if (lit == 0) {
+        lone = -1;
+    } else if (lit == 1) {
+        lone = static_cast<int>(first);
+    }
+
+    this->lone.at(schedule->position) = lone;
 
     for (std::size_t receiver = 0; receiver < sensors; receiver++) {
         double signal = 0.0;
@@ -253,7 +261,7 @@ void WallSensors::sample_scheduled(MujocoWorld& world) {
             if (this->lone.at(position) == -1) {
                 dark += counts;
                 darks += 1.0;
-            } else if (this->lone.at(position) == static_cast<int>(sensor)) {
+            } else if (std::cmp_equal(this->lone.at(position), sensor)) {
                 own = counts;
             }
         }

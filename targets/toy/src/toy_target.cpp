@@ -253,7 +253,7 @@ Wiring ToyTarget::wire(FirmwareThread& /*firmware*/, const WorldInfo& world) {
                 .scan_ticks = 1,
                 .emitter_duty = [&hardware](std::size_t /*sensor*/) { return hardware.emitters_on ? 100.0F : 0.0F; },
                 .write = [&hardware](std::size_t index, uint32_t counts) { hardware.wall_counts.at(index) = counts; },
-                .finish_sequence = [] {},
+                .finish_sequence = [] { },
                 .reflectance = world.reflectance,
                 .minnaert = world.minnaert,
                 .schedule = {},
@@ -466,13 +466,13 @@ PanelSpec ToyTarget::make_panel() const {
     const Battery*     pack = this->battery;
     const ToyReadings& known = this->readings;
     PanelSpec          panel{
-                 .state = StateLabel{.variable = "state", .names = state_names()},
-                 .buttons = {{.name = "button", .press = [input](bool pressed) { input->set(pressed); }}},
-                 .switches = {},
-                 .lamps = {},
-                 .readouts = {{.name = "battery", .text = [pack] { return std::format("{:.2f} V", pack->voltage()); }}},
-                 .plots = {"odometry", "heading", "front"},
-                 .take_over = {},
+        .state = StateLabel{.variable = "state", .names = state_names()},
+        .buttons = {{.name = "button", .press = [input](bool pressed) { input->set(pressed); }}},
+        .switches = {},
+        .lamps = {},
+        .readouts = {{.name = "battery", .text = [pack] { return std::format("{:.2f} V", pack->voltage()); }}},
+        .plots = {"odometry", "heading", "front"},
+        .take_over = {},
     };
 
     for (std::size_t index = 0; index < state_name_table.size(); index++) {
