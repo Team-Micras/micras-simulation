@@ -255,6 +255,8 @@ Wiring ToyTarget::wire(FirmwareThread& /*firmware*/, const WorldInfo& world) {
                 .write = [&hardware](std::size_t index, uint32_t counts) { hardware.wall_counts.at(index) = counts; },
                 .finish_sequence = [] { },
                 .reflectance = world.reflectance,
+                .minnaert = world.minnaert,
+                .schedule = {},
             },
             context.noise
         ));

@@ -20,7 +20,9 @@ namespace micras::sim {
  *
  * @note The defaults are the competition rules: 180 mm cells, 12 mm thick and
  *       50 mm tall walls. The reflectances are what an infrared range sensor sees:
- *       white wall sides, a black floor.
+ *       white wall sides, a black floor. The walls scatter by Minnaert's law, whose
+ *       exponent is one for a matte surface, as the floor always is, and larger for
+ *       a glossy one, which sends back more light the more square on it is met.
  */
 struct MazeConfig {
     double cell_size{0.18};
@@ -28,6 +30,19 @@ struct MazeConfig {
     double wall_height{0.05};
     double wall_reflectance{0.8};
     double floor_reflectance{0.05};
+    double wall_minnaert{1.0};
+
+    /**
+     * @brief Read the dimensions and surfaces measured for a maze, beside its drawing.
+     *
+     * @note The file has the drawing's name with a .toml extension. Each key it gives, a number
+     *       or a { value, source } table, replaces the default; without the file every value is
+     *       the default.
+     *
+     * @param drawing Path of the maze drawing.
+     * @return The maze's dimensions and surfaces.
+     */
+    static MazeConfig load_beside(const std::filesystem::path& drawing);
 };
 
 /**
@@ -128,6 +143,15 @@ public:
      * @return The reflectance.
      */
     static double reflectance(std::string_view geom_name, const MazeConfig& config);
+
+    /**
+     * @brief Get the Minnaert exponent of an arena geom.
+     *
+     * @param geom_name Name of the geom, with or without the attach prefix.
+     * @param config Dimensions and surfaces.
+     * @return The exponent, one for the matte floor.
+     */
+    static double minnaert(std::string_view geom_name, const MazeConfig& config);
 
 private:
     /**

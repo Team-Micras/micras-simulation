@@ -88,6 +88,11 @@ struct WorldInfo {
      * @brief Infrared reflectance of an arena geom, by id.
      */
     std::function<double(int)> reflectance;
+
+    /**
+     * @brief Minnaert exponent of an arena geom, by id.
+     */
+    std::function<double(int)> minnaert;
 };
 }  // namespace micras::sim
 

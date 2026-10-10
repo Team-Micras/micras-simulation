@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -14,6 +15,7 @@
 #include "micras/sim/core/mujoco_world.hpp"
 #include "micras/sim/core/span_at.hpp"
 #include "micras/sim/core/text_file.hpp"
+#include "temp_file.hpp"
 
 namespace micras::sim {
 namespace {
@@ -161,6 +163,34 @@ TEST_CASE("Maze.SeesTheFloorDarkAndEverythingElseAsWall") {
     CHECK_EQ(Maze::reflectance("floor", config), doctest::Approx(0.1).epsilon(1e-12));
     CHECK_EQ(Maze::reflectance("maze_south_0_0", config), doctest::Approx(0.7).epsilon(1e-12));
     CHECK_EQ(Maze::reflectance("maze_post_1_1", config), doctest::Approx(0.7).epsilon(1e-12));
+}
+
+TEST_CASE("Maze.GivesTheWallsTheirGlossAndTheFloorNone") {
+    const MazeConfig config{.wall_minnaert = 1.8};
+
+    CHECK_EQ(Maze::minnaert("maze_floor", config), doctest::Approx(1.0).epsilon(1e-12));
+    CHECK_EQ(Maze::minnaert("maze_south_0_0", config), doctest::Approx(1.8).epsilon(1e-12));
+    CHECK_EQ(Maze::minnaert("maze_post_1_1", config), doctest::Approx(1.8).epsilon(1e-12));
+}
+
+TEST_CASE("Maze.ReadsTheSurfacesBesideTheDrawing") {
+    const TempFile        surfaces{"surfaces.toml"};
+    std::filesystem::path drawing = surfaces.path();
+    drawing.replace_extension(".txt");
+
+    CHECK_EQ(MazeConfig::load_beside(drawing).wall_minnaert, doctest::Approx(1.0).epsilon(1e-12));
+
+    std::ofstream{
+        surfaces.path()
+    } << "wall_thickness = { value = 0.015, source = \"measured\" }\nwall_minnaert = 1.8\n";
+    const MazeConfig config = MazeConfig::load_beside(drawing);
+
+    CHECK_EQ(config.wall_thickness, doctest::Approx(0.015).epsilon(1e-12));
+    CHECK_EQ(config.wall_minnaert, doctest::Approx(1.8).epsilon(1e-12));
+    CHECK_EQ(config.cell_size, doctest::Approx(0.18).epsilon(1e-12));
+
+    std::ofstream{surfaces.path()} << "wall_gloss = 2.0\n";
+    CHECK_THROWS_AS(MazeConfig::load_beside(drawing), std::runtime_error);
 }
 }  // namespace
 }  // namespace micras::sim

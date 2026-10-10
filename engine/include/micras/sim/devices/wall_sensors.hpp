@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -22,17 +23,22 @@ namespace micras::sim {
 /**
  * @brief The ADC conversions of a set of wall sensors, lit and dark.
  *
- * @note The emitters fire in groups: every scan period one group is lit and every
- *       receiver is converted, the lit group's own receivers reading their
- *       emitter and the others reading whatever the lit group throws their way,
- *       which is the cross-talk. There are two groups, so the other group's scan
- *       is each sensor's dark reading. The sequence the firmware sees is one scan
- *       per group, in group order, and completes after the second one.
+ * @note Without a schedule the emitters fire in groups: every scan period one
+ *       group is lit and every receiver is converted, the lit group's own
+ *       receivers reading their emitter and the others reading whatever the lit
+ *       group throws their way, which is the cross-talk. There are two groups,
+ *       so the other group's scan is each sensor's dark reading. The sequence the
+ *       firmware sees is one scan per group, in group order, and completes after
+ *       the second one. With Config::schedule the firmware chooses which emitters
+ *       each scan lights and where its conversions go, and a sensor's intensity
+ *       is its reading with its emitter lit alone less the mean of the dark scans.
  *
  * @note Light model: each emitter is a cone of rays whose intensity falls off as
  *       2^-(angle / half angle)^2 around its axis, down to 2.5 half angles. Each
- *       ray that hits the arena reflects as a Lambertian spot of the surface's
- *       reflectance; the receiver collects it by the inverse square of its
+ *       ray that hits the arena reflects as a spot of the surface's reflectance,
+ *       by Minnaert's law: Lambertian, times the product of the cosines of the
+ *       ray's incidence and of the spot's emission angle raised to the surface's
+ *       exponent less one. The receiver collects it by the inverse square of its
  *       distance, the cosine of the spot's emission angle and the receiver's own
  *       angular response. The photocurrent is the responsivity times that
  *       irradiance, plus ambient light, and becomes a voltage across the load
@@ -41,6 +47,19 @@ namespace micras::sim {
  */
 class WallSensors : public Device {
 public:
+    /**
+     * @brief The emitters one scan lights, when the firmware schedules them itself.
+     *
+     * @note The position is where the scan goes in the buffer the firmware converts into, of the
+     * given length, and last marks a scan after which the firmware reads what was converted.
+     */
+    struct Schedule {
+        std::size_t       position;
+        std::size_t       length;
+        std::vector<bool> lit;
+        bool              last;
+    };
+
     /**
      * @brief The sensors and where their conversions go.
      */
@@ -82,6 +101,28 @@ public:
          * @note The rays pass through the geoms of MujocoWorld::unseen_group.
          */
         std::function<double(int)> reflectance;
+
+        /**
+         * @brief Minnaert exponent of an arena geom, by id: one for a matte surface.
+         */
+        std::function<double(int)> minnaert;
+
+        /**
+         * @brief The emitters each scan lights, when the firmware schedules them one at a time.
+         *
+         * @note Called once per scan, in place of the two groups of the description, of which the
+         * duty of the emitters then says nothing. Nothing means the emitters are not running, and
+         * no scan is taken.
+         */
+        std::function<std::optional<Schedule>()> schedule;
+
+        /**
+         * @brief Time between scans, in microseconds, when it is not a whole number of ticks.
+         *
+         * @note Zero takes scan_ticks instead. Otherwise each scan is taken at the first tick at or
+         * after its time, so a scan is late by less than a tick but the scans keep their rate.
+         */
+        double scan_period_us{0.0};
     };
 
     /**
@@ -140,6 +181,33 @@ private:
      * @return Irradiance in W/m^2.
      */
     double irradiance(MujocoWorld& world, std::size_t emitter, std::size_t receiver);
+
+    /**
+     * @brief Convert the light that falls on a receiver into counts of the converter.
+     *
+     * @param receiver Index of the receiving sensor.
+     * @param signal Irradiance from the emitters that are lit, in W/m^2.
+     * @return Counts of the converter.
+     */
+    uint32_t convert(std::size_t receiver, double signal);
+
+    /**
+     * @brief Take the scan the schedule of the firmware asks for.
+     *
+     * @param world The world.
+     */
+    void sample_scheduled(MujocoWorld& world);
+
+    /**
+     * @brief Emitter lit alone at each position of the scheduled sequence, -1 at a dark position and
+     * -2 at any other.
+     */
+    std::vector<int> lone;
+
+    /**
+     * @brief Time of the next scan, in microseconds, when the scans are timed by scan_period_us.
+     */
+    double next_scan_us{0.0};
 
     Config                 config;
     Noise                  noise;
